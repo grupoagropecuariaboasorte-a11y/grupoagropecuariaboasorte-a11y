@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Frota Agrícola",
+  "description": "Sistema completo de gestão de frota agrícola com controle de manutenção, combustível, estoque de diesel, checklists de 30 dias e ordens de serviço.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
