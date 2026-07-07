@@ -1,9 +1,11 @@
-import { supabase, isDemoMode } from './supabaseClient';
+import { supabase, isDemoMode as importedDemoMode } from './supabaseClient';
 import { 
   Farm, Machine, FuelStock, FuelLog, PreventivePlanItem, 
   MaintenanceLog, Checklist30d, WorkOrder, LookupItem,
   FuelStockBalance, ChecklistSummary, PreventivePlanStatus, CostRankingItem, DashboardSummary 
 } from '../types';
+
+let isDemoMode = importedDemoMode;
 
 // =========================================================================
 // VALORES PADRÃO (SEED) PARA O MODO DEMO
@@ -451,10 +453,8 @@ class LocalStorageDb {
   }
 }
 
-// Inicializa o banco local ao carregar este arquivo se estiver em modo Demo
-if (isDemoMode) {
-  LocalStorageDb.initAll();
-}
+// Inicializa o banco local ao carregar este arquivo para garantir que esteja pronto para fallback
+LocalStorageDb.initAll();
 
 // =========================================================================
 // EXPORTAÇÃO DOS SERVIÇOS (COM TRATAMENTO DUAL-MODE)
@@ -469,10 +469,17 @@ export const fleetService = {
       const p = localStorage.getItem('agro_fleet_profile');
       return p ? JSON.parse(p) : SEED_PROFILE;
     }
-    const { data: { user } } = await supabase!.auth.getUser();
-    if (!user) return null;
-    const { data } = await supabase!.from('profiles').select('*').eq('id', user.id).single();
-    return data;
+    try {
+      const { data: { user } } = await supabase!.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase!.from('profiles').select('*').eq('id', user.id).single();
+      return data;
+    } catch (e) {
+      console.error('Erro ao buscar perfil do Supabase, usando local:', e);
+      isDemoMode = true;
+      const p = localStorage.getItem('agro_fleet_profile');
+      return p ? JSON.parse(p) : SEED_PROFILE;
+    }
   },
 
   async updateProfileRole(id: string, role: string): Promise<any> {
@@ -481,9 +488,17 @@ export const fleetService = {
       localStorage.setItem('agro_fleet_profile', JSON.stringify(p));
       return p;
     }
-    const { data, error } = await supabase!.from('profiles').update({ role }).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase!.from('profiles').update({ role }).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.error('Erro ao atualizar perfil no Supabase, usando local:', e);
+      isDemoMode = true;
+      const p = { id, email: 'user@agro.com', role };
+      localStorage.setItem('agro_fleet_profile', JSON.stringify(p));
+      return p;
+    }
   },
 
   // =======================================================================
@@ -506,21 +521,39 @@ export const fleetService = {
       };
     }
 
-    const [eq, fl, mt, pr, sl] = await Promise.all([
-      supabase!.from('equipment_types').select('*'),
-      supabase!.from('fuel_types').select('*'),
-      supabase!.from('maintenance_types').select('*'),
-      supabase!.from('priorities').select('*'),
-      supabase!.from('service_locations').select('*'),
-    ]);
+    try {
+      const [eq, fl, mt, pr, sl] = await Promise.all([
+        supabase!.from('equipment_types').select('*'),
+        supabase!.from('fuel_types').select('*'),
+        supabase!.from('maintenance_types').select('*'),
+        supabase!.from('priorities').select('*'),
+        supabase!.from('service_locations').select('*'),
+      ]);
 
-    return {
-      equipmentTypes: eq.data || [],
-      fuelTypes: fl.data || [],
-      maintenanceTypes: mt.data || [],
-      priorities: pr.data || [],
-      serviceLocations: sl.data || [],
-    };
+      if (eq.error) throw eq.error;
+      if (fl.error) throw fl.error;
+      if (mt.error) throw mt.error;
+      if (pr.error) throw pr.error;
+      if (sl.error) throw sl.error;
+
+      return {
+        equipmentTypes: eq.data || [],
+        fuelTypes: fl.data || [],
+        maintenanceTypes: mt.data || [],
+        priorities: pr.data || [],
+        serviceLocations: sl.data || [],
+      };
+    } catch (e) {
+      console.error('Erro ao carregar lookups do Supabase, usando local:', e);
+      isDemoMode = true;
+      return {
+        equipmentTypes: LocalStorageDb.get('equipment_types', SEED_EQUIPMENT_TYPES),
+        fuelTypes: LocalStorageDb.get('fuel_types', SEED_FUEL_TYPES),
+        maintenanceTypes: LocalStorageDb.get('maintenance_types', SEED_MAINTENANCE_TYPES),
+        priorities: LocalStorageDb.get('priorities', SEED_PRIORITIES),
+        serviceLocations: LocalStorageDb.get('service_locations', SEED_SERVICE_LOCATIONS),
+      };
+    }
   },
 
   // =======================================================================
@@ -530,9 +563,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('farms', SEED_FARMS);
     }
-    const { data, error } = await supabase!.from('farms').select('*').order('name', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('farms').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar fazendas no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('farms', SEED_FARMS);
+    }
   },
 
   async addFarm(farm: Partial<Farm>): Promise<Farm> {
@@ -548,9 +587,24 @@ export const fleetService = {
       LocalStorageDb.set('farms', list);
       return newFarm;
     }
-    const { data, error } = await supabase!.from('farms').insert([farm]).select().single();
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase!.from('farms').insert([farm]).select().single();
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.error('Erro ao adicionar fazenda no Supabase, usando local:', e);
+      isDemoMode = true;
+      const list = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
+      const newFarm: Farm = {
+        id: crypto.randomUUID(),
+        name: farm.name || 'Nova Fazenda',
+        location: farm.location,
+        created_at: new Date().toISOString()
+      };
+      list.push(newFarm);
+      LocalStorageDb.set('farms', list);
+      return newFarm;
+    }
   },
 
   async updateFarm(id: string, farm: Partial<Farm>): Promise<Farm> {
@@ -562,9 +616,20 @@ export const fleetService = {
       LocalStorageDb.set('farms', list);
       return list[index];
     }
-    const { data, error } = await supabase!.from('farms').update(farm).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase!.from('farms').update(farm).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.error('Erro ao atualizar fazenda no Supabase, usando local:', e);
+      isDemoMode = true;
+      const list = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
+      const index = list.findIndex(f => f.id === id);
+      if (index === -1) throw new Error('Farm not found');
+      list[index] = { ...list[index], ...farm };
+      LocalStorageDb.set('farms', list);
+      return list[index];
+    }
   },
 
   async deleteFarm(id: string): Promise<void> {
@@ -574,8 +639,16 @@ export const fleetService = {
       LocalStorageDb.set('farms', list);
       return;
     }
-    const { error } = await supabase!.from('farms').delete().eq('id', id);
-    if (error) throw error;
+    try {
+      const { error } = await supabase!.from('farms').delete().eq('id', id);
+      if (error) throw error;
+    } catch (e) {
+      console.error('Erro ao excluir fazenda no Supabase, usando local:', e);
+      isDemoMode = true;
+      let list = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
+      list = list.filter(f => f.id !== id);
+      LocalStorageDb.set('farms', list);
+    }
   },
 
   // =======================================================================

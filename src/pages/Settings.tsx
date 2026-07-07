@@ -78,27 +78,29 @@ export default function SettingsPage({ userRole }: SettingsProps) {
 
   const handleResetDemoData = () => {
     if (!window.confirm('Tem certeza de que quer reiniciar todos os dados locais? Qualquer alteração feita será apagada e os dados originais da planilha Excel de testes serão recarregados.')) return;
-    localStorage.removeItem('agro_fleet_offline_db');
+    const keys = [
+      'farms', 'equipment_types', 'fuel_types', 'maintenance_types', 'priorities',
+      'service_locations', 'machines', 'fuel_stock', 'fuel_logs', 'preventive_plan',
+      'maintenance_logs', 'checklists', 'work_orders', 'profile'
+    ];
+    keys.forEach(k => localStorage.removeItem(`agro_fleet_${k}`));
     alert('Dados locais reiniciados! Atualizando página...');
     window.location.reload();
   };
 
   const handleClearDemoData = () => {
     if (!window.confirm('AVISO: Quer apagar todo o banco offline para começar com um sistema completamente limpo?')) return;
-    localStorage.removeItem('agro_fleet_offline_db');
-    // Forçar a classe do fleetService a gerar um banco vazio
-    const cleanDb = {
-      farms: [],
-      machines: [],
-      fuel_stock: [],
-      fuel_logs: [],
-      maintenance_logs: [],
-      preventive_plan: [],
-      checklists: [],
-      work_orders: [],
-      profiles: []
-    };
-    localStorage.setItem('agro_fleet_offline_db', JSON.stringify(cleanDb));
+    const keys = [
+      'farms', 'equipment_types', 'fuel_types', 'maintenance_types', 'priorities',
+      'service_locations', 'machines', 'fuel_stock', 'fuel_logs', 'preventive_plan',
+      'maintenance_logs', 'checklists', 'work_orders', 'profile'
+    ];
+    keys.forEach(k => {
+      localStorage.removeItem(`agro_fleet_${k}`);
+      if (k !== 'profile') {
+        localStorage.setItem(`agro_fleet_${k}`, JSON.stringify([]));
+      }
+    });
     alert('Banco de dados local limpo com sucesso! Reiniciando...');
     window.location.reload();
   };
