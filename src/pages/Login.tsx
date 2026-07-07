@@ -7,15 +7,28 @@ interface LoginProps {
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('grupoagropecuariaboasorte@gmail.com');
+  const [password, setPassword] = useState('123456789');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showQuickDemo, setShowQuickDemo] = useState(false);
 
   const handleRealLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
+
+    if (isDemoMode) {
+      setTimeout(() => {
+        let role: 'viewer' | 'editor' | 'admin' = 'admin';
+        if (email.includes('editor')) role = 'editor';
+        if (email.includes('viewer')) role = 'viewer';
+        
+        onLoginSuccess(email, role);
+        setLoading(false);
+      }, 400);
+      return;
+    }
 
     try {
       const { data, error } = await supabase!.auth.signInWithPassword({
@@ -73,7 +86,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </div>
           )}
 
-          {isDemoMode ? (
+          {isDemoMode && showQuickDemo ? (
             /* DEMO LOGIN OPTIONS */
             <div className="space-y-6">
               <div className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-xl text-center">
@@ -124,9 +137,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </div>
 
               <div className="border-t border-slate-800 pt-4 text-center">
-                <p className="text-[10px] text-slate-500 leading-normal">
-                  Uma vez configurado o seu banco de dados no arquivo `.env` com chaves válidas, esta tela habilitará automaticamente o formulário de login por e-mail e senha.
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickDemo(false)}
+                  className="text-xs text-slate-400 hover:underline cursor-pointer font-bold"
+                >
+                  Voltar para Login de E-mail/Senha
+                </button>
               </div>
             </div>
           ) : (
@@ -174,6 +191,18 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 {loading ? 'Entrando...' : 'Entrar no Sistema'}
                 <Play size={14} fill="currentColor" />
               </button>
+
+              {isDemoMode && (
+                <div className="border-t border-slate-800 pt-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickDemo(true)}
+                    className="text-xs text-amber-400 hover:underline cursor-pointer font-bold"
+                  >
+                    Usar perfis rápidos de demonstração
+                  </button>
+                </div>
+              )}
             </form>
           )}
         </div>
