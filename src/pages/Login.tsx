@@ -111,6 +111,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         if (profileError) {
           console.error('Erro ao cadastrar perfil:', profileError);
+          throw new Error('Usuário criado na autenticação, mas falhou ao registrar perfil: ' + profileError.message);
         }
 
         setSuccessMsg('Conta criada com sucesso! Faça login abaixo.');

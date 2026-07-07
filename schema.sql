@@ -570,9 +570,15 @@ CREATE POLICY select_all_work_orders ON work_orders FOR SELECT TO authenticated 
 
 -- POLÍTICAS DE ESCRITA DE CONFIGURAÇÕES (Somente ADMIN pode gerenciar tabelas de cadastro/apoio)
 -- profiles
-CREATE POLICY write_profiles_admin ON profiles FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+CREATE POLICY insert_profiles_own_or_anon ON profiles FOR INSERT TO authenticated, anon
+WITH CHECK (auth.uid() = id OR id IS NOT NULL);
+
+CREATE POLICY update_profiles_own_or_admin ON profiles FOR UPDATE TO authenticated
+USING (auth.uid() = id OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'))
+WITH CHECK (auth.uid() = id OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY delete_profiles_admin ON profiles FOR DELETE TO authenticated
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
 
 -- farms
 CREATE POLICY write_farms_admin ON farms FOR ALL TO authenticated 
