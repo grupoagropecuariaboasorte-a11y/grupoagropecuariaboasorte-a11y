@@ -26,7 +26,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setErrorMsg('');
 
     if (!supabase) {
-      setErrorMsg('O cliente do Supabase não está inicializado. Configure as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no painel do aplicativo.');
+      // Se não houver Supabase, entra automaticamente no modo demonstração local
+      onLoginSuccess(email || 'grupoagropecuariaboasorte@gmail.com', 'admin');
       setLoading(false);
       return;
     }
@@ -69,7 +70,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
 
     if (!supabase) {
-      setErrorMsg('O cliente do Supabase não está inicializado. Configure as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no painel do aplicativo.');
+      // Se não houver Supabase, entra automaticamente no modo demonstração local
+      onLoginSuccess(registerEmail || 'grupoagropecuariaboasorte@gmail.com', registerRole);
       setLoading(false);
       return;
     }
@@ -377,9 +379,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50"
+                className={`w-full flex items-center justify-center gap-2 py-3 text-white font-medium text-sm rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 ${
+                  !supabase 
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-950/50' 
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/50'
+                }`}
               >
-                {loading ? 'Entrando...' : 'Entrar no Sistema'}
+                {loading ? 'Entrando...' : !supabase ? 'Entrar no Sistema (Modo Demo)' : 'Entrar no Sistema'}
                 <Play size={14} fill="currentColor" />
               </button>
 
