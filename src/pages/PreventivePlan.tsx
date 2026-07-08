@@ -357,7 +357,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                 onChange={(e) => setConfigItem(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {lookups?.maintenanceCategories.map((c: string) => (
+                {lookups?.maintenanceCategories?.map((c: string) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>

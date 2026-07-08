@@ -737,7 +737,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                 onChange={(e) => setFormType(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {lookups?.equipmentTypes.map((t: LookupItem) => (
+                {lookups?.equipmentTypes?.map((t: LookupItem) => (
                   <option key={t.id} value={t.id}>{t.label}</option>
                 ))}
               </select>
@@ -881,7 +881,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                 onChange={(e) => setFormType(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {lookups?.equipmentTypes.map((t: LookupItem) => (
+                {lookups?.equipmentTypes?.map((t: LookupItem) => (
                   <option key={t.id} value={t.id}>{t.label}</option>
                 ))}
               </select>

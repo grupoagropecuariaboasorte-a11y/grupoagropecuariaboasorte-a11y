@@ -677,9 +677,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('machines', SEED_MACHINES);
     }
-    const { data, error } = await supabase!.from('machines').select('*').order('code', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('machines').select('*').order('code', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar máquinas no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('machines', SEED_MACHINES);
+    }
   },
 
   async addMachine(machine: Partial<Machine>): Promise<Machine> {
@@ -744,9 +750,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('fuel_logs', SEED_FUEL_LOGS);
     }
-    const { data, error } = await supabase!.from('fuel_logs').select('*').order('date', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('fuel_logs').select('*').order('date', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar abastecimentos no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('fuel_logs', SEED_FUEL_LOGS);
+    }
   },
 
   async addFuelLog(log: Partial<FuelLog>): Promise<FuelLog> {
@@ -936,9 +948,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('maintenance_logs', SEED_MAINTENANCE_LOGS);
     }
-    const { data, error } = await supabase!.from('maintenance_logs').select('*').order('date', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('maintenance_logs').select('*').order('date', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar manutenções no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('maintenance_logs', SEED_MAINTENANCE_LOGS);
+    }
   },
 
   async addMaintenanceLog(log: Partial<MaintenanceLog>): Promise<MaintenanceLog> {
@@ -1008,9 +1026,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('preventive_plan', SEED_PREVENTIVE_PLAN);
     }
-    const { data, error } = await supabase!.from('preventive_plan').select('*');
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('preventive_plan').select('*');
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar plano preventivo no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('preventive_plan', SEED_PREVENTIVE_PLAN);
+    }
   },
 
   async addPreventivePlan(item: Partial<PreventivePlanItem>): Promise<PreventivePlanItem> {
@@ -1140,9 +1164,83 @@ export const fleetService = {
       }).filter(Boolean) as PreventivePlanStatus[];
     }
 
-    const { data, error } = await supabase!.from('preventive_plan_status').select('*');
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('preventive_plan_status').select('*');
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar status do plano preventivo no Supabase, usando local:', e);
+      isDemoMode = true;
+      // Fallback to local computed behavior (re-executing local calculation)
+      const items = LocalStorageDb.get<PreventivePlanItem>('preventive_plan', SEED_PREVENTIVE_PLAN);
+      const machines = LocalStorageDb.get<Machine>('machines', SEED_MACHINES);
+      const logs = LocalStorageDb.get<MaintenanceLog>('maintenance_logs', SEED_MAINTENANCE_LOGS);
+      const today = new Date();
+
+      return items.map(item => {
+        const m = machines.find(mac => mac.id === item.machine_id);
+        if (!m) return null;
+
+        const mLogs = logs
+          .filter(l => l.machine_id === m.id && l.main_item === item.maintenance_item)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        const lastPerformed = mLogs.length > 0 ? mLogs[0] : null;
+        const lastPerformedDate = lastPerformed ? lastPerformed.date : item.last_performed_date;
+        const lastPerformedHourKm = lastPerformed ? lastPerformed.hour_km_at_service : item.last_performed_hour_km;
+
+        const currentHourKm = m.current_hour_km || m.initial_hour_km;
+        const hoursKmSinceLast = currentHourKm - lastPerformedHourKm;
+
+        let nextDueDate = '';
+        let daysRemaining = 99999;
+        if (item.interval_days > 0) {
+          const baseDate = new Date(lastPerformedDate);
+          baseDate.setDate(baseDate.getDate() + item.interval_days);
+          nextDueDate = baseDate.toISOString().split('T')[0];
+          daysRemaining = Math.ceil((baseDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        }
+
+        let hourKmRemaining = 99999;
+        if (item.interval_hour_km > 0) {
+          hourKmRemaining = (lastPerformedHourKm + item.interval_hour_km) - currentHourKm;
+        }
+
+        let status: 'NUNCA REALIZADA' | 'VENCIDA' | 'PRÓXIMA' | 'OK' = 'OK';
+        if (!lastPerformed) {
+          status = 'NUNCA REALIZADA';
+        } else if (
+          (item.interval_days > 0 && daysRemaining < 0) ||
+          (item.interval_hour_km > 0 && hourKmRemaining < 0)
+        ) {
+          status = 'VENCIDA';
+        } else if (
+          (item.interval_days > 0 && daysRemaining <= 7) ||
+          (item.interval_hour_km > 0 && hourKmRemaining <= 20)
+        ) {
+          status = 'PRÓXIMA';
+        }
+
+        return {
+          plan_item_id: item.id,
+          machine_id: item.machine_id,
+          machine_code: m.code,
+          machine_name: m.name,
+          farm_id: m.farm_id,
+          maintenance_item: item.maintenance_item,
+          interval_days: item.interval_days,
+          interval_hour_km: item.interval_hour_km,
+          last_performed_date: lastPerformedDate,
+          last_performed_hour_km: lastPerformedHourKm,
+          current_hour_km: currentHourKm,
+          hours_km_since_last: hoursKmSinceLast,
+          next_due_date: nextDueDate,
+          days_remaining: daysRemaining === 99999 ? 0 : daysRemaining,
+          hour_km_remaining: hourKmRemaining === 99999 ? 0 : hourKmRemaining,
+          status
+        } as PreventivePlanStatus;
+      }).filter(Boolean) as PreventivePlanStatus[];
+    }
   },
 
   // =======================================================================
@@ -1152,9 +1250,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('checklists', SEED_CHECKLISTS);
     }
-    const { data, error } = await supabase!.from('checklists_30d').select('*').order('date', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('checklists_30d').select('*').order('date', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar checklists no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('checklists', SEED_CHECKLISTS);
+    }
   },
 
   async addChecklist(checklist: Partial<Checklist30d>): Promise<Checklist30d> {
@@ -1223,9 +1327,50 @@ export const fleetService = {
       });
     }
 
-    const { data, error } = await supabase!.from('checklist_summary').select('*');
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('checklist_summary').select('*');
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar resumo de checklists no Supabase, usando local:', e);
+      isDemoMode = true;
+      const machines = LocalStorageDb.get<Machine>('machines', SEED_MACHINES);
+      const checklists = LocalStorageDb.get<Checklist30d>('checklists', SEED_CHECKLISTS);
+      const today = new Date();
+
+      return machines.map(m => {
+        const mChecklists = checklists
+          .filter(c => c.machine_id === m.id)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        const lastDateStr = mChecklists.length > 0 ? mChecklists[0].date : null;
+        let daysSinceLast: number | null = null;
+        let status: 'NUNCA' | 'VENCIDO' | 'PRÓXIMO' | 'OK' = 'NUNCA';
+
+        if (lastDateStr) {
+          const lastDate = new Date(lastDateStr);
+          daysSinceLast = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysSinceLast > 30) {
+            status = 'VENCIDO';
+          } else if (daysSinceLast >= 23) {
+            status = 'PRÓXIMO';
+          } else {
+            status = 'OK';
+          }
+        }
+
+        return {
+          machine_id: m.id,
+          machine_code: m.code,
+          machine_name: m.name,
+          farm_id: m.farm_id,
+          last_checklist_date: lastDateStr,
+          days_since_last: daysSinceLast,
+          status
+        };
+      });
+    }
   },
 
   // =======================================================================
@@ -1235,9 +1380,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('work_orders', SEED_WORK_ORDERS);
     }
-    const { data, error } = await supabase!.from('work_orders').select('*').order('os_number', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('work_orders').select('*').order('os_number', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar ordens de serviço no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('work_orders', SEED_WORK_ORDERS);
+    }
   },
 
   async addWorkOrder(wo: Partial<WorkOrder>): Promise<WorkOrder> {

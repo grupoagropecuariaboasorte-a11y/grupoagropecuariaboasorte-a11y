@@ -122,10 +122,13 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
   const laneConcluida = filteredOrders.filter(wo => wo.status === 'Concluída');
 
   // Cores por prioridade
-  const priorityColors = {
-    'Alta': 'bg-rose-50 text-rose-700 border-rose-105',
-    'Média': 'bg-amber-50 text-amber-700 border-amber-105',
-    'Baixa': 'bg-blue-50 text-blue-700 border-blue-105',
+  const priorityColors: Record<string, string> = {
+    'Alta': 'bg-rose-50 text-rose-700 border-rose-100',
+    'alta': 'bg-rose-50 text-rose-700 border-rose-100',
+    'Média': 'bg-amber-50 text-amber-700 border-amber-100',
+    'media': 'bg-amber-50 text-amber-700 border-amber-100',
+    'Baixa': 'bg-blue-50 text-blue-700 border-blue-100',
+    'baixa': 'bg-blue-50 text-blue-700 border-blue-100',
   };
 
   return (
@@ -209,7 +212,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
                   <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{wo.description}&rdquo;</p>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority]}`}>
+                    <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
                       Prioridade {wo.priority}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">Tec: {wo.assigned_to || 'Sem Técnico'}</span>
@@ -274,7 +277,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
                   <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{wo.description}&rdquo;</p>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority]}`}>
+                    <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
                       Prioridade {wo.priority}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">Tec: {wo.assigned_to || 'Sem Técnico'}</span>
