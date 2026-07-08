@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
 
-// Determinar se estamos em modo demo - desativado permanentemente conforme solicitado pelo usuário
-export const isDemoMode = false;
+// Determinar se estamos em modo demo de forma dinâmica
+export const isDemoMode = !supabaseUrl || !supabaseAnonKey;
 
 // Inicializar cliente real do Supabase se as chaves estiverem presentes
 let client = null;

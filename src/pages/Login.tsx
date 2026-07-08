@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase, isDemoMode } from '../lib/supabaseClient';
-import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: (email: string, role: 'viewer' | 'editor' | 'admin') => void;
@@ -19,6 +19,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [showQuickDemo, setShowQuickDemo] = useState(false);
+  const [showSupaWarning, setShowSupaWarning] = useState(!supabase);
 
   const handleRealLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,9 +143,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative">
-      {!supabase && (
-        <div className="absolute top-0 left-0 right-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs text-amber-400 flex items-center justify-center gap-2 z-50">
-          <span>🔌 <strong>Conexão Supabase Pendente:</strong> Por favor, insira as chaves <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code> nas Configurações (ícone de engrenagem) para reconectar o banco de dados real.</span>
+      {!supabase && showSupaWarning && (
+        <div className="absolute top-0 left-0 right-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs text-amber-400 flex items-center justify-between gap-3 z-50">
+          <div className="flex-1 text-center">
+            🔌 <strong>Conexão Supabase Pendente:</strong> Por favor, insira as chaves <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code> nas Configurações (ícone de engrenagem) para reconectar o banco de dados real.
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSupaWarning(false)}
+            className="text-amber-400 hover:text-amber-200 transition-colors p-1 rounded-md hover:bg-white/5 cursor-pointer shrink-0"
+            title="Descartar aviso"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
