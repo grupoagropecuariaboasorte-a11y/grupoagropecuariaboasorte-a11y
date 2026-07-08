@@ -510,7 +510,23 @@ export const fleetService = {
     maintenanceTypes: LookupItem[];
     priorities: LookupItem[];
     serviceLocations: LookupItem[];
+    maintenanceCategories: string[];
   }> {
+    const categories = [
+      'Motor e Filtros',
+      'Sistema Hidráulico',
+      'Transmissão e Caixa',
+      'Freios e Direção',
+      'Elétrica e Bateria',
+      'Arrefecimento',
+      'Cabine e Ar Condicionado',
+      'Pneus / Rodas',
+      'Esteiras / Suspensão',
+      'Implementos / Facas',
+      'Funilaria e Pintura',
+      'Outros'
+    ];
+
     if (isDemoMode) {
       return {
         equipmentTypes: LocalStorageDb.get('equipment_types', SEED_EQUIPMENT_TYPES),
@@ -518,6 +534,7 @@ export const fleetService = {
         maintenanceTypes: LocalStorageDb.get('maintenance_types', SEED_MAINTENANCE_TYPES),
         priorities: LocalStorageDb.get('priorities', SEED_PRIORITIES),
         serviceLocations: LocalStorageDb.get('service_locations', SEED_SERVICE_LOCATIONS),
+        maintenanceCategories: categories,
       };
     }
 
@@ -542,6 +559,7 @@ export const fleetService = {
         maintenanceTypes: mt.data || [],
         priorities: pr.data || [],
         serviceLocations: sl.data || [],
+        maintenanceCategories: categories,
       };
     } catch (e) {
       console.error('Erro ao carregar lookups do Supabase, usando local:', e);
@@ -552,6 +570,7 @@ export const fleetService = {
         maintenanceTypes: LocalStorageDb.get('maintenance_types', SEED_MAINTENANCE_TYPES),
         priorities: LocalStorageDb.get('priorities', SEED_PRIORITIES),
         serviceLocations: LocalStorageDb.get('service_locations', SEED_SERVICE_LOCATIONS),
+        maintenanceCategories: categories,
       };
     }
   },
