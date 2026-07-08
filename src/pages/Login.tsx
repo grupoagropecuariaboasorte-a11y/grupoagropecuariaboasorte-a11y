@@ -3,7 +3,7 @@ import { supabase, isDemoMode, isSchemaMissing } from '../lib/supabaseClient';
 import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X } from 'lucide-react';
 import SupabaseSetupAssistant from '../components/SupabaseSetupAssistant';
 import { fleetService } from '../lib/fleetService';
-import logoBoaSorte from '../assets/images/logo_boa_sorte_1783538486473.jpg';
+import logoBoaSorte from '../assets/images/logo_boa_sorte_original_1783538842727.jpg';
 
 interface LoginProps {
   onLoginSuccess: (email: string, role: 'viewer' | 'editor' | 'admin') => void;
