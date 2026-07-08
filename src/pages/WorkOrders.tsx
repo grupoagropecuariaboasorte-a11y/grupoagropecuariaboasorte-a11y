@@ -108,7 +108,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     const farmMatch = selectedFarmId === 'ALL' || (machine && machine.farm_id === selectedFarmId);
 
     const textMatch = 
-      (wo.os_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(wo.os_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (wo.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (wo.assigned_to || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
