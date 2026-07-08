@@ -211,10 +211,10 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     const statusMatch = statusFilter === 'ALL' || m.status === statusFilter;
     const typeMatch = typeFilter === 'ALL' || m.type === typeFilter;
     const textMatch = 
-      m.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.brand || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.model || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (m.driver_name && m.driver_name.toLowerCase().includes(searchTerm.toLowerCase()));
     
     return farmMatch && statusMatch && typeMatch && textMatch;

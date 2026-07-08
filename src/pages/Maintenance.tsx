@@ -155,12 +155,12 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
     const catMatch = categoryFilter === 'ALL' || log.main_item === categoryFilter;
 
     const textMatch = 
-      log.service_description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.main_item.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.responsible.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (log.service_description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (log.main_item || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (log.responsible || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (log.parts_replaced && log.parts_replaced.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (machine && machine.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (machine && machine.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
     return farmMatch && periodMatch && catMatch && textMatch;
   });

@@ -178,9 +178,9 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     const machine = machines.find(m => m.id === log.machine_id);
     const farm = farms.find(f => f.id === log.farm_id);
     const textMatch = 
-      (machine && machine.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (machine && machine.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (farm && farm.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (farm && (farm.name || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
       (log.responsible && log.responsible.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (log.notes && log.notes.toLowerCase().includes(searchTerm.toLowerCase()));
 

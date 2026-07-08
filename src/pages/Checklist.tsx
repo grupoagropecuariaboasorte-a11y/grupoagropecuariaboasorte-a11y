@@ -175,11 +175,11 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     const periodMatch = isDateInPeriod(log.date);
 
     const textMatch = 
-      log.operator_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (log.operator_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (log.work_type && log.work_type.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (log.failed_items_notes && log.failed_items_notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (machine && machine.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (machine && machine.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
     return farmMatch && periodMatch && textMatch;
   });

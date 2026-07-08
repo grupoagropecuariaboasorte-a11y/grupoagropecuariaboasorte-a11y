@@ -168,9 +168,9 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     
     const machine = machines.find(m => m.id === p.machine_id);
     const textMatch = 
-      p.maintenance_item.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (machine && machine.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (machine && machine.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (p.maintenance_item || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
     return farmMatch && statusMatch && textMatch;
   });
