@@ -5,6 +5,7 @@ import {
   FileText, Settings, LogOut, Info
 } from 'lucide-react';
 import { isDemoMode } from '../lib/supabaseClient';
+import logoBoaSorte from '../assets/images/logo_boa_sorte_1783538486473.jpg';
 
 interface SidebarProps {
   userRole: 'viewer' | 'editor' | 'admin';
@@ -32,14 +33,17 @@ export default function Sidebar({ userRole, userEmail, onLogout }: SidebarProps)
   return (
     <aside className="w-64 bg-[#1B3022] text-white flex flex-col justify-between h-screen sticky top-0 no-print shadow-md">
       {/* Brand Logo & Name */}
-      <div className="p-6 border-b border-white/10">
+      <div className="p-5 border-b border-white/10 bg-[#122218]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-amber-400 rounded-lg flex items-center justify-center text-[#1B3022] shrink-0 font-bold shadow-sm">
-            <Tractor size={18} />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg tracking-tight text-white">AgroFleet</h1>
-            <p className="text-[10px] text-amber-400 font-medium tracking-wider uppercase font-mono">Controle de Frota</p>
+          <img 
+            src={logoBoaSorte} 
+            alt="Boa Sorte Logo" 
+            className="w-10 h-10 rounded-full border border-amber-400/30 object-cover shadow-md shrink-0"
+            referrerPolicy="no-referrer"
+          />
+          <div className="truncate">
+            <h1 className="font-bold text-sm tracking-tight text-white leading-tight uppercase truncate">BOA SORTE</h1>
+            <p className="text-[9px] text-amber-400 font-bold tracking-wider uppercase font-mono">AGROPECUÁRIA</p>
           </div>
         </div>
       </div>
