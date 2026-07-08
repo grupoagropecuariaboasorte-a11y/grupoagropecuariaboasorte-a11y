@@ -143,22 +143,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative">
-      {!supabase && showSupaWarning && (
-        <div className="absolute top-0 left-0 right-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs text-amber-400 flex items-center justify-between gap-3 z-50">
-          <div className="flex-1 text-center">
-            🔌 <strong>Conexão Supabase Pendente:</strong> Por favor, insira as chaves <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code> nas Configurações (ícone de engrenagem) para reconectar o banco de dados real.
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowSupaWarning(false)}
-            className="text-amber-400 hover:text-amber-200 transition-colors p-1 rounded-md hover:bg-white/5 cursor-pointer shrink-0"
-            title="Descartar aviso"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
       {/* Background visual accents */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-950/20 via-slate-950 to-slate-950 -z-10" />
 
@@ -390,13 +374,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full flex items-center justify-center gap-2 py-3 text-white font-medium text-sm rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 ${
-                  !supabase 
-                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-950/50' 
-                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/50'
-                }`}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50"
               >
-                {loading ? 'Entrando...' : !supabase ? 'Entrar no Sistema (Modo Demo)' : 'Entrar no Sistema'}
+                {loading ? 'Entrando...' : 'Entrar no Sistema'}
                 <Play size={14} fill="currentColor" />
               </button>
 
