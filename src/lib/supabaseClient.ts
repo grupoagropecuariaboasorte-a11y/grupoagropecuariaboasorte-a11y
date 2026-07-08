@@ -6,6 +6,12 @@ const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'sb_p
 // Determinar se estamos em modo demo de forma dinâmica
 export const isDemoMode = false;
 
+// Estado global para detectar se as tabelas do Supabase não existem
+export let isSchemaMissing = false;
+export function setSchemaMissing(value: boolean) {
+  isSchemaMissing = value;
+}
+
 // Inicializar cliente real do Supabase se as chaves estiverem presentes
 let client = null;
 try {
@@ -16,4 +22,5 @@ try {
 }
 
 export const supabase = client;
+
 

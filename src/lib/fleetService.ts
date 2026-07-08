@@ -1,4 +1,4 @@
-import { supabase, isDemoMode as importedDemoMode } from './supabaseClient';
+import { supabase, isDemoMode as importedDemoMode, setSchemaMissing } from './supabaseClient';
 import { 
   Farm, Machine, FuelStock, FuelLog, PreventivePlanItem, 
   MaintenanceLog, Checklist30d, WorkOrder, LookupItem,
@@ -6,6 +6,23 @@ import {
 } from '../types';
 
 let isDemoMode = importedDemoMode || !supabase;
+
+// Função auxiliar para tratar erros do banco e detectar tabelas ausentes
+function handleDbError(e: any, message: string) {
+  console.error(message, e);
+  if (
+    e?.code === 'PGRST205' || 
+    e?.code === '42P01' || // PostgreSQL undefined_table error code
+    (e?.message && (
+      e.message.includes('Could not find the table') || 
+      e.message.includes('relation "') || 
+      e.message.includes('does not exist')
+    ))
+  ) {
+    setSchemaMissing(true);
+  }
+}
+
 
 // =========================================================================
 // VALORES PADRÃO (SEED) PARA O MODO DEMO
@@ -587,8 +604,7 @@ export const fleetService = {
       if (error) throw error;
       return data || [];
     } catch (e) {
-      console.error('Erro ao buscar fazendas no Supabase, usando local:', e);
-      isDemoMode = true;
+      handleDbError(e, 'Erro ao buscar fazendas no Supabase, usando local:');
       return LocalStorageDb.get('farms', SEED_FARMS);
     }
   },

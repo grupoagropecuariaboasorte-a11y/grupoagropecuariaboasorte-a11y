@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { supabase, isDemoMode } from '../lib/supabaseClient';
+import React, { useState, useEffect } from 'react';
+import { supabase, isDemoMode, isSchemaMissing } from '../lib/supabaseClient';
 import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X } from 'lucide-react';
+import SupabaseSetupAssistant from '../components/SupabaseSetupAssistant';
+import { fleetService } from '../lib/fleetService';
 
 interface LoginProps {
   onLoginSuccess: (email: string, role: 'viewer' | 'editor' | 'admin') => void;
@@ -20,6 +22,23 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [successMsg, setSuccessMsg] = useState('');
   const [showQuickDemo, setShowQuickDemo] = useState(false);
   const [showSupaWarning, setShowSupaWarning] = useState(!supabase);
+  const [schemaMissing, setSchemaMissing] = useState(isSchemaMissing);
+
+  useEffect(() => {
+    async function checkSchema() {
+      try {
+        await fleetService.getFarms();
+        if (isSchemaMissing) {
+          setSchemaMissing(true);
+        }
+      } catch (e) {
+        setSchemaMissing(true);
+      }
+    }
+    if (supabase) {
+      checkSchema();
+    }
+  }, []);
 
   const handleRealLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,13 +161,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative">
+    <div className={`min-h-screen flex items-center justify-center bg-slate-950 px-4 py-12 relative overflow-y-auto`}>
       {/* Background visual accents */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-950/20 via-slate-950 to-slate-950 -z-10" />
 
-      <div className="w-full max-w-md pt-12">
+      <div className={`w-full ${schemaMissing ? 'max-w-4xl' : 'max-w-md'} flex flex-col gap-6`}>
         {/* Logo and Intro */}
-        <div className="text-center mb-8">
+        <div className="text-center">
           <div className="inline-flex p-3.5 bg-emerald-600/10 text-emerald-500 rounded-2xl border border-emerald-500/20 shadow-lg shadow-emerald-950/30 mb-4">
             <Tractor size={36} />
           </div>
@@ -156,8 +175,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           <p className="text-slate-400 text-sm mt-1">Gestão de Ativos, Manutenção e Combustível</p>
         </div>
 
-        {/* Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8">
+        {schemaMissing && <SupabaseSetupAssistant />}
+
+        <div className="w-full max-w-md mx-auto">
+          {/* Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8">
           {successMsg && (
             <div className="mb-4 p-3.5 bg-emerald-950/30 border border-emerald-900/40 rounded-xl text-xs text-emerald-400 flex items-center gap-2">
               <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
@@ -395,6 +417,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </div>
             </form>
           )}
+        </div>
         </div>
       </div>
     </div>

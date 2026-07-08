@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { Farm, LookupItem } from '../types';
 import Modal from '../components/Modal';
-import { isDemoMode } from '../lib/supabaseClient';
+import { isDemoMode, isSchemaMissing } from '../lib/supabaseClient';
+import SupabaseSetupAssistant from '../components/SupabaseSetupAssistant';
 import { 
   Settings, Database, Play, Trash2, Plus, RefreshCw, 
   Map, Server, ShieldCheck, AlertCircle, Info 
@@ -116,6 +117,8 @@ export default function SettingsPage({ userRole }: SettingsProps) {
         </h3>
         <p className="text-xs text-slate-500 mt-1">Gerenciamento de tabelas auxiliares, conexão com o banco e dados locais.</p>
       </div>
+
+      {isSchemaMissing && <SupabaseSetupAssistant />}
 
       {/* CONEXÃO E METADADOS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
