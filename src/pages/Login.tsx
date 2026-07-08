@@ -25,20 +25,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
     setErrorMsg('');
 
-    if (isDemoMode) {
-      setTimeout(() => {
-        let role: 'viewer' | 'editor' | 'admin' = 'admin';
-        if (email.includes('editor')) role = 'editor';
-        if (email.includes('viewer')) role = 'viewer';
-        
-        onLoginSuccess(email, role);
-        setLoading(false);
-      }, 400);
+    if (!supabase) {
+      setErrorMsg('O cliente do Supabase não está inicializado. Configure as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no painel do aplicativo.');
+      setLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase!.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -47,7 +41,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       if (data?.user) {
         // Obter role do perfil
-        const { data: profile } = await supabase!
+        const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
@@ -62,14 +56,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
   };
 
-  const handleDemoLogin = (role: 'viewer' | 'editor' | 'admin') => {
-    setLoading(true);
-    setTimeout(() => {
-      onLoginSuccess(`diretoria@agroboasorte.com.br`, role);
-      setLoading(false);
-    }, 400);
-  };
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -82,16 +68,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
-    if (isDemoMode) {
-      setTimeout(() => {
-        onLoginSuccess(registerEmail, registerRole);
-        setLoading(false);
-      }, 600);
+    if (!supabase) {
+      setErrorMsg('O cliente do Supabase não está inicializado. Configure as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no painel do aplicativo.');
+      setLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase!.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: registerEmail,
         password: registerPassword,
       });
@@ -99,7 +83,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (error) throw error;
 
       if (data?.user) {
-        const { error: profileError } = await supabase!
+        const { error: profileError } = await supabase
           .from('profiles')
           .insert([
             {
@@ -132,17 +116,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (isDemoMode) {
-      setTimeout(() => {
-        setSuccessMsg('Simulação: E-mail de redefinição de senha enviado para ' + forgotEmail);
-        setView('login');
-        setLoading(false);
-      }, 600);
+    if (!supabase) {
+      setErrorMsg('O cliente do Supabase não está inicializado.');
+      setLoading(false);
       return;
     }
 
     try {
-      const { error } = await supabase!.auth.resetPasswordForEmail(forgotEmail, {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
         redirectTo: `${window.location.origin}/`,
       });
 
@@ -158,11 +139,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative">
+      {!supabase && (
+        <div className="absolute top-0 left-0 right-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs text-amber-400 flex items-center justify-center gap-2 z-50">
+          <span>🔌 <strong>Conexão Supabase Pendente:</strong> Por favor, insira as chaves <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code> nas Configurações (ícone de engrenagem) para reconectar o banco de dados real.</span>
+        </div>
+      )}
+
       {/* Background visual accents */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-950/20 via-slate-950 to-slate-950 -z-10" />
 
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md pt-12">
         {/* Logo and Intro */}
         <div className="text-center mb-8">
           <div className="inline-flex p-3.5 bg-emerald-600/10 text-emerald-500 rounded-2xl border border-emerald-500/20 shadow-lg shadow-emerald-950/30 mb-4">
@@ -182,72 +169,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           )}
 
           {errorMsg && (
-            <div className="mb-4 p-3.5 bg-red-950/30 border border-red-900/40 rounded-xl text-xs text-red-400">
-              {errorMsg}
+            <div className="mb-4 p-3.5 bg-red-950/30 border border-red-900/40 rounded-xl text-xs text-red-400 flex flex-col gap-2">
+              <span>{errorMsg}</span>
+              {(errorMsg.toLowerCase().includes('failed to fetch') || errorMsg.toLowerCase().includes('fetch') || errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('conexão') || errorMsg.toLowerCase().includes('conectar')) && (
+                <div className="mt-1 pt-2 border-t border-red-900/30">
+                  <p className="text-[11px] text-slate-300 leading-relaxed text-left">
+                    <strong>Por que isso acontece?</strong> O aplicativo não conseguiu se conectar com o servidor do Supabase. Isso ocorre quando as credenciais de API estão ausentes, incorretas no arquivo de configuração, ou há um bloqueio de rede.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {isDemoMode && showQuickDemo ? (
-            /* DEMO LOGIN OPTIONS */
-            <div className="space-y-6">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-xl text-center">
-                <span className="inline-block px-2.5 py-0.5 text-[9px] font-mono font-semibold tracking-wide bg-amber-500/20 text-amber-300 rounded-full mb-2 uppercase">
-                  Modo de Demonstração Ativo
-                </span>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Para facilitar a visualização do applet no AI Studio, escolha uma das credenciais de testes abaixo para entrar instantaneamente:
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => handleDemoLogin('admin')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all text-left cursor-pointer group"
-                >
-                  <div>
-                    <p className="text-xs font-semibold text-slate-200">Entrar como Administrador</p>
-                    <p className="text-[10px] text-emerald-500 font-mono">Role: admin (Controle Total)</p>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-500 group-hover:text-emerald-500 transition-colors" />
-                </button>
-
-                <button
-                  onClick={() => handleDemoLogin('editor')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all text-left cursor-pointer group"
-                >
-                  <div>
-                    <p className="text-xs font-semibold text-slate-200">Entrar como Operador / Editor</p>
-                    <p className="text-[10px] text-amber-500 font-mono">Role: editor (Lançar Dados)</p>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-500 group-hover:text-amber-500 transition-colors" />
-                </button>
-
-                <button
-                  onClick={() => handleDemoLogin('viewer')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all text-left cursor-pointer group"
-                >
-                  <div>
-                    <p className="text-xs font-semibold text-slate-200">Entrar como Visualizador</p>
-                    <p className="text-[10px] text-slate-500 font-mono">Role: viewer (Somente Leitura)</p>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                </button>
-              </div>
-
-              <div className="border-t border-slate-800 pt-4 text-center">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickDemo(false)}
-                  className="text-xs text-slate-400 hover:underline cursor-pointer font-bold"
-                >
-                  Voltar para Login de E-mail/Senha
-                </button>
-              </div>
-            </div>
-          ) : view === 'register' ? (
+          {view === 'register' ? (
             /* REGISTRATION FORM */
             <form onSubmit={handleRegister} className="space-y-4">
               <div className="text-center mb-2">
@@ -461,16 +395,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 >
                   <User size={14} /> Não tem uma conta? Criar Usuário
                 </button>
-
-                {isDemoMode && (
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickDemo(true)}
-                    className="text-xs text-amber-400 hover:underline cursor-pointer font-bold"
-                  >
-                    Usar perfis rápidos de demonstração
-                  </button>
-                )}
               </div>
             </form>
           )}

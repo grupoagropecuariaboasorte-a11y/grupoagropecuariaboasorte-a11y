@@ -5,7 +5,7 @@ import {
   FuelStockBalance, ChecklistSummary, PreventivePlanStatus, CostRankingItem, DashboardSummary 
 } from '../types';
 
-let isDemoMode = importedDemoMode;
+let isDemoMode = importedDemoMode || !supabase;
 
 // =========================================================================
 // VALORES PADRÃO (SEED) PARA O MODO DEMO
