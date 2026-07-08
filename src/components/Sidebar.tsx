@@ -5,7 +5,7 @@ import {
   FileText, Settings, LogOut, Info
 } from 'lucide-react';
 import { isDemoMode } from '../lib/supabaseClient';
-import logoBoaSorte from '../assets/images/logo_boa_sorte_original_1783538842727.jpg';
+import logoBoaSorte from '../assets/images/logo_boa_sorte_transparent.png';
 
 interface SidebarProps {
   userRole: 'viewer' | 'editor' | 'admin';
