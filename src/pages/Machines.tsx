@@ -340,6 +340,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                   <th className="py-4 px-6 text-center">Status de Revisão</th>
                   <th className="py-4 px-6 text-right">Horímetro Anterior</th>
                   <th className="py-4 px-6 text-right">Horímetro/Km Atual</th>
+                  <th className="py-4 px-6 text-right">Próxima Revisão</th>
                   <th className="py-4 px-6">Motorista</th>
                   <th className="py-4 px-6 text-center">Ações</th>
                 </tr>
@@ -385,6 +386,14 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                     previousHourKmVal = m.initial_hour_km;
                   }
 
+                  // 3. Cálculo do Horímetro Próxima Revisão
+                  const hourKmItems = machinePrevItems.filter(p => p.interval_hour_km > 0);
+                  const nextRevisionHourKm = hourKmItems.length > 0
+                    ? Math.min(...hourKmItems.map(p => p.last_performed_hour_km + p.interval_hour_km))
+                    : null;
+
+                  const isNextRevisionOverdue = nextRevisionHourKm !== null && currentHourKmVal >= nextRevisionHourKm;
+
                   return (
                     <tr 
                       key={m.id} 
@@ -414,6 +423,15 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                       </td>
                       <td className="py-4 px-6 text-right font-mono text-xs font-bold text-slate-800">
                         {currentHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                      </td>
+                      <td className={`py-4 px-6 text-right font-mono text-xs font-bold ${isNextRevisionOverdue ? 'text-red-600' : 'text-slate-600'}`}>
+                        {nextRevisionHourKm !== null ? (
+                          <>
+                            {nextRevisionHourKm.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-xs text-slate-500">{m.driver_name || 'Sem motorista'}</td>
                       <td className="py-4 px-6 text-center" onClick={(e) => e.stopPropagation()}>

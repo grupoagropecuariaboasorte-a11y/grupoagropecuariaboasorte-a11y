@@ -69,7 +69,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           .eq('id', data.user.id)
           .single();
 
-        onLoginSuccess(data.user.email || email, profile?.role || 'viewer');
+        let finalRole = profile?.role || 'viewer';
+        if ((data.user.email || email).toLowerCase() === 'grupoagropecuariaboasorte@gmail.com') {
+          finalRole = 'admin';
+        }
+
+        onLoginSuccess(data.user.email || email, finalRole as any);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao realizar login. Verifique as credenciais.');

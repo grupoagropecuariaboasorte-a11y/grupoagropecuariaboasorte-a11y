@@ -28,6 +28,10 @@ function AppContent() {
   // Estados de Sessão
   const [userEmail, setUserEmail] = useState<string>(() => localStorage.getItem('agro_user_email') || '');
   const [userRole, setUserRole] = useState<'viewer' | 'editor' | 'admin'>(() => {
+    const email = localStorage.getItem('agro_user_email') || '';
+    if (email.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com') {
+      return 'admin';
+    }
     return (localStorage.getItem('agro_user_role') as any) || '';
   });
 
@@ -48,10 +52,14 @@ function AppContent() {
   }, []);
 
   const handleLoginSuccess = (email: string, role: 'viewer' | 'editor' | 'admin') => {
+    let finalRole = role;
+    if (email.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com') {
+      finalRole = 'admin';
+    }
     setUserEmail(email);
-    setUserRole(role);
+    setUserRole(finalRole);
     localStorage.setItem('agro_user_email', email);
-    localStorage.setItem('agro_user_role', role);
+    localStorage.setItem('agro_user_role', finalRole);
   };
 
   const handleLogout = () => {
