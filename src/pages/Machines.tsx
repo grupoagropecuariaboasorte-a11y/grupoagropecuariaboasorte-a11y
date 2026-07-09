@@ -333,16 +333,16 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="py-4 px-6">Código</th>
-                  <th className="py-4 px-6">Equipamento</th>
-                  <th className="py-4 px-6">Fazenda</th>
-                  <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6 text-center">Status de Revisão</th>
-                  <th className="py-4 px-6 text-right">Horímetro Anterior</th>
-                  <th className="py-4 px-6 text-right">Horímetro/Km Atual</th>
-                  <th className="py-4 px-6 text-right">Próxima Revisão</th>
-                  <th className="py-4 px-6">Motorista</th>
-                  <th className="py-4 px-6 text-center">Ações</th>
+                  <th className="py-2.5 px-3">Código</th>
+                  <th className="py-2.5 px-3">Equipamento</th>
+                  <th className="py-2.5 px-3">Fazenda</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-center">Status de Revisão</th>
+                  <th className="py-2.5 px-3 text-right">Horímetro Anterior</th>
+                  <th className="py-2.5 px-3 text-right">Horímetro/Km Atual</th>
+                  <th className="py-2.5 px-3 text-right">Próxima Revisão</th>
+                  <th className="py-2.5 px-3">Motorista</th>
+                  <th className="py-2.5 px-3 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -402,29 +402,29 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                         selectedMachine?.id === m.id ? 'bg-slate-50 border-r-2 border-[#1B3022]' : ''
                       }`}
                     >
-                      <td className="py-4 px-6 font-mono text-xs font-bold text-[#1B3022]">{m.code}</td>
-                      <td className="py-4 px-6">
+                      <td className="py-3 px-3 font-mono text-xs font-bold text-[#1B3022]">{m.code}</td>
+                      <td className="py-3 px-3">
                         <div className="font-bold text-xs text-slate-800">{m.name}</div>
                         <div className="text-[10px] text-slate-400 mt-0.5">{typeLabel} • {m.brand} {m.model}</div>
                       </td>
-                      <td className="py-4 px-6 text-xs text-slate-600">{farmName}</td>
-                      <td className="py-4 px-6">
+                      <td className="py-3 px-3 text-xs text-slate-600">{farmName}</td>
+                      <td className="py-3 px-3">
                         <span className={`inline-flex px-2 py-0.5 text-[9px] font-bold border rounded-md uppercase tracking-wider ${statusColors[m.status]}`}>
                           {m.status}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className="py-3 px-3 text-center">
                         <span className={`inline-flex px-2 py-0.5 text-[9px] font-bold border rounded-md uppercase tracking-wider ${revisionStatusColor}`}>
                           {revisionStatusText}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-right font-mono text-xs font-bold text-slate-500">
+                      <td className="py-3 px-3 text-right font-mono text-xs font-bold text-slate-500">
                         {previousHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
                       </td>
-                      <td className="py-4 px-6 text-right font-mono text-xs font-bold text-slate-800">
+                      <td className="py-3 px-3 text-right font-mono text-xs font-bold text-slate-800">
                         {currentHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
                       </td>
-                      <td className={`py-4 px-6 text-right font-mono text-xs font-bold ${isNextRevisionOverdue ? 'text-red-600' : 'text-slate-600'}`}>
+                      <td className={`py-3 px-3 text-right font-mono text-xs font-bold ${isNextRevisionOverdue ? 'text-red-600' : 'text-slate-600'}`}>
                         {nextRevisionHourKm !== null ? (
                           <>
                             {nextRevisionHourKm.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
@@ -433,8 +433,8 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           <span className="text-slate-300">-</span>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-xs text-slate-500">{m.driver_name || 'Sem motorista'}</td>
-                      <td className="py-4 px-6 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-3 text-xs text-slate-500">{m.driver_name || 'Sem motorista'}</td>
+                      <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => handleOpenDrawer(m)}
