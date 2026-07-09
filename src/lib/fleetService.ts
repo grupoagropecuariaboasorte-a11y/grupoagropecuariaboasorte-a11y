@@ -1,4 +1,4 @@
-import { supabase, isDemoMode as importedDemoMode, setSchemaMissing } from './supabaseClient';
+import { supabase, isDemoMode as importedDemoMode, setDemoMode, setSchemaMissing } from './supabaseClient';
 import { 
   Farm, Machine, FuelStock, FuelLog, PreventivePlanItem, 
   MaintenanceLog, Checklist30d, WorkOrder, LookupItem,
@@ -6,10 +6,15 @@ import {
 } from '../types';
 
 let isDemoMode = importedDemoMode || !supabase;
+function syncDemoMode(val: boolean) {
+  isDemoMode = val;
+  setDemoMode(val);
+}
 
 // Função auxiliar para tratar erros do banco e detectar tabelas ausentes
 function handleDbError(e: any, message: string) {
   console.error(message, e);
+  syncDemoMode(true);
   if (
     e?.code === 'PGRST205' || 
     e?.code === '42P01' || // PostgreSQL undefined_table error code
@@ -493,7 +498,7 @@ export const fleetService = {
       return data;
     } catch (e) {
       console.error('Erro ao buscar perfil do Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       const p = localStorage.getItem('agro_fleet_profile');
       return p ? JSON.parse(p) : SEED_PROFILE;
     }
@@ -511,7 +516,7 @@ export const fleetService = {
       return data;
     } catch (e) {
       console.error('Erro ao atualizar perfil no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       const p = { id, email: 'user@agro.com', role };
       localStorage.setItem('agro_fleet_profile', JSON.stringify(p));
       return p;
@@ -580,7 +585,7 @@ export const fleetService = {
       };
     } catch (e) {
       console.error('Erro ao carregar lookups do Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       return {
         equipmentTypes: LocalStorageDb.get('equipment_types', SEED_EQUIPMENT_TYPES),
         fuelTypes: LocalStorageDb.get('fuel_types', SEED_FUEL_TYPES),
@@ -622,13 +627,16 @@ export const fleetService = {
       LocalStorageDb.set('farms', list);
       return newFarm;
     }
+    const cleanFarm = {
+      name: farm.name || 'Nova Fazenda'
+    };
     try {
-      const { data, error } = await supabase!.from('farms').insert([farm]).select().single();
+      const { data, error } = await supabase!.from('farms').insert([cleanFarm]).select().single();
       if (error) throw error;
       return data;
     } catch (e) {
       console.error('Erro ao adicionar fazenda no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       const list = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
       const newFarm: Farm = {
         id: crypto.randomUUID(),
@@ -657,7 +665,7 @@ export const fleetService = {
       return data;
     } catch (e) {
       console.error('Erro ao atualizar fazenda no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       const list = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
       const index = list.findIndex(f => f.id === id);
       if (index === -1) throw new Error('Farm not found');
@@ -679,7 +687,7 @@ export const fleetService = {
       if (error) throw error;
     } catch (e) {
       console.error('Erro ao excluir fazenda no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       let list = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
       list = list.filter(f => f.id !== id);
       LocalStorageDb.set('farms', list);
@@ -699,7 +707,7 @@ export const fleetService = {
       return data || [];
     } catch (e) {
       console.error('Erro ao buscar máquinas no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       return LocalStorageDb.get('machines', SEED_MACHINES);
     }
   },
@@ -729,7 +737,22 @@ export const fleetService = {
       LocalStorageDb.set('machines', list);
       return newMachine;
     }
-    const { data, error } = await supabase!.from('machines').insert([machine]).select().single();
+    const cleanMachine = {
+      code: machine.code || 'MAQ-NEW',
+      name: machine.name || 'Máquina Nova',
+      type: machine.type || 'trator',
+      brand: machine.brand || 'Marca',
+      model: machine.model || 'Modelo',
+      year: Number(machine.year) || new Date().getFullYear(),
+      serial_number: machine.serial_number || '',
+      initial_hour_km: Number(machine.initial_hour_km) || 0,
+      current_hour_km: Number(machine.current_hour_km) || Number(machine.initial_hour_km) || 0,
+      acquisition_date: machine.acquisition_date || new Date().toISOString().split('T')[0],
+      status: machine.status || 'Ativa',
+      farm_id: machine.farm_id || '11111111-1111-1111-1111-111111111111',
+      driver_name: machine.driver_name || ''
+    };
+    const { data, error } = await supabase!.from('machines').insert([cleanMachine]).select().single();
     if (error) throw error;
     return data;
   },
@@ -743,7 +766,23 @@ export const fleetService = {
       LocalStorageDb.set('machines', list);
       return list[index];
     }
-    const { data, error } = await supabase!.from('machines').update(machine).eq('id', id).select().single();
+    const cleanMachine: any = {};
+    if (machine.code !== undefined) cleanMachine.code = machine.code;
+    if (machine.name !== undefined) cleanMachine.name = machine.name;
+    if (machine.type !== undefined) cleanMachine.type = machine.type;
+    if (machine.brand !== undefined) cleanMachine.brand = machine.brand;
+    if (machine.model !== undefined) cleanMachine.model = machine.model;
+    if (machine.year !== undefined) cleanMachine.year = Number(machine.year);
+    if (machine.serial_number !== undefined) cleanMachine.serial_number = machine.serial_number;
+    if (machine.initial_hour_km !== undefined) cleanMachine.initial_hour_km = Number(machine.initial_hour_km);
+    if (machine.current_hour_km !== undefined) cleanMachine.current_hour_km = Number(machine.current_hour_km);
+    if (machine.acquisition_date !== undefined) cleanMachine.acquisition_date = machine.acquisition_date;
+    if (machine.status !== undefined) cleanMachine.status = machine.status;
+    if (machine.farm_id !== undefined) cleanMachine.farm_id = machine.farm_id;
+    if (machine.driver_name !== undefined) cleanMachine.driver_name = machine.driver_name;
+    cleanMachine.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase!.from('machines').update(cleanMachine).eq('id', id).select().single();
     if (error) throw error;
     return data;
   },
@@ -772,7 +811,7 @@ export const fleetService = {
       return data || [];
     } catch (e) {
       console.error('Erro ao buscar abastecimentos no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       return LocalStorageDb.get('fuel_logs', SEED_FUEL_LOGS);
     }
   },
@@ -875,14 +914,21 @@ export const fleetService = {
 
     const pStart = Number(log.pump_reading_start) || 0;
     const pEnd = Number(log.pump_reading_end) || 0;
-    const liters = pEnd - pStart;
-    const val = liters * price;
 
     const logToInsert = {
-      ...log,
+      farm_id: log.farm_id,
+      machine_id: log.machine_id,
+      date: log.date || new Date().toISOString(),
+      fuel_type: log.fuel_type || 'diesel_s10',
+      pump_reading_start: pStart,
+      pump_reading_end: pEnd,
+      hour_km_at_fueling: Number(log.hour_km_at_fueling) || 0,
+      hours_km_since_last: Number(log.hours_km_since_last) || 0,
+      consumption_rate: Number(log.consumption_rate) || 0,
       price_per_liter: price,
-      liters_supplied: liters,
-      total_value: Number(val.toFixed(2))
+      supplier: log.supplier || '',
+      responsible: log.responsible || '',
+      notes: log.notes || ''
     };
 
     const { data, error } = await supabase!.from('fuel_logs').insert([logToInsert]).select().single();
@@ -954,17 +1000,20 @@ export const fleetService = {
     const farmId = log.farm_id || '11111111-1111-1111-1111-111111111111';
     const price = await this.getLatestDieselPrice(farmId);
 
-    const pStart = Number(log.pump_reading_start) || 0;
-    const pEnd = Number(log.pump_reading_end) || 0;
-    const liters = pEnd - pStart;
-    const val = liters * price;
-
-    const updatedFields = {
-      ...log,
-      price_per_liter: price,
-      liters_supplied: liters,
-      total_value: Number(val.toFixed(2))
-    };
+    const updatedFields: any = {};
+    if (log.farm_id !== undefined) updatedFields.farm_id = log.farm_id;
+    if (log.machine_id !== undefined) updatedFields.machine_id = log.machine_id;
+    if (log.date !== undefined) updatedFields.date = log.date;
+    if (log.fuel_type !== undefined) updatedFields.fuel_type = log.fuel_type;
+    if (log.pump_reading_start !== undefined) updatedFields.pump_reading_start = Number(log.pump_reading_start);
+    if (log.pump_reading_end !== undefined) updatedFields.pump_reading_end = Number(log.pump_reading_end);
+    if (log.hour_km_at_fueling !== undefined) updatedFields.hour_km_at_fueling = Number(log.hour_km_at_fueling);
+    if (log.hours_km_since_last !== undefined) updatedFields.hours_km_since_last = Number(log.hours_km_since_last);
+    if (log.consumption_rate !== undefined) updatedFields.consumption_rate = Number(log.consumption_rate);
+    updatedFields.price_per_liter = price;
+    if (log.supplier !== undefined) updatedFields.supplier = log.supplier;
+    if (log.responsible !== undefined) updatedFields.responsible = log.responsible;
+    if (log.notes !== undefined) updatedFields.notes = log.notes;
 
     const { data, error } = await supabase!.from('fuel_logs').update(updatedFields).eq('id', id).select().single();
     if (error) throw error;
@@ -1049,7 +1098,7 @@ export const fleetService = {
       return data || [];
     } catch (e) {
       console.error('Erro ao buscar fuel_stock no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       return LocalStorageDb.get('fuel_stock', SEED_FUEL_STOCK);
     }
   },
@@ -1072,13 +1121,22 @@ export const fleetService = {
       LocalStorageDb.set('fuel_stock', list);
       return newEntry;
     }
+    const cleanStock = {
+      farm_id: stock.farm_id,
+      entry_date: stock.entry_date || new Date().toISOString().split('T')[0],
+      liters_received: Number(stock.liters_received) || 0,
+      price_per_liter: Number(stock.price_per_liter) || 5.85,
+      supplier: stock.supplier || '',
+      minimum_stock_alert: Number(stock.minimum_stock_alert) || 1000,
+      notes: stock.notes || ''
+    };
     try {
-      const { data, error } = await supabase!.from('fuel_stock').insert([stock]).select().single();
+      const { data, error } = await supabase!.from('fuel_stock').insert([cleanStock]).select().single();
       if (error) throw error;
       return data;
     } catch (e) {
       console.error('Erro ao adicionar fuel_stock no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
       const newEntry: FuelStock = {
         id: crypto.randomUUID(),
@@ -1139,7 +1197,7 @@ export const fleetService = {
       return data || [];
     } catch (e) {
       console.error('Erro ao buscar balanço de combustível no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       const farms = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
       const fuelStock = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
       const fuelLogs = LocalStorageDb.get<FuelLog>('fuel_logs', SEED_FUEL_LOGS);
@@ -1220,7 +1278,7 @@ export const fleetService = {
     } catch (e: any) {
       if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
         console.error('Tabela fuel_stock inexistente no Supabase, ativando fallback local:', e);
-        isDemoMode = true;
+        syncDemoMode(true);
       } else {
         console.error('Erro ao atualizar no Supabase, usando local:', e);
       }
@@ -1283,7 +1341,7 @@ export const fleetService = {
     } catch (e: any) {
       if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
         console.error('Tabela fuel_stock inexistente no Supabase, ativando fallback local:', e);
-        isDemoMode = true;
+        syncDemoMode(true);
       } else {
         console.error('Erro ao deletar no Supabase, usando local:', e);
       }
@@ -1316,7 +1374,7 @@ export const fleetService = {
       return data || [];
     } catch (e) {
       console.error('Erro ao buscar manutenções no Supabase, usando local:', e);
-      isDemoMode = true;
+      syncDemoMode(true);
       return LocalStorageDb.get('maintenance_logs', SEED_MAINTENANCE_LOGS);
     }
   },
@@ -1365,7 +1423,24 @@ export const fleetService = {
 
       return newLog;
     }
-    const { data, error } = await supabase!.from('maintenance_logs').insert([log]).select().single();
+    const cleanLog = {
+      machine_id: log.machine_id,
+      date: log.date || new Date().toISOString(),
+      type: log.type || 'preventiva',
+      priority: log.priority || 'media',
+      hour_km_at_service: Number(log.hour_km_at_service) || 0,
+      service_description: log.service_description || 'Serviço executado',
+      main_item: log.main_item || 'Geral',
+      parts_replaced: log.parts_replaced || '',
+      quantity: Number(log.quantity) || 1,
+      parts_cost: Number(log.parts_cost) || 0,
+      labor_cost: Number(log.labor_cost) || 0,
+      location_shop: log.location_shop || 'oficina_interna',
+      responsible: log.responsible || '',
+      next_maintenance_date: log.next_maintenance_date || null,
+      next_hour_km: log.next_hour_km ? Number(log.next_hour_km) : null
+    };
+    const { data, error } = await supabase!.from('maintenance_logs').insert([cleanLog]).select().single();
     if (error) throw error;
     return data;
   },
@@ -1414,7 +1489,13 @@ export const fleetService = {
       LocalStorageDb.set('preventive_plan', list);
       return newItem;
     }
-    const { data, error } = await supabase!.from('preventive_plan').insert([item]).select().single();
+    const cleanItem = {
+      machine_id: item.machine_id,
+      maintenance_item: item.maintenance_item || 'Item Novo',
+      interval_days: Number(item.interval_days) || 0,
+      interval_hour_km: Number(item.interval_hour_km) || 0
+    };
+    const { data, error } = await supabase!.from('preventive_plan').insert([cleanItem]).select().single();
     if (error) throw error;
     return data;
   },
@@ -1428,7 +1509,13 @@ export const fleetService = {
       LocalStorageDb.set('preventive_plan', list);
       return list[index];
     }
-    const { data, error } = await supabase!.from('preventive_plan').update(item).eq('id', id).select().single();
+    const cleanItem: any = {};
+    if (item.machine_id !== undefined) cleanItem.machine_id = item.machine_id;
+    if (item.maintenance_item !== undefined) cleanItem.maintenance_item = item.maintenance_item;
+    if (item.interval_days !== undefined) cleanItem.interval_days = Number(item.interval_days);
+    if (item.interval_hour_km !== undefined) cleanItem.interval_hour_km = Number(item.interval_hour_km);
+
+    const { data, error } = await supabase!.from('preventive_plan').update(cleanItem).eq('id', id).select().single();
     if (error) throw error;
     return data;
   },
@@ -1643,7 +1730,16 @@ export const fleetService = {
       // Se o status do checklist for grave (Máquina Parada ou Atenção), alertar ou opcionalmente gerar OS
       return newChecklist;
     }
-    const { data, error } = await supabase!.from('checklists_30d').insert([checklist]).select().single();
+    const cleanChecklist = {
+      machine_id: checklist.machine_id,
+      date: checklist.date || new Date().toISOString().split('T')[0],
+      operator_name: checklist.operator_name || 'Operador',
+      hour_km: Number(checklist.hour_km) || 0,
+      work_type: checklist.work_type || '',
+      overall_status: checklist.overall_status || 'OK',
+      failed_items_notes: checklist.failed_items_notes || ''
+    };
+    const { data, error } = await supabase!.from('checklists_30d').insert([cleanChecklist]).select().single();
     if (error) throw error;
     return data;
   },
@@ -1778,7 +1874,16 @@ export const fleetService = {
       LocalStorageDb.set('work_orders', list);
       return newWO;
     }
-    const { data, error } = await supabase!.from('work_orders').insert([wo]).select().single();
+    const cleanWO = {
+      machine_id: wo.machine_id,
+      open_date: wo.open_date || new Date().toISOString().split('T')[0],
+      reason: wo.reason || wo.description || 'Revisão',
+      priority: wo.priority || 'media',
+      status: wo.status || 'Aberta',
+      responsible: wo.responsible || wo.assigned_to || '',
+      notes: wo.notes || ''
+    };
+    const { data, error } = await supabase!.from('work_orders').insert([cleanWO]).select().single();
     if (error) throw error;
     return data;
   },
@@ -1797,7 +1902,24 @@ export const fleetService = {
       LocalStorageDb.set('work_orders', list);
       return list[index];
     }
-    const { data, error } = await supabase!.from('work_orders').update(wo).eq('id', id).select().single();
+    const cleanWO: any = {};
+    if (wo.machine_id !== undefined) cleanWO.machine_id = wo.machine_id;
+    if (wo.open_date !== undefined) cleanWO.open_date = wo.open_date;
+    if (wo.reason !== undefined) cleanWO.reason = wo.reason;
+    else if (wo.description !== undefined) cleanWO.reason = wo.description;
+    if (wo.priority !== undefined) cleanWO.priority = wo.priority;
+    if (wo.status !== undefined) {
+      cleanWO.status = wo.status;
+      if (wo.status === 'Concluída') {
+        cleanWO.close_date = wo.close_date || new Date().toISOString().split('T')[0];
+      }
+    }
+    if (wo.responsible !== undefined) cleanWO.responsible = wo.responsible;
+    else if (wo.assigned_to !== undefined) cleanWO.responsible = wo.assigned_to;
+    if (wo.close_date !== undefined) cleanWO.close_date = wo.close_date;
+    if (wo.notes !== undefined) cleanWO.notes = wo.notes;
+
+    const { data, error } = await supabase!.from('work_orders').update(cleanWO).eq('id', id).select().single();
     if (error) throw error;
     return data;
   },
