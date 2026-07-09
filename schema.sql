@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS fuel_stock (
     farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
     entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
     liters_received NUMERIC NOT NULL CHECK (liters_received > 0),
+    price_per_liter NUMERIC NOT NULL DEFAULT 5.85, -- Preço por litro de diesel na entrega
     supplier VARCHAR(150),
     minimum_stock_alert NUMERIC NOT NULL DEFAULT 1000, -- Limiar de alerta de estoque mínimo
     notes TEXT,

@@ -39,10 +39,14 @@ export interface FuelStock {
   farm_id: string;
   entry_date: string;
   liters_received: number;
+  price_per_liter: number; // Preço de aquisição por litro
   supplier?: string;
   minimum_stock_alert: number;
   notes?: string;
   created_at?: string;
+  is_deleted?: boolean;
+  deletion_reason?: string;
+  edit_justification?: string;
 }
 
 export interface FuelLog {

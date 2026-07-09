@@ -191,11 +191,11 @@ const SEED_MACHINES: Machine[] = [
 ];
 
 const SEED_FUEL_STOCK: FuelStock[] = [
-  { id: 'fs1', farm_id: '11111111-1111-1111-1111-111111111111', entry_date: '2026-06-01', liters_received: 5000, supplier: 'Distribuidora Ipiranga', minimum_stock_alert: 1500, notes: 'Carga cheia tanque central' },
-  { id: 'fs2', farm_id: '11111111-1111-1111-1111-111111111111', entry_date: '2026-06-25', liters_received: 5000, supplier: 'Distribuidora Ipiranga', minimum_stock_alert: 1500, notes: 'Reforço para colheita' },
-  { id: 'fs3', farm_id: '22222222-2222-2222-2222-222222222222', entry_date: '2026-06-05', liters_received: 8000, supplier: 'Combustíveis Raízen', minimum_stock_alert: 2000, notes: 'Tanque principal Rio Ferro' },
-  { id: 'fs4', farm_id: '33333333-3333-3333-3333-333333333333', entry_date: '2026-06-10', liters_received: 4000, supplier: 'Distribuidora Vibra', minimum_stock_alert: 1000, notes: 'Carga Tanque Modelo' },
-  { id: 'fs5', farm_id: '44444444-4444-4444-4444-444444444444', entry_date: '2026-06-12', liters_received: 3000, supplier: 'Combustíveis Alesat', minimum_stock_alert: 800, notes: 'Tanque União de emergência' }
+  { id: 'fs1', farm_id: '11111111-1111-1111-1111-111111111111', entry_date: '2026-06-01', liters_received: 5000, price_per_liter: 5.85, supplier: 'Distribuidora Ipiranga', minimum_stock_alert: 1500, notes: 'Carga cheia tanque central' },
+  { id: 'fs2', farm_id: '11111111-1111-1111-1111-111111111111', entry_date: '2026-06-25', liters_received: 5000, price_per_liter: 5.90, supplier: 'Distribuidora Ipiranga', minimum_stock_alert: 1500, notes: 'Reforço para colheita' },
+  { id: 'fs3', farm_id: '22222222-2222-2222-2222-222222222222', entry_date: '2026-06-05', liters_received: 8000, price_per_liter: 5.65, supplier: 'Combustíveis Raízen', minimum_stock_alert: 2000, notes: 'Tanque principal Rio Ferro' },
+  { id: 'fs4', farm_id: '33333333-3333-3333-3333-333333333333', entry_date: '2026-06-10', liters_received: 4000, price_per_liter: 5.75, supplier: 'Distribuidora Vibra', minimum_stock_alert: 1000, notes: 'Carga Tanque Modelo' },
+  { id: 'fs5', farm_id: '44444444-4444-4444-4444-444444444444', entry_date: '2026-06-12', liters_received: 3000, price_per_liter: 5.80, supplier: 'Combustíveis Alesat', minimum_stock_alert: 800, notes: 'Tanque União de emergência' }
 ];
 
 const SEED_FUEL_LOGS: FuelLog[] = [
@@ -777,14 +777,47 @@ export const fleetService = {
     }
   },
 
+  async getLatestDieselPrice(farmId: string): Promise<number> {
+    if (isDemoMode) {
+      const stockList = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const farmStocks = stockList
+        .filter(s => s.farm_id === farmId && s.price_per_liter !== undefined && s.price_per_liter > 0 && !s.is_deleted)
+        .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+      
+      if (farmStocks.length > 0) {
+        return farmStocks[0].price_per_liter;
+      }
+      return 5.85; // Fallback
+    }
+
+    try {
+      const { data, error } = await supabase!
+        .from('fuel_stock')
+        .select('price_per_liter')
+        .eq('farm_id', farmId)
+        .neq('is_deleted', true)
+        .order('entry_date', { ascending: false })
+        .limit(1);
+      if (error || !data || data.length === 0) {
+        return 5.85;
+      }
+      return Number(data[0].price_per_liter) || 5.85;
+    } catch (e) {
+      console.error('Erro ao buscar preço de diesel:', e);
+      return 5.85;
+    }
+  },
+
   async addFuelLog(log: Partial<FuelLog>): Promise<FuelLog> {
+    const farmId = log.farm_id || '11111111-1111-1111-1111-111111111111';
+    const price = await this.getLatestDieselPrice(farmId);
+
     if (isDemoMode) {
       const list = LocalStorageDb.get<FuelLog>('fuel_logs', SEED_FUEL_LOGS);
       
       const pStart = Number(log.pump_reading_start) || 0;
       const pEnd = Number(log.pump_reading_end) || 0;
       const liters = pEnd - pStart;
-      const price = Number(log.price_per_liter) || 0;
       const val = liters * price;
 
       // Calcular horas desde o último abastecimento (gatilho simulado)
@@ -807,7 +840,7 @@ export const fleetService = {
 
       const newLog: FuelLog = {
         id: crypto.randomUUID(),
-        farm_id: log.farm_id || '11111111-1111-1111-1111-111111111111',
+        farm_id: farmId,
         machine_id: log.machine_id || '',
         date: log.date || new Date().toISOString(),
         fuel_type: log.fuel_type || 'diesel_s10',
@@ -839,9 +872,130 @@ export const fleetService = {
 
       return newLog;
     }
-    const { data, error } = await supabase!.from('fuel_logs').insert([log]).select().single();
+
+    const pStart = Number(log.pump_reading_start) || 0;
+    const pEnd = Number(log.pump_reading_end) || 0;
+    const liters = pEnd - pStart;
+    const val = liters * price;
+
+    const logToInsert = {
+      ...log,
+      price_per_liter: price,
+      liters_supplied: liters,
+      total_value: Number(val.toFixed(2))
+    };
+
+    const { data, error } = await supabase!.from('fuel_logs').insert([logToInsert]).select().single();
     if (error) throw error;
     return data;
+  },
+
+  async updateFuelLog(id: string, log: Partial<FuelLog>): Promise<FuelLog> {
+    if (isDemoMode) {
+      const list = LocalStorageDb.get<FuelLog>('fuel_logs', SEED_FUEL_LOGS);
+      const index = list.findIndex(l => l.id === id);
+      if (index === -1) throw new Error('Abastecimento não encontrado');
+
+      const merged = { ...list[index], ...log };
+
+      const farmId = merged.farm_id || '11111111-1111-1111-1111-111111111111';
+      const price = await this.getLatestDieselPrice(farmId);
+
+      const pStart = Number(merged.pump_reading_start) || 0;
+      const pEnd = Number(merged.pump_reading_end) || 0;
+      const liters = pEnd - pStart;
+      const val = liters * price;
+
+      merged.price_per_liter = price;
+      merged.liters_supplied = liters;
+      merged.total_value = Number(val.toFixed(2));
+
+      // Recalcular hours_km_since_last e consumo
+      const sameMachineLogs = list
+        .filter(l => l.machine_id === merged.machine_id && l.id !== id)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      let lastHourKm = 0;
+      const priorLog = sameMachineLogs.find(l => new Date(l.date).getTime() < new Date(merged.date).getTime());
+      if (priorLog) {
+        lastHourKm = priorLog.hour_km_at_fueling;
+      } else {
+        const mList = LocalStorageDb.get<Machine>('machines', SEED_MACHINES);
+        const m = mList.find(x => x.id === merged.machine_id);
+        lastHourKm = m ? m.initial_hour_km : 0;
+      }
+
+      const fuelingHourKm = Number(merged.hour_km_at_fueling) || 0;
+      const deltaHourKm = fuelingHourKm >= lastHourKm ? fuelingHourKm - lastHourKm : 0;
+      const consumption = (deltaHourKm > 0 && liters > 0) ? (liters / deltaHourKm) : 0;
+
+      merged.hours_km_since_last = deltaHourKm;
+      merged.consumption_rate = Number(consumption.toFixed(3));
+
+      list[index] = merged;
+      LocalStorageDb.set('fuel_logs', list);
+
+      // Atualizar o current_hour_km da máquina se necessário
+      const mList = LocalStorageDb.get<Machine>('machines', SEED_MACHINES);
+      const mIndex = mList.findIndex(m => m.id === merged.machine_id);
+      if (mIndex !== -1) {
+        const remainingMachineLogs = list.filter(l => l.machine_id === merged.machine_id);
+        const maxHourKm = Math.max(mList[mIndex].initial_hour_km, ...remainingMachineLogs.map(l => l.hour_km_at_fueling));
+        if (mList[mIndex].current_hour_km !== maxHourKm) {
+          mList[mIndex].current_hour_km = maxHourKm;
+          mList[mIndex].updated_at = new Date().toISOString();
+          LocalStorageDb.set('machines', mList);
+        }
+      }
+
+      return merged;
+    }
+
+    const farmId = log.farm_id || '11111111-1111-1111-1111-111111111111';
+    const price = await this.getLatestDieselPrice(farmId);
+
+    const pStart = Number(log.pump_reading_start) || 0;
+    const pEnd = Number(log.pump_reading_end) || 0;
+    const liters = pEnd - pStart;
+    const val = liters * price;
+
+    const updatedFields = {
+      ...log,
+      price_per_liter: price,
+      liters_supplied: liters,
+      total_value: Number(val.toFixed(2))
+    };
+
+    const { data, error } = await supabase!.from('fuel_logs').update(updatedFields).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteFuelLog(id: string): Promise<void> {
+    if (isDemoMode) {
+      let list = LocalStorageDb.get<FuelLog>('fuel_logs', SEED_FUEL_LOGS);
+      const logToDelete = list.find(l => l.id === id);
+      if (!logToDelete) return;
+
+      list = list.filter(l => l.id !== id);
+      LocalStorageDb.set('fuel_logs', list);
+
+      // Reverter o current_hour_km da máquina se necessário
+      const mList = LocalStorageDb.get<Machine>('machines', SEED_MACHINES);
+      const mIndex = mList.findIndex(m => m.id === logToDelete.machine_id);
+      if (mIndex !== -1) {
+        const remainingMachineLogs = list.filter(l => l.machine_id === logToDelete.machine_id);
+        const maxHourKm = Math.max(mList[mIndex].initial_hour_km, ...remainingMachineLogs.map(l => l.hour_km_at_fueling));
+        if (mList[mIndex].current_hour_km !== maxHourKm) {
+          mList[mIndex].current_hour_km = maxHourKm;
+          mList[mIndex].updated_at = new Date().toISOString();
+          LocalStorageDb.set('machines', mList);
+        }
+      }
+      return;
+    }
+    const { error } = await supabase!.from('fuel_logs').delete().eq('id', id);
+    if (error) throw error;
   },
 
   // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda
@@ -902,6 +1056,7 @@ export const fleetService = {
         farm_id: stock.farm_id || '',
         entry_date: stock.entry_date || new Date().toISOString().split('T')[0],
         liters_received: Number(stock.liters_received) || 0,
+        price_per_liter: Number(stock.price_per_liter) || 5.85,
         supplier: stock.supplier || '',
         minimum_stock_alert: Number(stock.minimum_stock_alert) || 1000,
         notes: stock.notes || '',
@@ -924,9 +1079,9 @@ export const fleetService = {
       const fuelLogs = LocalStorageDb.get<FuelLog>('fuel_logs', SEED_FUEL_LOGS);
 
       return farms.map(farm => {
-        // soma entradas daquela fazenda
+        // soma entradas daquela fazenda (excluindo excluídas)
         const totalReceived = fuelStock
-          .filter(s => s.farm_id === farm.id)
+          .filter(s => s.farm_id === farm.id && !s.is_deleted)
           .reduce((sum, current) => sum + current.liters_received, 0);
 
         // soma consumos abastecidos naquela fazenda
@@ -936,7 +1091,7 @@ export const fleetService = {
 
         // pegar limiar de alerta
         const lastStockEntry = fuelStock
-          .filter(s => s.farm_id === farm.id)
+          .filter(s => s.farm_id === farm.id && !s.is_deleted)
           .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
         
         const minAlert = lastStockEntry.length > 0 ? lastStockEntry[0].minimum_stock_alert : 1000;
@@ -952,9 +1107,59 @@ export const fleetService = {
       });
     }
 
-    const { data, error } = await supabase!.from('fuel_stock_balance').select('*');
+    try {
+      const { data, error } = await supabase!.from('fuel_stock_balance').select('*');
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar balanço de combustível:', e);
+      return [];
+    }
+  },
+
+  async updateFuelStock(id: string, stock: Partial<FuelStock>): Promise<FuelStock> {
+    if (isDemoMode) {
+      const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const idx = list.findIndex(item => item.id === id);
+      if (idx === -1) throw new Error('Registro não encontrado');
+      
+      const updatedEntry = {
+        ...list[idx],
+        ...stock,
+        liters_received: stock.liters_received !== undefined ? Number(stock.liters_received) : list[idx].liters_received,
+        price_per_liter: stock.price_per_liter !== undefined ? Number(stock.price_per_liter) : list[idx].price_per_liter,
+        minimum_stock_alert: stock.minimum_stock_alert !== undefined ? Number(stock.minimum_stock_alert) : list[idx].minimum_stock_alert,
+      };
+      list[idx] = updatedEntry;
+      LocalStorageDb.set('fuel_stock', list);
+      return updatedEntry;
+    }
+    const { data, error } = await supabase!.from('fuel_stock').update(stock).eq('id', id).select().single();
     if (error) throw error;
-    return data || [];
+    return data;
+  },
+
+  async deleteFuelStock(id: string, justification: string): Promise<FuelStock> {
+    if (isDemoMode) {
+      const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const idx = list.findIndex(item => item.id === id);
+      if (idx === -1) throw new Error('Registro não encontrado');
+      
+      const updatedEntry = {
+        ...list[idx],
+        is_deleted: true,
+        deletion_reason: justification,
+      };
+      list[idx] = updatedEntry;
+      LocalStorageDb.set('fuel_stock', list);
+      return updatedEntry;
+    }
+    const { data, error } = await supabase!.from('fuel_stock').update({
+      is_deleted: true,
+      deletion_reason: justification
+    }).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
   },
 
   // =======================================================================
