@@ -224,8 +224,15 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredBalances.map((item) => {
           const capMax = item.total_received || 5000;
-          const perc = capMax > 0 ? Math.min(100, Math.max(0, (item.current_balance / capMax) * 100)) : 0;
-          const isLow = item.current_balance <= item.min_alert;
+          const currentBal = item.current_balance || 0;
+          const minAlert = item.min_alert || 0;
+          const perc = capMax > 0 ? Math.min(100, Math.max(0, (currentBal / capMax) * 100)) : 0;
+          const isLow = currentBal <= minAlert;
+
+          const farmActiveStocks = stockHistory.filter(s => s.farm_id === item.farm_id && !s.is_deleted);
+          const lastLaunch = farmActiveStocks.length > 0
+            ? [...farmActiveStocks].sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0]
+            : null;
 
           return (
             <div key={item.farm_id} className="bg-white border border-slate-200 p-6 rounded-2xl flex flex-col justify-between shadow-xs relative overflow-hidden">
@@ -256,28 +263,49 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                   <p className="text-slate-400 font-medium">Lançado Entrada</p>
                   <p className="text-slate-800 font-bold font-mono mt-0.5 flex items-center gap-1">
                     <ArrowUpCircle size={14} className="text-emerald-600" />
-                    {item.total_received.toLocaleString('pt-BR')} L
+                    {(item.total_received ?? 0).toLocaleString('pt-BR')} L
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">Consumido</p>
                   <p className="text-slate-800 font-bold font-mono mt-0.5 flex items-center gap-1">
                     <ArrowDownCircle size={14} className="text-blue-600" />
-                    {item.total_consumed.toLocaleString('pt-BR')} L
+                    {(item.total_consumed ?? 0).toLocaleString('pt-BR')} L
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">Saldo Atual</p>
                   <p className={`text-sm font-black font-mono mt-0.5 ${isLow ? 'text-rose-700' : 'text-emerald-700'}`}>
-                    {item.current_balance.toLocaleString('pt-BR')} L
+                    {(item.current_balance ?? 0).toLocaleString('pt-BR')} L
                   </p>
+                </div>
+              </div>
+
+              {/* Preço do Último Lançamento (Preço Atual) */}
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 mb-6 flex justify-between items-center text-xs">
+                <div className="flex items-center gap-2 text-slate-500">
+                  <span className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg shrink-0">
+                    <TrendingUp size={13} />
+                  </span>
+                  <div>
+                    <p className="text-[10px] text-slate-450 font-semibold uppercase tracking-wider">Preço Último Lançado (Atual)</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  {lastLaunch ? (
+                    <p className="font-bold font-mono text-[#1B3022]">
+                      R$ {Number(lastLaunch.price_per_liter || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] font-normal text-slate-400">/ L</span>
+                    </p>
+                  ) : (
+                    <p className="font-medium text-slate-400">Nenhum lançamento</p>
+                  )}
                 </div>
               </div>
 
               {/* Progress visual */}
               <div className="space-y-2">
                 <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                  <span>Limite Alerta: {item.min_alert.toLocaleString('pt-BR')} L</span>
+                  <span>Limite Alerta: {(item.min_alert ?? 0).toLocaleString('pt-BR')} L</span>
                   <span>{perc.toFixed(1)}% do total recebido</span>
                 </div>
                 <div className="w-full bg-slate-100 border border-slate-200/60 rounded-full h-3 overflow-hidden">
@@ -294,7 +322,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                 <div className="mt-4 p-3 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2 text-xs text-rose-800 leading-normal shadow-2xs">
                   <ShieldAlert size={14} className="shrink-0 mt-0.5 text-rose-600" />
                   <span>
-                    <strong>Nível de Alerta Crítico!</strong> O volume de diesel está abaixo do limite configurado de segurança ({item.min_alert.toLocaleString('pt-BR')} L) para a Fazenda {item.farm_name}. Solicite abastecimento de caminhão tanque com urgência.
+                    <strong>Nível de Alerta Crítico!</strong> O volume de diesel está abaixo do limite configurado de segurança ({(item.min_alert ?? 0).toLocaleString('pt-BR')} L) para a Fazenda {item.farm_name}. Solicite abastecimento de caminhão tanque com urgência.
                   </span>
                 </div>
               )}
@@ -321,6 +349,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                 <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-4 px-6">Data de Entrada</th>
                   <th className="py-4 px-6">Fazenda</th>
+                  <th className="py-4 px-6 text-center">Status</th>
                   <th className="py-4 px-6 font-mono text-right">Lts Recebidos</th>
                   <th className="py-4 px-6 font-mono text-right">Preço/L</th>
                   <th className="py-4 px-6">Fornecedor</th>
@@ -349,15 +378,26 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                           )}
                         </div>
                       </td>
+                      <td className="py-4 px-6 text-center">
+                        {h.edit_justification ? (
+                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 uppercase tracking-wide">
+                            Editado
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-850 uppercase tracking-wide">
+                            Lançado
+                          </span>
+                        )}
+                      </td>
                       <td className="py-4 px-6 text-right font-mono font-bold text-[#1B3022]">
-                        +{h.liters_received.toLocaleString('pt-BR')} L
+                        +{(h.liters_received ?? 0).toLocaleString('pt-BR')} L
                       </td>
                       <td className="py-4 px-6 text-right font-mono text-slate-650">
                         R$ {Number(h.price_per_liter || 5.85).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-4 px-6 text-slate-600">{h.supplier || 'Não informado'}</td>
                       <td className="py-4 px-6 text-right font-mono text-slate-500">
-                        {h.minimum_stock_alert.toLocaleString('pt-BR')} L
+                        {(h.minimum_stock_alert ?? 0).toLocaleString('pt-BR')} L
                       </td>
                       <td className="py-4 px-6 text-slate-500 italic max-w-xs truncate" title={h.notes}>
                         {h.notes || 'Nenhuma nota registrada'}
@@ -417,6 +457,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                 <tr className="bg-rose-50/20 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-4 px-6">Data Original</th>
                   <th className="py-4 px-6">Fazenda</th>
+                  <th className="py-4 px-6 text-center">Status</th>
                   <th className="py-4 px-6 font-mono text-right">Lts Recebidos</th>
                   <th className="py-4 px-6 font-mono text-right">Preço/L</th>
                   <th className="py-4 px-6">Fornecedor</th>
@@ -433,8 +474,13 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                         {new Date(h.entry_date).toLocaleDateString('pt-BR')}
                       </td>
                       <td className="py-4 px-6 font-bold line-through decoration-rose-300">{farmName}</td>
+                      <td className="py-4 px-6 text-center">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 uppercase tracking-wide">
+                          Removido
+                        </span>
+                      </td>
                       <td className="py-4 px-6 text-right font-mono font-bold text-rose-600/70 line-through decoration-rose-300">
-                        {h.liters_received.toLocaleString('pt-BR')} L
+                        {(h.liters_received ?? 0).toLocaleString('pt-BR')} L
                       </td>
                       <td className="py-4 px-6 text-right font-mono line-through decoration-rose-300">
                         R$ {Number(h.price_per_liter || 5.85).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
