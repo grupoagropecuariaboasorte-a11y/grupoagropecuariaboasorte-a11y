@@ -1192,27 +1192,39 @@ export const fleetService = {
       return updatedEntry;
     }
 
+    // Proactively construct a clean payload for Supabase to avoid column-not-found errors
+    const cleanStock: any = {};
+    if (stock.farm_id !== undefined) cleanStock.farm_id = stock.farm_id;
+    if (stock.entry_date !== undefined) cleanStock.entry_date = stock.entry_date;
+    if (stock.liters_received !== undefined) cleanStock.liters_received = Number(stock.liters_received);
+    if (stock.price_per_liter !== undefined) cleanStock.price_per_liter = Number(stock.price_per_liter);
+    if (stock.supplier !== undefined) cleanStock.supplier = stock.supplier;
+    if (stock.minimum_stock_alert !== undefined) cleanStock.minimum_stock_alert = Number(stock.minimum_stock_alert);
+
+    let finalNotes = stock.notes !== undefined ? stock.notes : '';
+    if (stock.edit_justification) {
+      finalNotes = finalNotes
+        ? `${finalNotes}\n[Justificativa da alteração: ${stock.edit_justification}]`
+        : `[Justificativa da alteração: ${stock.edit_justification}]`;
+    }
+    if (finalNotes) {
+      cleanStock.notes = finalNotes;
+    } else if (stock.notes !== undefined) {
+      cleanStock.notes = stock.notes;
+    }
+
     try {
-      const { data, error } = await supabase!.from('fuel_stock').update(stock).eq('id', id).select().single();
-      if (error) {
-        // Se der erro de coluna não existente para 'edit_justification'
-        if (error.message?.includes('edit_justification') || error.code === '42P21' || error.code === '42P22') {
-          const { edit_justification, ...cleanStock } = stock;
-          if (edit_justification) {
-            cleanStock.notes = cleanStock.notes 
-              ? `${cleanStock.notes}\n[Justificativa da alteração: ${edit_justification}]`
-              : `[Justificativa da alteração: ${edit_justification}]`;
-          }
-          const retryResult = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().single();
-          if (retryResult.error) throw retryResult.error;
-          return retryResult.data;
-        }
-        throw error;
-      }
+      const { data, error } = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().single();
+      if (error) throw error;
       return data;
-    } catch (e) {
-      console.error('Erro ao atualizar fuel_stock no Supabase, usando local:', e);
-      isDemoMode = true;
+    } catch (e: any) {
+      if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
+        console.error('Tabela fuel_stock inexistente no Supabase, ativando fallback local:', e);
+        isDemoMode = true;
+      } else {
+        console.error('Erro ao atualizar no Supabase, usando local:', e);
+      }
+      
       const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
       const idx = list.findIndex(item => item.id === id);
       if (idx === -1) throw new Error('Registro não encontrado');
@@ -1253,9 +1265,14 @@ export const fleetService = {
       }).eq('id', id).select().single();
 
       if (error) {
-        // Se der erro de coluna não existente para is_deleted ou deletion_reason
-        if (error.message?.includes('is_deleted') || error.message?.includes('deletion_reason') || error.code === '42P21' || error.code === '42P22') {
-          // Fazemos a deleção direta do registro no banco se o soft-delete não for suportado pela tabela
+        // Se der erro de coluna não existente para is_deleted ou deletion_reason (código 42703 ou mensagem)
+        if (
+          error.code === '42703' ||
+          error.message?.includes('is_deleted') || 
+          error.message?.includes('deletion_reason') || 
+          error.code === '42P21' || 
+          error.code === '42P22'
+        ) {
           const deleteResult = await supabase!.from('fuel_stock').delete().eq('id', id).select().single();
           if (deleteResult.error) throw deleteResult.error;
           return deleteResult.data;
@@ -1263,9 +1280,14 @@ export const fleetService = {
         throw error;
       }
       return data;
-    } catch (e) {
-      console.error('Erro ao deletar fuel_stock no Supabase, usando local:', e);
-      isDemoMode = true;
+    } catch (e: any) {
+      if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
+        console.error('Tabela fuel_stock inexistente no Supabase, ativando fallback local:', e);
+        isDemoMode = true;
+      } else {
+        console.error('Erro ao deletar no Supabase, usando local:', e);
+      }
+      
       const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
       const idx = list.findIndex(item => item.id === id);
       if (idx === -1) throw new Error('Registro não encontrado');
