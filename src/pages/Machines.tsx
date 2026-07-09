@@ -32,6 +32,10 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
   const [machinePrevStatus, setMachinePrevStatus] = useState<PreventivePlanStatus[]>([]);
   const [machineChecklists, setMachineChecklists] = useState<Checklist30d[]>([]);
 
+  // Estados globais para cálculo de colunas
+  const [allPrevStatuses, setAllPrevStatuses] = useState<PreventivePlanStatus[]>([]);
+  const [allFuelLogs, setAllFuelLogs] = useState<FuelLog[]>([]);
+
   // Modais de CRUD
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -55,16 +59,20 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     async function loadData() {
       setLoading(true);
       try {
-        const [mList, fList, lData] = await Promise.all([
+        const [mList, fList, lData, pStatuses, fuelLogsList] = await Promise.all([
           fleetService.getMachines(),
           fleetService.getFarms(),
-          fleetService.getLookups()
+          fleetService.getLookups(),
+          fleetService.getPreventivePlanStatus(),
+          fleetService.getFuelLogs()
         ]);
         setMachines(mList);
         setFarms(fList);
         setLookups(lData);
+        setAllPrevStatuses(pStatuses);
+        setAllFuelLogs(fuelLogsList);
         if (fList.length > 0) {
-          setFormFarmId(fList[0].id);
+          setFormFarmId(selectedFarmId === 'ALL' ? fList[0].id : selectedFarmId);
         }
       } catch (err) {
         console.error(err);
@@ -77,8 +85,18 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
 
   // Recarregar lista
   const refreshList = async () => {
-    const list = await fleetService.getMachines();
-    setMachines(list);
+    try {
+      const [mList, pStatuses, fuelLogsList] = await Promise.all([
+        fleetService.getMachines(),
+        fleetService.getPreventivePlanStatus(),
+        fleetService.getFuelLogs()
+      ]);
+      setMachines(mList);
+      setAllPrevStatuses(pStatuses);
+      setAllFuelLogs(fuelLogsList);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // Carrega o histórico de uma máquina específica para a Ficha Drawer
@@ -118,7 +136,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     setFormSerial('');
     setFormInitialHourKm(0);
     setFormStatus('Ativa');
-    if (farms.length > 0) setFormFarmId(farms[0].id);
+    if (farms.length > 0) {
+      setFormFarmId(selectedFarmId === 'ALL' ? farms[0].id : selectedFarmId);
+    }
     setFormDriver('');
     setIsCreateOpen(true);
   };
@@ -317,7 +337,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                   <th className="py-4 px-6">Equipamento</th>
                   <th className="py-4 px-6">Fazenda</th>
                   <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6">Horímetro/Km</th>
+                  <th className="py-4 px-6 text-center">Status de Revisão</th>
+                  <th className="py-4 px-6 text-right">Horímetro Anterior</th>
+                  <th className="py-4 px-6 text-right">Horímetro/Km Atual</th>
                   <th className="py-4 px-6">Motorista</th>
                   <th className="py-4 px-6 text-center">Ações</th>
                 </tr>
@@ -334,6 +356,34 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                     'Parada': 'bg-red-50 text-red-700 border-red-100',
                     'Vendida/Baixada': 'bg-slate-100 text-slate-600 border-slate-200'
                   };
+
+                  // 1. Cálculo do Status de Revisão (Verde Tudo OK / Vermelho Vencida)
+                  const machinePrevItems = allPrevStatuses.filter(p => p.machine_id === m.id);
+                  const hasVencida = machinePrevItems.some(p => p.status === 'VENCIDA');
+                  const revisionStatusText = hasVencida ? 'Vencida' : 'Tudo OK';
+                  const revisionStatusColor = hasVencida 
+                    ? 'bg-red-50 text-red-700 border-red-100' 
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-100';
+
+                  // 2. Cálculo do Horímetro/Km anterior e atual com base nos registros de abastecimento
+                  const machineFuelLogsSorted = allFuelLogs
+                    .filter(log => log.machine_id === m.id)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                  let currentHourKmVal = m.current_hour_km;
+                  let previousHourKmVal = m.initial_hour_km;
+
+                  if (machineFuelLogsSorted.length > 0) {
+                    currentHourKmVal = machineFuelLogsSorted[0].hour_km_at_fueling;
+                    if (machineFuelLogsSorted.length > 1) {
+                      previousHourKmVal = machineFuelLogsSorted[1].hour_km_at_fueling;
+                    } else {
+                      previousHourKmVal = m.initial_hour_km;
+                    }
+                  } else {
+                    currentHourKmVal = m.current_hour_km;
+                    previousHourKmVal = m.initial_hour_km;
+                  }
 
                   return (
                     <tr 
@@ -354,8 +404,16 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           {m.status}
                         </span>
                       </td>
-                      <td className="py-4 px-6 font-mono text-xs font-bold text-slate-800">
-                        {m.current_hour_km.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                      <td className="py-4 px-6 text-center">
+                        <span className={`inline-flex px-2 py-0.5 text-[9px] font-bold border rounded-md uppercase tracking-wider ${revisionStatusColor}`}>
+                          {revisionStatusText}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right font-mono text-xs font-bold text-slate-500">
+                        {previousHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                      </td>
+                      <td className="py-4 px-6 text-right font-mono text-xs font-bold text-slate-800">
+                        {currentHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
                       </td>
                       <td className="py-4 px-6 text-xs text-slate-500">{m.driver_name || 'Sem motorista'}</td>
                       <td className="py-4 px-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -367,7 +425,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           >
                             <ChevronRight size={16} />
                           </button>
-                          {userRole === 'admin' && (
+                          {userRole !== 'viewer' && (
                             <>
                               <button
                                 onClick={() => handleOpenEdit(m)}
@@ -466,74 +524,93 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             
             {/* TAB: SUMMARY / FICHA */}
-            {drawerTab === 'summary' && (
-              <div className="space-y-6">
-                {/* Metadados */}
-                <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-3.5">
-                  <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                    <Info size={12} /> Dados Cadastrais
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <p className="text-slate-500 font-medium">Marca / Modelo</p>
-                      <p className="text-slate-800 font-bold mt-0.5">{selectedMachine.brand} • {selectedMachine.model}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500 font-medium">Ano Fabricação</p>
-                      <p className="text-slate-800 font-bold mt-0.5">{selectedMachine.year}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500 font-medium">Nº de Série</p>
-                      <p className="text-slate-700 font-mono mt-0.5 truncate">{selectedMachine.serial_number || 'Não informado'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500 font-medium">Data de Aquisição</p>
-                      <p className="text-slate-800 font-bold mt-0.5">
-                        {selectedMachine.acquisition_date ? new Date(selectedMachine.acquisition_date).toLocaleDateString('pt-BR') : 'Não informada'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500 font-medium">Horímetro Inicial</p>
-                      <p className="text-slate-800 font-mono font-bold mt-0.5">{selectedMachine.initial_hour_km.toLocaleString('pt-BR')} h/km</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500 font-medium">Horímetro Atual</p>
-                      <p className="text-[#1B3022] font-mono font-black mt-0.5">{selectedMachine.current_hour_km.toLocaleString('pt-BR')} h/km</p>
-                    </div>
-                  </div>
-                </div>
+            {drawerTab === 'summary' && (() => {
+              const sortedFuelLogs = [...machineFuelLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              let drawerCurrentHourKm = selectedMachine.current_hour_km;
+              let drawerPreviousHourKm = selectedMachine.initial_hour_km;
 
-                {/* Grafico de Custo Acumulado */}
-                {machineFuelLogs.length > 0 || machineMaintLogs.length > 0 ? (
-                  <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl">
-                    <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 mb-4 border-b border-slate-200 pb-2">
-                      <BarChart size={12} /> Custo Temporal Acumulado (R$)
+              if (sortedFuelLogs.length > 0) {
+                drawerCurrentHourKm = sortedFuelLogs[0].hour_km_at_fueling;
+                if (sortedFuelLogs.length > 1) {
+                  drawerPreviousHourKm = sortedFuelLogs[1].hour_km_at_fueling;
+                } else {
+                  drawerPreviousHourKm = selectedMachine.initial_hour_km;
+                }
+              }
+
+              return (
+                <div className="space-y-6">
+                  {/* Metadados */}
+                  <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-3.5">
+                    <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                      <Info size={12} /> Dados Cadastrais
                     </h4>
-                    <div className="h-44 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={getAccumulatedCostData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#1B3022" stopOpacity={0.2}/>
-                              <stop offset="95%" stopColor="#1B3022" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="Data" stroke="#64748b" style={{ fontSize: 9, fontFamily: 'monospace' }} />
-                          <YAxis stroke="#64748b" style={{ fontSize: 9, fontFamily: 'monospace' }} />
-                          <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', fontSize: 11, color: '#1e293b' }} />
-                          <Area type="monotone" dataKey="Custo Acumulado (R$)" stroke="#1B3022" fillOpacity={1} fill="url(#colorCost)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <p className="text-slate-500 font-medium">Marca / Modelo</p>
+                        <p className="text-slate-800 font-bold mt-0.5">{selectedMachine.brand} • {selectedMachine.model}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 font-medium">Ano Fabricação</p>
+                        <p className="text-slate-800 font-bold mt-0.5">{selectedMachine.year}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 font-medium">Nº de Série</p>
+                        <p className="text-slate-700 font-mono mt-0.5 truncate">{selectedMachine.serial_number || 'Não informado'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 font-medium">Data de Aquisição</p>
+                        <p className="text-slate-800 font-bold mt-0.5">
+                          {selectedMachine.acquisition_date ? new Date(selectedMachine.acquisition_date).toLocaleDateString('pt-BR') : 'Não informada'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 font-medium">Horímetro Inicial</p>
+                        <p className="text-slate-800 font-mono font-bold mt-0.5">{selectedMachine.initial_hour_km.toLocaleString('pt-BR')} h/km</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 font-medium">Horímetro Anterior</p>
+                        <p className="text-slate-800 font-mono font-bold mt-0.5">{drawerPreviousHourKm.toLocaleString('pt-BR')} h/km</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 font-medium">Horímetro Atual (Abastecimento)</p>
+                        <p className="text-[#1B3022] font-mono font-black mt-0.5">{drawerCurrentHourKm.toLocaleString('pt-BR')} h/km</p>
+                      </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-slate-400 text-xs">
-                    Sem dados de custo para gerar gráfico.
-                  </div>
-                )}
-              </div>
-            )}
+
+                  {/* Grafico de Custo Acumulado */}
+                  {machineFuelLogs.length > 0 || machineMaintLogs.length > 0 ? (
+                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                      <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 mb-4 border-b border-slate-200 pb-2">
+                        <BarChart size={12} /> Custo Temporal Acumulado (R$)
+                      </h4>
+                      <div className="h-44 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={getAccumulatedCostData()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#1B3022" stopOpacity={0.2}/>
+                                <stop offset="95%" stopColor="#1B3022" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="Data" stroke="#64748b" style={{ fontSize: 9, fontFamily: 'monospace' }} />
+                            <YAxis stroke="#64748b" style={{ fontSize: 9, fontFamily: 'monospace' }} />
+                            <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', fontSize: 11, color: '#1e293b' }} />
+                            <Area type="monotone" dataKey="Custo Acumulado (R$)" stroke="#1B3022" fillOpacity={1} fill="url(#colorCost)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-slate-400 text-xs">
+                      Sem dados de custo para gerar gráfico.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* TAB: FUEL LOGS / ABASTECIMENTOS */}
             {drawerTab === 'fuel' && (

@@ -51,7 +51,11 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
         setMachines(mList);
         setLookups(lData);
 
-        if (mList.length > 0) {
+        const farmMachs = mList.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
+        if (farmMachs.length > 0) {
+          setFormMachineId(farmMachs[0].id);
+          setFormHourKm(farmMachs[0].current_hour_km || farmMachs[0].initial_hour_km);
+        } else if (mList.length > 0) {
           setFormMachineId(mList[0].id);
           setFormHourKm(mList[0].current_hour_km || mList[0].initial_hour_km);
         }
@@ -85,9 +89,17 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
     setFormLaborCost('');
     setFormPartsReplaced('');
     setFormResponsible('');
-    if (machines.length > 0) {
+    
+    const farmMachines = machines.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
+    if (farmMachines.length > 0) {
+      setFormMachineId(farmMachines[0].id);
+      setFormHourKm(farmMachines[0].current_hour_km || farmMachines[0].initial_hour_km);
+    } else if (machines.length > 0) {
       setFormMachineId(machines[0].id);
       setFormHourKm(machines[0].current_hour_km || machines[0].initial_hour_km);
+    } else {
+      setFormMachineId('');
+      setFormHourKm('');
     }
     setIsAddOpen(true);
   };
@@ -330,9 +342,11 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
                 onChange={(e) => setFormMachineId(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                ))}
+                {machines
+                  .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                  ))}
               </select>
             </div>
 

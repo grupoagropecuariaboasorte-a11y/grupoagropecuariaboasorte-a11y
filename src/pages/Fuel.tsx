@@ -57,8 +57,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
         setMachines(mList);
         setLookups(lData);
 
-        if (fList.length > 0) setFormFarmId(fList[0].id);
-        if (mList.length > 0) setFormMachineId(mList[0].id);
+        const initialFarm = selectedFarmId === 'ALL' ? (fList[0]?.id || '') : selectedFarmId;
+        setFormFarmId(initialFarm);
+        const farmMachs = mList.filter(m => m.farm_id === initialFarm);
+        if (farmMachs.length > 0) {
+          setFormMachineId(farmMachs[0].id);
+        } else if (mList.length > 0) {
+          setFormMachineId(mList[0].id);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -100,6 +106,20 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     }
   }, [formMachineId, machines]);
 
+  // Sincronizar máquina com a fazenda selecionada no formulário
+  useEffect(() => {
+    if (!formFarmId) return;
+    const farmMachines = machines.filter(m => m.farm_id === formFarmId);
+    if (farmMachines.length > 0) {
+      const isCurrentMachineInFarm = farmMachines.some(m => m.id === formMachineId);
+      if (!isCurrentMachineInFarm) {
+        setFormMachineId(farmMachines[0].id);
+      }
+    } else {
+      setFormMachineId('');
+    }
+  }, [formFarmId, machines]);
+
   // =========================================================================
   // SUBMISSÃO DO ABASTECIMENTO
   // =========================================================================
@@ -109,10 +129,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     setFormPumpEnd('');
     setFormNotes('');
     setFormResponsible('');
-    if (farms.length > 0) setFormFarmId(farms[0].id);
-    if (machines.length > 0) {
+    const defaultFarm = selectedFarmId === 'ALL' ? (farms[0]?.id || '') : selectedFarmId;
+    setFormFarmId(defaultFarm);
+    const farmMachines = machines.filter(m => m.farm_id === defaultFarm);
+    if (farmMachines.length > 0) {
+      setFormMachineId(farmMachines[0].id);
+      setFormHourKm(farmMachines[0].current_hour_km || farmMachines[0].initial_hour_km);
+    } else if (machines.length > 0) {
       setFormMachineId(machines[0].id);
       setFormHourKm(machines[0].current_hour_km || machines[0].initial_hour_km);
+    } else {
+      setFormMachineId('');
+      setFormHourKm('');
     }
     setIsAddOpen(true);
   };

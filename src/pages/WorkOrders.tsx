@@ -42,7 +42,12 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
         setMachines(mList);
         setFarms(fList);
 
-        if (mList.length > 0) setFormMachineId(mList[0].id);
+        const farmMachs = mList.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
+        if (farmMachs.length > 0) {
+          setFormMachineId(farmMachs[0].id);
+        } else if (mList.length > 0) {
+          setFormMachineId(mList[0].id);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -61,7 +66,15 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     setFormDescription('');
     setFormAssignedTo('');
     setFormPriority('Média');
-    if (machines.length > 0) setFormMachineId(machines[0].id);
+    
+    const farmMachines = machines.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
+    if (farmMachines.length > 0) {
+      setFormMachineId(farmMachines[0].id);
+    } else if (machines.length > 0) {
+      setFormMachineId(machines[0].id);
+    } else {
+      setFormMachineId('');
+    }
     setIsAddOpen(true);
   };
 
@@ -375,9 +388,11 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
                 onChange={(e) => setFormMachineId(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                ))}
+                {machines
+                  .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                  ))}
               </select>
             </div>
 

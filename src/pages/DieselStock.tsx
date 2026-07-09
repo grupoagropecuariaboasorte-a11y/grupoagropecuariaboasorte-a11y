@@ -39,7 +39,9 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
         setStockHistory(hist);
         setFarms(fList);
         setBalances(bal);
-        if (fList.length > 0) setFormFarmId(fList[0].id);
+        if (fList.length > 0) {
+          setFormFarmId(selectedFarmId === 'ALL' ? fList[0].id : selectedFarmId);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -64,7 +66,9 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
     setFormSupplier('');
     setFormMinAlert(1000);
     setFormNotes('');
-    if (farms.length > 0) setFormFarmId(farms[0].id);
+    if (farms.length > 0) {
+      setFormFarmId(selectedFarmId === 'ALL' ? farms[0].id : selectedFarmId);
+    }
     setIsAddOpen(true);
   };
 

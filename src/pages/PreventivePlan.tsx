@@ -62,7 +62,11 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
         setFarms(fList);
         setLookups(lData);
 
-        if (mList.length > 0) {
+        const farmMachs = mList.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
+        if (farmMachs.length > 0) {
+          setConfigMachineId(farmMachs[0].id);
+          setConfigLastHourKm(farmMachs[0].current_hour_km || farmMachs[0].initial_hour_km);
+        } else if (mList.length > 0) {
           setConfigMachineId(mList[0].id);
           setConfigLastHourKm(mList[0].current_hour_km || mList[0].initial_hour_km);
         }
@@ -111,6 +115,29 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     } catch (err: any) {
       alert('Erro ao configurar plano: ' + err.message);
     }
+  };
+
+  const handleOpenConfig = () => {
+    setConfigIntervalDays('');
+    setConfigIntervalHours('');
+    setConfigLastDate('');
+    
+    const farmMachines = machines.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
+    if (farmMachines.length > 0) {
+      setConfigMachineId(farmMachines[0].id);
+      setConfigLastHourKm(farmMachines[0].current_hour_km || farmMachines[0].initial_hour_km);
+    } else if (machines.length > 0) {
+      setConfigMachineId(machines[0].id);
+      setConfigLastHourKm(machines[0].current_hour_km || machines[0].initial_hour_km);
+    } else {
+      setConfigMachineId('');
+      setConfigLastHourKm('');
+    }
+    
+    if (lookups && lookups.maintenanceCategories && lookups.maintenanceCategories.length > 0) {
+      setConfigItem(lookups.maintenanceCategories[0]);
+    }
+    setIsConfigOpen(true);
   };
 
   // Abrir modal de Realizar Manutenção pré-preenchido
@@ -192,7 +219,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
 
         {userRole !== 'viewer' && (
           <button
-            onClick={() => setIsConfigOpen(true)}
+            onClick={handleOpenConfig}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
           >
             <Plus size={14} />
@@ -344,9 +371,11 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                 onChange={(e) => setConfigMachineId(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                ))}
+                {machines
+                  .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                  ))}
               </select>
             </div>
 
