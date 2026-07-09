@@ -118,14 +118,14 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
 
   const handleOpenEdit = (stock: FuelStock) => {
     setEditingId(stock.id);
-    setEditFarmId(stock.farm_id);
-    setEditDate(stock.entry_date);
-    setEditLiters(stock.liters_received);
-    setEditPricePerLiter(stock.price_per_liter);
-    setEditSupplier(stock.supplier || '');
-    setEditMinAlert(stock.minimum_stock_alert);
-    setEditNotes(stock.notes || '');
-    setEditJustification(stock.edit_justification || '');
+    setEditFarmId(stock.farm_id || '');
+    setEditDate(stock.entry_date || '');
+    setEditLiters(stock.liters_received ?? '');
+    setEditPricePerLiter(stock.price_per_liter ?? '');
+    setEditSupplier(stock.supplier ?? '');
+    setEditMinAlert(stock.minimum_stock_alert ?? 1000);
+    setEditNotes(stock.notes ?? '');
+    setEditJustification(stock.edit_justification ?? '');
     setIsEditOpen(true);
   };
 
