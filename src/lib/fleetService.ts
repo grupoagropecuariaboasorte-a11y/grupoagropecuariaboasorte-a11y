@@ -1043,9 +1043,15 @@ export const fleetService = {
     if (isDemoMode) {
       return LocalStorageDb.get('fuel_stock', SEED_FUEL_STOCK);
     }
-    const { data, error } = await supabase!.from('fuel_stock').select('*').order('entry_date', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase!.from('fuel_stock').select('*').order('entry_date', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Erro ao buscar fuel_stock no Supabase, usando local:', e);
+      isDemoMode = true;
+      return LocalStorageDb.get('fuel_stock', SEED_FUEL_STOCK);
+    }
   },
 
   async addFuelStock(stock: Partial<FuelStock>): Promise<FuelStock> {
@@ -1066,9 +1072,29 @@ export const fleetService = {
       LocalStorageDb.set('fuel_stock', list);
       return newEntry;
     }
-    const { data, error } = await supabase!.from('fuel_stock').insert([stock]).select().single();
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase!.from('fuel_stock').insert([stock]).select().single();
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.error('Erro ao adicionar fuel_stock no Supabase, usando local:', e);
+      isDemoMode = true;
+      const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const newEntry: FuelStock = {
+        id: crypto.randomUUID(),
+        farm_id: stock.farm_id || '',
+        entry_date: stock.entry_date || new Date().toISOString().split('T')[0],
+        liters_received: Number(stock.liters_received) || 0,
+        price_per_liter: Number(stock.price_per_liter) || 5.85,
+        supplier: stock.supplier || '',
+        minimum_stock_alert: Number(stock.minimum_stock_alert) || 1000,
+        notes: stock.notes || '',
+        created_at: new Date().toISOString()
+      };
+      list.push(newEntry);
+      LocalStorageDb.set('fuel_stock', list);
+      return newEntry;
+    }
   },
 
   // VIEW fuel_stock_balance
@@ -1112,8 +1138,39 @@ export const fleetService = {
       if (error) throw error;
       return data || [];
     } catch (e) {
-      console.error('Erro ao buscar balanço de combustível:', e);
-      return [];
+      console.error('Erro ao buscar balanço de combustível no Supabase, usando local:', e);
+      isDemoMode = true;
+      const farms = LocalStorageDb.get<Farm>('farms', SEED_FARMS);
+      const fuelStock = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const fuelLogs = LocalStorageDb.get<FuelLog>('fuel_logs', SEED_FUEL_LOGS);
+
+      return farms.map(farm => {
+        // soma entradas daquela fazenda (excluindo excluídas)
+        const totalReceived = fuelStock
+          .filter(s => s.farm_id === farm.id && !s.is_deleted)
+          .reduce((sum, current) => sum + current.liters_received, 0);
+
+        // soma consumos abastecidos naquela fazenda
+        const totalConsumed = fuelLogs
+          .filter(l => l.farm_id === farm.id)
+          .reduce((sum, current) => sum + current.liters_supplied, 0);
+
+        // pegar limiar de alerta
+        const lastStockEntry = fuelStock
+          .filter(s => s.farm_id === farm.id && !s.is_deleted)
+          .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+        
+        const minAlert = lastStockEntry.length > 0 ? lastStockEntry[0].minimum_stock_alert : 1000;
+
+        return {
+          farm_id: farm.id,
+          farm_name: farm.name,
+          total_received: totalReceived,
+          total_consumed: totalConsumed,
+          current_balance: totalReceived - totalConsumed,
+          min_alert: minAlert
+        };
+      });
     }
   },
 
@@ -1134,9 +1191,43 @@ export const fleetService = {
       LocalStorageDb.set('fuel_stock', list);
       return updatedEntry;
     }
-    const { data, error } = await supabase!.from('fuel_stock').update(stock).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+
+    try {
+      const { data, error } = await supabase!.from('fuel_stock').update(stock).eq('id', id).select().single();
+      if (error) {
+        // Se der erro de coluna não existente para 'edit_justification'
+        if (error.message?.includes('edit_justification') || error.code === '42P21' || error.code === '42P22') {
+          const { edit_justification, ...cleanStock } = stock;
+          if (edit_justification) {
+            cleanStock.notes = cleanStock.notes 
+              ? `${cleanStock.notes}\n[Justificativa da alteração: ${edit_justification}]`
+              : `[Justificativa da alteração: ${edit_justification}]`;
+          }
+          const retryResult = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().single();
+          if (retryResult.error) throw retryResult.error;
+          return retryResult.data;
+        }
+        throw error;
+      }
+      return data;
+    } catch (e) {
+      console.error('Erro ao atualizar fuel_stock no Supabase, usando local:', e);
+      isDemoMode = true;
+      const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const idx = list.findIndex(item => item.id === id);
+      if (idx === -1) throw new Error('Registro não encontrado');
+      
+      const updatedEntry = {
+        ...list[idx],
+        ...stock,
+        liters_received: stock.liters_received !== undefined ? Number(stock.liters_received) : list[idx].liters_received,
+        price_per_liter: stock.price_per_liter !== undefined ? Number(stock.price_per_liter) : list[idx].price_per_liter,
+        minimum_stock_alert: stock.minimum_stock_alert !== undefined ? Number(stock.minimum_stock_alert) : list[idx].minimum_stock_alert,
+      };
+      list[idx] = updatedEntry;
+      LocalStorageDb.set('fuel_stock', list);
+      return updatedEntry;
+    }
   },
 
   async deleteFuelStock(id: string, justification: string): Promise<FuelStock> {
@@ -1154,12 +1245,40 @@ export const fleetService = {
       LocalStorageDb.set('fuel_stock', list);
       return updatedEntry;
     }
-    const { data, error } = await supabase!.from('fuel_stock').update({
-      is_deleted: true,
-      deletion_reason: justification
-    }).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+
+    try {
+      const { data, error } = await supabase!.from('fuel_stock').update({
+        is_deleted: true,
+        deletion_reason: justification
+      }).eq('id', id).select().single();
+
+      if (error) {
+        // Se der erro de coluna não existente para is_deleted ou deletion_reason
+        if (error.message?.includes('is_deleted') || error.message?.includes('deletion_reason') || error.code === '42P21' || error.code === '42P22') {
+          // Fazemos a deleção direta do registro no banco se o soft-delete não for suportado pela tabela
+          const deleteResult = await supabase!.from('fuel_stock').delete().eq('id', id).select().single();
+          if (deleteResult.error) throw deleteResult.error;
+          return deleteResult.data;
+        }
+        throw error;
+      }
+      return data;
+    } catch (e) {
+      console.error('Erro ao deletar fuel_stock no Supabase, usando local:', e);
+      isDemoMode = true;
+      const list = LocalStorageDb.get<FuelStock>('fuel_stock', SEED_FUEL_STOCK);
+      const idx = list.findIndex(item => item.id === id);
+      if (idx === -1) throw new Error('Registro não encontrado');
+      
+      const updatedEntry = {
+        ...list[idx],
+        is_deleted: true,
+        deletion_reason: justification,
+      };
+      list[idx] = updatedEntry;
+      LocalStorageDb.set('fuel_stock', list);
+      return updatedEntry;
+    }
   },
 
   // =======================================================================
