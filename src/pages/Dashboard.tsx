@@ -222,9 +222,13 @@ export default function Dashboard({ selectedFarmId, selectedPeriod, userRole }: 
   // Alerta de máquinas sem nenhum checklist
   const machinesNoChecklist = filteredChecklistSummary.filter(c => c.status === 'NUNCA');
 
+  // Filtrar Estoque de Diesel por Fazenda
+  const filteredStockBalances = selectedFarmId === 'ALL'
+    ? stockBalances
+    : stockBalances.filter(sb => sb.farm_id === selectedFarmId);
+
   // Alerta de baixo estoque de diesel por fazenda
-  const activeStocksFiltered = stockBalances.filter(sb => {
-    if (selectedFarmId !== 'ALL' && sb.farm_id !== selectedFarmId) return false;
+  const activeStocksFiltered = filteredStockBalances.filter(sb => {
     return sb.current_balance <= sb.min_alert;
   });
 
@@ -465,7 +469,7 @@ export default function Dashboard({ selectedFarmId, selectedPeriod, userRole }: 
           </div>
 
           <div className="space-y-5">
-            {stockBalances.map((sb) => {
+            {filteredStockBalances.map((sb) => {
               const capMax = sb.total_received || 5000;
               const perc = capMax > 0 ? Math.min(100, Math.max(0, (sb.current_balance / capMax) * 100)) : 0;
               const isLow = sb.current_balance <= sb.min_alert;

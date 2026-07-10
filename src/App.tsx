@@ -39,16 +39,17 @@ function AppContent() {
   const [selectedFarmId, setSelectedFarmId] = useState('ALL');
   const [selectedPeriod, setSelectedPeriod] = useState('ALL');
 
-  useEffect(() => {
-    async function loadFarms() {
-      try {
-        const list = await fleetService.getFarms();
-        setFarms(list);
-      } catch (e) {
-        console.error('Erro ao buscar fazendas no layout:', e);
-      }
+  const refreshFarms = async () => {
+    try {
+      const list = await fleetService.getFarms();
+      setFarms(list);
+    } catch (e) {
+      console.error('Erro ao buscar fazendas no layout:', e);
     }
-    loadFarms();
+  };
+
+  useEffect(() => {
+    refreshFarms();
   }, []);
 
   const handleLoginSuccess = (email: string, role: 'viewer' | 'editor' | 'admin') => {
@@ -124,7 +125,7 @@ function AppContent() {
             <Route path="/ordens-servico" element={<WorkOrders selectedFarmId={selectedFarmId} userRole={userRole} />} />
             <Route path="/ranking-custos" element={<CostRanking selectedFarmId={selectedFarmId} />} />
             <Route path="/relatorio-mensal" element={<MonthlyReport selectedFarmId={selectedFarmId} />} />
-            <Route path="/configuracoes" element={<SettingsPage userRole={userRole} />} />
+            <Route path="/configuracoes" element={<SettingsPage userRole={userRole} onRefreshFarms={refreshFarms} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

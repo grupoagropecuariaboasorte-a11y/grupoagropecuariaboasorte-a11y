@@ -11,9 +11,10 @@ import {
 
 interface SettingsProps {
   userRole: 'viewer' | 'editor' | 'admin';
+  onRefreshFarms?: () => void;
 }
 
-export default function SettingsPage({ userRole }: SettingsProps) {
+export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps) {
   const [farms, setFarms] = useState<Farm[]>([]);
   const [lookups, setLookups] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,9 @@ export default function SettingsPage({ userRole }: SettingsProps) {
     ]);
     setFarms(fList);
     setLookups(lList);
+    if (onRefreshFarms) {
+      onRefreshFarms();
+    }
   };
 
   const handleCreateFarm = async (e: React.FormEvent) => {

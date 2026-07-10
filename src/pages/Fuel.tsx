@@ -60,6 +60,11 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   const [searchTerm, setSearchTerm] = useState('');
   const [machineFilter, setMachineFilter] = useState('ALL');
 
+  // Reset local machine filter when global farm filter changes
+  useEffect(() => {
+    setMachineFilter('ALL');
+  }, [selectedFarmId]);
+
   // Load Initial Data
   useEffect(() => {
     async function loadData() {
@@ -424,9 +429,12 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
         >
           <option value="ALL">Todas as Máquinas</option>
-          {machines.map(m => (
-            <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-          ))}
+          {machines
+            .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+            .map(m => (
+              <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+            ))
+          }
         </select>
 
         <div className="flex-1 text-right text-xs text-slate-500 font-mono">

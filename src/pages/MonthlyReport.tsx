@@ -19,16 +19,19 @@ export default function MonthlyReport({ selectedFarmId }: MonthlyReportProps) {
   const [checklists, setChecklists] = useState<Checklist30d[]>([]);
 
   // Filtros Locais do Relatório
-  const [selectedMonth, setSelectedMonth] = useState(''); // Formato: YYYY-MM
-  const [localFarmId, setLocalFarmId] = useState('ALL');
-
-  useEffect(() => {
-    // Definir mês atual como default
+  const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    setSelectedMonth(monthStr);
-    setLocalFarmId(selectedFarmId);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }); // Formato: YYYY-MM
+  const [localFarmId, setLocalFarmId] = useState(selectedFarmId);
 
+  // Sincronizar filtro de fazenda local com o global
+  useEffect(() => {
+    setLocalFarmId(selectedFarmId);
+  }, [selectedFarmId]);
+
+  // Carregar dados iniciais uma única vez ao montar
+  useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
@@ -51,7 +54,7 @@ export default function MonthlyReport({ selectedFarmId }: MonthlyReportProps) {
       }
     }
     loadData();
-  }, [selectedFarmId]);
+  }, []);
 
   if (loading) {
     return (
