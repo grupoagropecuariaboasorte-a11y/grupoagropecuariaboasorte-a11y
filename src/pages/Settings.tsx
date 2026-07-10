@@ -121,77 +121,31 @@ export default function SettingsPage({ userRole }: SettingsProps) {
       {isSchemaMissing && <SupabaseSetupAssistant />}
 
       {/* CONEXÃO E METADADOS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         
         {/* Status Conexão */}
-        <div className="bg-white border border-slate-200 p-6 rounded-2xl flex flex-col justify-between shadow-xs">
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-4 flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
-              <Server size={14} /> Status da Conexão
-            </h4>
+        <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-4 flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
+            <Server size={14} /> Status da Conexão do Sistema
+          </h4>
 
-            {isDemoMode ? (
-              <div className="space-y-3">
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-normal flex items-start gap-2 shadow-2xs">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5 text-amber-600" />
-                  <div>
-                    <span className="font-bold text-amber-900">Modo Demo Local Ativo</span>
-                    <p className="text-[10px] text-slate-500 mt-1">As credenciais do Supabase no arquivo `.env` não foram encontradas. Os dados estão salvos de forma segura no cache local do seu navegador (localStorage).</p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed font-mono">
-                  Para passar para produção, preencha as variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` no painel de configurações de ambiente ou arquivo `.env`.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 leading-normal flex items-start gap-2 shadow-2xs">
-                  <ShieldCheck size={16} className="shrink-0 mt-0.5 text-emerald-600" />
-                  <div>
-                    <span className="font-bold text-emerald-900">Produção Supabase Ativo</span>
-                    <p className="text-[10px] text-emerald-600 mt-1">Conexão em tempo real estabelecida com a nuvem Supabase Postgres (RLS e triggers operando).</p>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            <div className="md:col-span-2">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 leading-normal flex items-start gap-3 shadow-2xs">
+                <ShieldCheck size={18} className="shrink-0 mt-0.5 text-emerald-600" />
+                <div>
+                  <span className="font-bold text-emerald-900">Produção Supabase Ativo e Online</span>
+                  <p className="text-[11px] text-emerald-700 mt-1">
+                    Este aplicativo está operando em modo estritamente online. O Modo de Demonstração Offline foi completamente removido do sistema. Todos os seus dados, cadastros de frotas, checklists e ordens de serviço estão protegidos na nuvem do Supabase PostgreSQL em tempo real.
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-
-          <div className="text-[10px] text-slate-400 font-mono mt-4">
-            Version: v1.1.2 (SaaS Industrial)
-          </div>
-        </div>
-
-        {/* Auditoria / Reset offline (Apenas visível se estiver em demo) */}
-        <div className="bg-white border border-slate-200 p-6 rounded-2xl md:col-span-2 flex flex-col justify-between shadow-xs">
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-4 flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
-              <Database size={14} /> Manutenção do Banco Local (Modo Demo)
-            </h4>
-            <p className="text-xs text-slate-500 leading-relaxed mb-4">
-              Use estes comandos para testar cenários. Você pode apagar tudo para fazer um cadastro limpo do zero ou resetar os dados para restaurar as 53 máquinas originais da planilha Excel para fins de homologação.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                onClick={handleResetDemoData}
-                className="flex items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 rounded-xl transition-all cursor-pointer shadow-2xs"
-              >
-                <RefreshCw size={14} className="text-[#1B3022]" />
-                <span>Restaurar Dados Planilha (Seed)</span>
-              </button>
-
-              <button
-                onClick={handleClearDemoData}
-                className="flex items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 hover:border-rose-200 text-xs font-bold text-slate-700 rounded-xl transition-all cursor-pointer shadow-2xs hover:bg-rose-50/50"
-              >
-                <Trash2 size={14} className="text-rose-600" />
-                <span>Apagar Tudo (Banco Limpo)</span>
-              </button>
             </div>
-          </div>
-
-          <div className="mt-4 p-3.5 bg-slate-50 border border-slate-150 rounded-xl text-[10px] text-slate-400 leading-normal">
-            * Estas ações apagam apenas a persistência temporária local (`localStorage`) e não interferem na segurança física se você estiver conectado ao Supabase.
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col justify-center h-full">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1">Status do Servidor</span>
+              <span className="text-xs font-mono font-bold text-[#1B3022]">Provedor: Supabase Cloud</span>
+              <span className="text-[10px] text-slate-400 font-mono mt-2">Versão: v1.2.0 (Online Only)</span>
+            </div>
           </div>
         </div>
       </div>

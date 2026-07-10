@@ -1,10 +1,11 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Tractor, Fuel, Database, Wrench, 
   CalendarDays, CheckSquare, TrendingUp, ClipboardList, 
   FileText, Settings, LogOut, Info
 } from 'lucide-react';
-import { isDemoMode } from '../lib/supabaseClient';
+import { supabase, isDemoMode } from '../lib/supabaseClient';
 import logoBoaSorte from '../assets/images/logo_boa_sorte_transparent.png';
 
 interface SidebarProps {
@@ -15,6 +16,37 @@ interface SidebarProps {
 
 export default function Sidebar({ userRole, userEmail, onLogout }: SidebarProps) {
   const navigate = useNavigate();
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+
+  useEffect(() => {
+    let active = true;
+    const checkConnection = async () => {
+      if (!supabase) {
+        if (active) setDbStatus('disconnected');
+        return;
+      }
+      try {
+        const { error } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).limit(1);
+        if (active) {
+          if (error && error.message && (error.message.includes('FetchError') || error.message.includes('Failed to fetch') || error.message.includes('network'))) {
+            setDbStatus('disconnected');
+          } else {
+            setDbStatus('connected');
+          }
+        }
+      } catch (e) {
+        if (active) setDbStatus('disconnected');
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 15000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const menuItems = [
     { path: '/', label: 'Painel Geral', icon: LayoutDashboard },
@@ -71,15 +103,7 @@ export default function Sidebar({ userRole, userEmail, onLogout }: SidebarProps)
         })}
       </nav>
 
-      {/* Demo banner indicator inside sidebar */}
-      {isDemoMode && (
-        <div className="mx-3 my-2 p-3 bg-white/5 border border-amber-400/20 rounded-xl flex items-start gap-2">
-          <Info size={14} className="text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-[10px] text-white/80 leading-normal font-medium">
-            Modo Demo Ativo (Persistência Local). Conecte ao Supabase em Configurações.
-          </div>
-        </div>
-      )}
+
 
       {/* User Area */}
       <div className="p-4 border-t border-white/10 bg-[#122218]">
@@ -93,6 +117,27 @@ export default function Sidebar({ userRole, userEmail, onLogout }: SidebarProps)
           <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-mono font-semibold bg-white/10 text-white/70 border border-white/5">
             PROD
           </span>
+        </div>
+
+        {/* Status do Banco de Dados Supabase */}
+        <div className="mb-3 px-2.5 py-2 bg-white/5 border border-white/5 rounded-xl flex items-center justify-between">
+          <span className="text-[10px] font-semibold text-white/70">Banco de Dados:</span>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${
+              dbStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
+              dbStatus === 'disconnected' ? 'bg-red-500 animate-pulse' :
+              'bg-amber-400 animate-pulse'
+            }`} />
+            <span className={`text-[9px] font-bold font-mono tracking-wide ${
+              dbStatus === 'connected' ? 'text-emerald-400' :
+              dbStatus === 'disconnected' ? 'text-red-400' :
+              'text-amber-400'
+            }`}>
+              {dbStatus === 'connected' ? 'SUPABASE' :
+               dbStatus === 'disconnected' ? 'OFFLINE' :
+               'CONECTANDO'}
+            </span>
+          </div>
         </div>
 
         <button

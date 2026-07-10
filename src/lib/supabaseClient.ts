@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://qkdwyoqlfkibpxyjmagh.supabase.co';
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_VzQW8L0IWcWapz7RAkQv-Q_eB2BEJQv';
 
-// Determinar se estamos em modo demo de forma dinâmica
-export let isDemoMode = false;
+// Determinar se estamos em modo demo de forma dinâmica - SEMPRE DESATIVADO
+export const isDemoMode = false;
 export function setDemoMode(value: boolean) {
-  isDemoMode = value;
+  // Modo demo eliminado definitivamente
 }
 
 // Estado global para detectar se as tabelas do Supabase não existem
@@ -22,12 +22,9 @@ try {
   console.log('🔌 Conexão padrão ao Supabase configurada como original de produção.');
 } catch (e) {
   console.error('Erro ao instanciar cliente do Supabase:', e);
-  isDemoMode = true;
 }
 
 export const supabase = client;
-if (!supabase) {
-  isDemoMode = true;
-}
+
 
 

@@ -47,8 +47,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setErrorMsg('');
 
     if (!supabase) {
-      // Se não houver Supabase, entra automaticamente no modo demonstração local
-      onLoginSuccess(email || 'grupoagropecuariaboasorte@gmail.com', 'admin');
+      setErrorMsg('Conexão ao banco de dados Supabase indisponível. O modo demo foi desativado e o sistema só funciona conectado ao banco de dados online.');
       setLoading(false);
       return;
     }
@@ -96,8 +95,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
 
     if (!supabase) {
-      // Se não houver Supabase, entra automaticamente no modo demonstração local
-      onLoginSuccess(registerEmail || 'grupoagropecuariaboasorte@gmail.com', registerRole);
+      setErrorMsg('Conexão ao banco de dados Supabase indisponível. O modo demo foi desativado e o sistema só funciona conectado ao banco de dados online.');
       setLoading(false);
       return;
     }
