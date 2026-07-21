@@ -436,6 +436,9 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
         </div>
       </div>
 
+
+
+      
       {/* HISTÓRICO DE LANÇAMENTOS REMOVIDOS */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="p-6 border-b border-slate-200 bg-rose-50/50 flex items-center justify-between">
@@ -503,6 +506,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
           )}
         </div>
       </div>
+
 
       {/* MODAL ADICIONAR ENTRADA */}
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Lançar Carga de Diesel (Tanque)">

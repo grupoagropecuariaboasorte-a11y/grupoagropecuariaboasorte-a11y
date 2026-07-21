@@ -25,10 +25,15 @@ async function safeInsert(table: string, payload: any) {
   while (retries > 0) {
     const { data, error } = await supabase!.from(table).insert([currentPayload]).select().maybeSingle();
     if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('Could not find the'))) {
-      const match = error.message.match(/'(.*?)' column/);
-      if (match && match[1]) {
-        console.warn(`[SafeInsert] Stripping missing column ${match[1]} from ${table}`);
-        delete currentPayload[match[1]];
+      let colName = '';
+      const match1 = error.message?.match(/'(.*?)' column/);
+      const match2 = error.message?.match(/column [^.]+\.(.*?) does not exist/);
+      if (match1 && match1[1]) colName = match1[1];
+      else if (match2 && match2[1]) colName = match2[1];
+
+      if (colName) {
+        console.warn(`[SafeInsert] Stripping missing column ${colName} from ${table}`);
+        delete currentPayload[colName];
         retries--;
         continue;
       }
@@ -44,10 +49,15 @@ async function safeUpdate(table: string, id: string, payload: any) {
   while (retries > 0) {
     const { data, error } = await supabase!.from(table).update(currentPayload).eq('id', id).select().maybeSingle();
     if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('Could not find the'))) {
-      const match = error.message.match(/'(.*?)' column/);
-      if (match && match[1]) {
-        console.warn(`[SafeUpdate] Stripping missing column ${match[1]} from ${table}`);
-        delete currentPayload[match[1]];
+      let colName = '';
+      const match1 = error.message?.match(/'(.*?)' column/);
+      const match2 = error.message?.match(/column [^.]+\.(.*?) does not exist/);
+      if (match1 && match1[1]) colName = match1[1];
+      else if (match2 && match2[1]) colName = match2[1];
+
+      if (colName) {
+        console.warn(`[SafeUpdate] Stripping missing column ${colName} from ${table}`);
+        delete currentPayload[colName];
         retries--;
         continue;
       }
@@ -719,17 +729,33 @@ export const fleetService = {
   // =======================================================================
   // ABASTECIMENTOS (FUEL LOGS)
   // =======================================================================
-  async getFuelLogs(): Promise<FuelLog[]> {
-    
-    try {
-      const { data, error } = await supabase!.from('fuel_logs').select('*').order('date', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    } catch (e) {
-      console.error('Erro ao buscar abastecimentos no Supabase, usando local:', e);
-      throw e;
+  async getFuelLogs(farmId?: string): Promise<FuelLog[]> {
+    let query = supabase!.from('fuel_logs').select('*').order('date', { ascending: false });
+    if (farmId && farmId !== 'ALL') {
+      query = query.eq('farm_id', farmId);
     }
+    const { data, error } = await query;
+    if (error) throw error;
+    
+    let allData = data || [];
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const deletedStr = localStorage.getItem('deleted_fuel_logs');
+        if (deletedStr) {
+          const deletedArr = JSON.parse(deletedStr);
+          if (farmId && farmId !== 'ALL') {
+             allData = allData.concat(deletedArr.filter((d: any) => d.farm_id === farmId));
+          } else {
+             allData = allData.concat(deletedArr);
+          }
+        }
+      }
+    } catch(e) {}
+    
+    allData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return allData;
   },
+
 
   async getLatestDieselPrice(farmId: string): Promise<number> {
     
@@ -783,8 +809,6 @@ export const fleetService = {
   },
 
   async updateFuelLog(id: string, log: Partial<FuelLog>): Promise<FuelLog> {
-    
-
     const farmId = log.farm_id || '11111111-1111-1111-1111-111111111111';
     const price = await this.getLatestDieselPrice(farmId);
 
@@ -803,16 +827,51 @@ export const fleetService = {
     if (log.responsible !== undefined) updatedFields.responsible = log.responsible;
     if (log.notes !== undefined) updatedFields.notes = log.notes;
 
-    const { data, error } = await safeUpdate('fuel_logs', id, updatedFields);
-    if (error) throw error;
+    // Direct update to prevent safeUpdate from stripping user edits silently
+    const { data, error } = await supabase!.from('fuel_logs').update(updatedFields).eq('id', id).select().maybeSingle();
+    
+    if (error) {
+      console.error('Update error on fuel_logs:', error);
+      // Fallback for missing columns if we really need to, but let's throw to show the user what's wrong!
+      throw error;
+    }
+    
+    if (!data) {
+       throw new Error('Nenhum dado retornado. Verifique se o registro existe ou se há bloqueio de permissão.');
+    }
+    
     return data;
   },
 
-  async deleteFuelLog(id: string): Promise<void> {
-    
-    const { error } = await supabase!.from('fuel_logs').delete().eq('id', id);
-    if (error) throw error;
+
+  async deleteFuelLog(id: string, justification: string): Promise<void> {
+    try {
+      const { data: logToDel } = await supabase!.from('fuel_logs').select('*').eq('id', id).maybeSingle();
+      
+      const { error } = await supabase!.from('fuel_logs').delete().eq('id', id);
+      if (error) throw error;
+      
+      if (logToDel) {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            const deletedStr = localStorage.getItem('deleted_fuel_logs');
+            const deletedArr = deletedStr ? JSON.parse(deletedStr) : [];
+            deletedArr.push({
+              ...logToDel,
+              is_deleted: true,
+              deletion_reason: justification,
+              updated_at: new Date().toISOString()
+            });
+            localStorage.setItem('deleted_fuel_logs', JSON.stringify(deletedArr));
+          }
+        } catch(e) {}
+      }
+    } catch (e: any) {
+      console.error('Erro ao excluir fuel_log:', e);
+      throw e;
+    }
   },
+
 
   // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda
   async getPumpDiscrepancy(farmId: string, currentStart: number): Promise<{ lastEnd: number; hasDiscrepancy: boolean }> {
@@ -840,17 +899,33 @@ export const fleetService = {
   // =======================================================================
   // ESTOQUE DE DIESEL (FUEL STOCK)
   // =======================================================================
-  async getFuelStock(): Promise<FuelStock[]> {
-    
-    try {
-      const { data, error } = await supabase!.from('fuel_stock').select('*').order('entry_date', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    } catch (e) {
-      console.error('Erro ao buscar fuel_stock no Supabase, usando local:', e);
-      throw e;
+  async getFuelStock(farmId?: string): Promise<FuelStock[]> {
+    let query = supabase!.from('fuel_stock').select('*').order('created_at', { ascending: false });
+    if (farmId && farmId !== 'ALL') {
+      query = query.eq('farm_id', farmId);
     }
+    const { data, error } = await query;
+    if (error) throw error;
+    
+    let allData = data || [];
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const deletedStr = localStorage.getItem('deleted_fuel_stock');
+        if (deletedStr) {
+          const deletedArr = JSON.parse(deletedStr);
+          if (farmId && farmId !== 'ALL') {
+             allData = allData.concat(deletedArr.filter((d: any) => d.farm_id === farmId));
+          } else {
+             allData = allData.concat(deletedArr);
+          }
+        }
+      }
+    } catch(e) {}
+    
+    allData.sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+    return allData;
   },
+
 
   async addFuelStock(stock: Partial<FuelStock>): Promise<FuelStock> {
     
@@ -940,34 +1015,34 @@ export const fleetService = {
     }
   },
 
-  async deleteFuelStock(id: string, justification: string): Promise<FuelStock> {
+  async deleteFuelStock(id: string, justification: string): Promise<void> {
     try {
-      const payload = {
-        is_deleted: true,
-        deletion_reason: justification,
-        updated_at: new Date().toISOString()
-      };
-      const { data, error } = await safeUpdate('fuel_stock', id, payload);
-
-      if (error) {
-        // Se der erro de coluna não existente para is_deleted ou deletion_reason (código 42703 ou mensagem)
-        if (
-          error.code === '42703' ||
-          error.message?.includes('is_deleted') || 
-          error.message?.includes('deletion_reason') || 
-          error.code === '42P21' || 
-          error.code === '42P22'
-        ) {
-          const deleteResult = await supabase!.from('fuel_stock').delete().eq('id', id).select().maybeSingle();
-          if (deleteResult.error) throw deleteResult.error;
-          return deleteResult.data;
+      // Buscar antes de deletar
+      const { data: stock } = await supabase!.from('fuel_stock').select('*').eq('id', id).maybeSingle();
+      
+      const { error } = await supabase!.from('fuel_stock').delete().eq('id', id);
+      if (error) throw error;
+      
+      if (stock) {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            const deletedStr = localStorage.getItem('deleted_fuel_stock');
+            const deletedArr = deletedStr ? JSON.parse(deletedStr) : [];
+            deletedArr.push({
+              ...stock,
+              is_deleted: true,
+              deletion_reason: justification,
+              updated_at: new Date().toISOString()
+            });
+            localStorage.setItem('deleted_fuel_stock', JSON.stringify(deletedArr));
+          }
+        } catch(e) {
+          console.warn('Failed to save deleted item to local storage', e);
         }
-        throw error;
       }
-      return data;
     } catch (e: any) {
       if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
-        console.error('Tabela fuel_stock inexistente no Supabase, ativando fallback local:', e);
+        console.error('Tabela fuel_stock inexistente no Supabase:', e);
       }
       throw e;
     }
