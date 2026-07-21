@@ -16,17 +16,45 @@ function syncDemoMode(val: boolean) {
 function handleDbError(e: any, message: string) {
   console.error(message, e);
   throw e;
-  if (
-    e?.code === 'PGRST205' || 
-    e?.code === '42P01' || // PostgreSQL undefined_table error code
-    (e?.message && (
-      e.message.includes('Could not find the table') || 
-      e.message.includes('relation "') || 
-      e.message.includes('does not exist')
-    ))
-  ) {
-    setSchemaMissing(true);
+}
+
+// Helpers para contornar problemas de cache de schema do Supabase em colunas recém adicionadas
+async function safeInsert(table: string, payload: any) {
+  let currentPayload = { ...payload };
+  let retries = 5;
+  while (retries > 0) {
+    const { data, error } = await supabase!.from(table).insert([currentPayload]).select().maybeSingle();
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('Could not find the'))) {
+      const match = error.message.match(/'(.*?)' column/);
+      if (match && match[1]) {
+        console.warn(`[SafeInsert] Stripping missing column ${match[1]} from ${table}`);
+        delete currentPayload[match[1]];
+        retries--;
+        continue;
+      }
+    }
+    return { data, error };
   }
+  return { data: null, error: new Error('Too many retries for missing columns') };
+}
+
+async function safeUpdate(table: string, id: string, payload: any) {
+  let currentPayload = { ...payload };
+  let retries = 5;
+  while (retries > 0) {
+    const { data, error } = await supabase!.from(table).update(currentPayload).eq('id', id).select().maybeSingle();
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('Could not find the'))) {
+      const match = error.message.match(/'(.*?)' column/);
+      if (match && match[1]) {
+        console.warn(`[SafeUpdate] Stripping missing column ${match[1]} from ${table}`);
+        delete currentPayload[match[1]];
+        retries--;
+        continue;
+      }
+    }
+    return { data, error };
+  }
+  return { data: null, error: new Error('Too many retries for missing columns') };
 }
 
 
@@ -503,7 +531,7 @@ export const fleetService = {
   async updateProfileRole(id: string, role: string): Promise<any> {
     
     try {
-      const { data, error } = await supabase!.from('profiles').update({ role }).eq('id', id).select().maybeSingle();
+      const { data, error } = await safeUpdate('profiles', id, { role });
       if (error) throw error;
       return data;
     } catch (e) {
@@ -590,7 +618,7 @@ export const fleetService = {
       name: farm.name || 'Nova Fazenda'
     };
     try {
-      const { data, error } = await supabase!.from('farms').insert([cleanFarm]).select().maybeSingle();
+      const { data, error } = await safeInsert('farms', cleanFarm);
       if (error) throw error;
       return data;
     } catch (e) {
@@ -602,7 +630,7 @@ export const fleetService = {
   async updateFarm(id: string, farm: Partial<Farm>): Promise<Farm> {
     
     try {
-      const { data, error } = await supabase!.from('farms').update(farm).eq('id', id).select().maybeSingle();
+      const { data, error } = await safeUpdate('farms', id, farm);
       if (error) throw error;
       return data;
     } catch (e) {
@@ -654,7 +682,7 @@ export const fleetService = {
       farm_id: machine.farm_id || '11111111-1111-1111-1111-111111111111',
       driver_name: machine.driver_name || ''
     };
-    const { data, error } = await supabase!.from('machines').insert([cleanMachine]).select().maybeSingle();
+    const { data, error } = await safeInsert('machines', cleanMachine);
     if (error) throw error;
     return data;
   },
@@ -677,7 +705,7 @@ export const fleetService = {
     if (machine.driver_name !== undefined) cleanMachine.driver_name = machine.driver_name;
     cleanMachine.updated_at = new Date().toISOString();
 
-    const { data, error } = await supabase!.from('machines').update(cleanMachine).eq('id', id).select().maybeSingle();
+    const { data, error } = await safeUpdate('machines', id, cleanMachine);
     if (error) throw error;
     return data;
   },
@@ -749,7 +777,7 @@ export const fleetService = {
       notes: log.notes || ''
     };
 
-    const { data, error } = await supabase!.from('fuel_logs').insert([logToInsert]).select().maybeSingle();
+    const { data, error } = await safeInsert('fuel_logs', logToInsert);
     if (error) throw error;
     return data;
   },
@@ -775,7 +803,7 @@ export const fleetService = {
     if (log.responsible !== undefined) updatedFields.responsible = log.responsible;
     if (log.notes !== undefined) updatedFields.notes = log.notes;
 
-    const { data, error } = await supabase!.from('fuel_logs').update(updatedFields).eq('id', id).select().maybeSingle();
+    const { data, error } = await safeUpdate('fuel_logs', id, updatedFields);
     if (error) throw error;
     return data;
   },
@@ -836,8 +864,17 @@ export const fleetService = {
       notes: stock.notes || ''
     };
     try {
-      const { data, error } = await supabase!.from('fuel_stock').insert([cleanStock]).select().maybeSingle();
-      if (error) throw error;
+      const { data, error } = await safeInsert('fuel_stock', cleanStock);
+      if (error) {
+        if (error.message?.includes('price_per_liter')) {
+          const fallbackStock = { ...cleanStock };
+          delete (fallbackStock as any).price_per_liter;
+          const res = await safeInsert('fuel_stock', fallbackStock);
+          if (res.error) throw res.error;
+          return res.data;
+        }
+        throw error;
+      }
       return data;
     } catch (e) {
       console.error('Erro ao adicionar fuel_stock no Supabase, usando local:', e);
@@ -884,8 +921,16 @@ export const fleetService = {
     }
 
     try {
-      const { data, error } = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
-      if (error) throw error;
+      const { data, error } = await safeUpdate('fuel_stock', id, cleanStock);
+      if (error) {
+        if (error.message?.includes('price_per_liter')) {
+          delete cleanStock.price_per_liter;
+          const res = await safeUpdate('fuel_stock', id, cleanStock);
+          if (res.error) throw res.error;
+          return res.data;
+        }
+        throw error;
+      }
       return data;
     } catch (e: any) {
       if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
@@ -897,10 +942,12 @@ export const fleetService = {
 
   async deleteFuelStock(id: string, justification: string): Promise<FuelStock> {
     try {
-      const { data, error } = await supabase!.from('fuel_stock').update({
+      const payload = {
         is_deleted: true,
-        deletion_reason: justification
-      }).eq('id', id).select().maybeSingle();
+        deletion_reason: justification,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await safeUpdate('fuel_stock', id, payload);
 
       if (error) {
         // Se der erro de coluna não existente para is_deleted ou deletion_reason (código 42703 ou mensagem)
@@ -961,13 +1008,13 @@ export const fleetService = {
       next_maintenance_date: log.next_maintenance_date || null,
       next_hour_km: log.next_hour_km ? Number(log.next_hour_km) : null
     };
-    const { data, error } = await supabase!.from('maintenance_logs').insert([cleanLog]).select().maybeSingle();
+    const { data, error } = await safeInsert('maintenance_logs', cleanLog);
     if (error) {
       // Tentar sem operator_name caso a coluna não exista no Supabase ainda
       if (error.message?.includes('operator_name')) {
         const fallbackLog = { ...cleanLog };
         delete (fallbackLog as any).operator_name;
-        const res = await supabase!.from('maintenance_logs').insert([fallbackLog]).select().maybeSingle();
+        const res = await safeInsert('maintenance_logs', fallbackLog);
         if (res.error) throw res.error;
         return res.data;
       }
@@ -995,11 +1042,11 @@ export const fleetService = {
     if (log.next_maintenance_date !== undefined) cleanLog.next_maintenance_date = log.next_maintenance_date;
     if (log.next_hour_km !== undefined) cleanLog.next_hour_km = log.next_hour_km ? Number(log.next_hour_km) : null;
 
-    const { data, error } = await supabase!.from('maintenance_logs').update(cleanLog).eq('id', id).select().maybeSingle();
+    const { data, error } = await safeUpdate('maintenance_logs', id, cleanLog);
     if (error) {
       if (error.message?.includes('operator_name')) {
         delete cleanLog.operator_name;
-        const res = await supabase!.from('maintenance_logs').update(cleanLog).eq('id', id).select().maybeSingle();
+        const res = await safeUpdate('maintenance_logs', id, cleanLog);
         if (res.error) throw res.error;
         return res.data;
       }
@@ -1037,7 +1084,7 @@ export const fleetService = {
       interval_days: Number(item.interval_days) || 0,
       interval_hour_km: Number(item.interval_hour_km) || 0
     };
-    const { data, error } = await supabase!.from('preventive_plan').insert([cleanItem]).select().maybeSingle();
+    const { data, error } = await safeInsert('preventive_plan', cleanItem);
     if (error) throw error;
     return data;
   },
@@ -1050,7 +1097,7 @@ export const fleetService = {
     if (item.interval_days !== undefined) cleanItem.interval_days = Number(item.interval_days);
     if (item.interval_hour_km !== undefined) cleanItem.interval_hour_km = Number(item.interval_hour_km);
 
-    const { data, error } = await supabase!.from('preventive_plan').update(cleanItem).eq('id', id).select().maybeSingle();
+    const { data, error } = await safeUpdate('preventive_plan', id, cleanItem);
     if (error) throw error;
     return data;
   },
@@ -1106,7 +1153,7 @@ export const fleetService = {
       overall_status: checklist.overall_status || 'OK',
       failed_items_notes: checklist.failed_items_notes || ''
     };
-    const { data, error } = await supabase!.from('checklists_30d').insert([cleanChecklist]).select().maybeSingle();
+    const { data, error } = await safeInsert('checklists_30d', cleanChecklist);
     if (error) throw error;
     return data;
   },
@@ -1151,7 +1198,7 @@ export const fleetService = {
       responsible: wo.responsible || wo.assigned_to || '',
       notes: wo.notes || ''
     };
-    const { data, error } = await supabase!.from('work_orders').insert([cleanWO]).select().maybeSingle();
+    const { data, error } = await safeInsert('work_orders', cleanWO);
     if (error) throw error;
     return data;
   },
@@ -1175,7 +1222,7 @@ export const fleetService = {
     if (wo.close_date !== undefined) cleanWO.close_date = wo.close_date;
     if (wo.notes !== undefined) cleanWO.notes = wo.notes;
 
-    const { data, error } = await supabase!.from('work_orders').update(cleanWO).eq('id', id).select().maybeSingle();
+    const { data, error } = await safeUpdate('work_orders', id, cleanWO);
     if (error) throw error;
     return data;
   },
