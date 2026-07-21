@@ -31,10 +31,21 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
   const [formLaborCost, setFormLaborCost] = useState<number | ''>('');
   const [formPartsReplaced, setFormPartsReplaced] = useState('');
   const [formResponsible, setFormResponsible] = useState('');
+  const [formOperator, setFormOperator] = useState('');
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingLogId, setEditingLogId] = useState('');
 
   // Filters local
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [machineFilter, setMachineFilter] = useState('ALL');
+  const [operatorFilter, setOperatorFilter] = useState('');
+
+  // Reset machine filter when farm changes
+  useEffect(() => {
+    setMachineFilter('ALL');
+  }, [selectedFarmId]);
 
   useEffect(() => {
     async function loadData() {
@@ -89,6 +100,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
     setFormLaborCost('');
     setFormPartsReplaced('');
     setFormResponsible('');
+    setFormOperator('');
     
     const farmMachines = machines.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
     if (farmMachines.length > 0) {
@@ -101,13 +113,29 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
       setFormMachineId('');
       setFormHourKm('');
     }
+    setEditingLogId('');
+    setIsAddOpen(true);
+  };
+
+  const handleOpenEdit = (log: MaintenanceLog) => {
+    setFormMachineId(log.machine_id);
+    setFormDate(log.date.split('T')[0]);
+    setFormMainItem(log.main_item);
+    setFormDesc(log.service_description);
+    setFormHourKm(log.hour_km_at_service);
+    setFormPartsCost(log.parts_cost);
+    setFormLaborCost(log.labor_cost);
+    setFormPartsReplaced(log.parts_replaced || '');
+    setFormResponsible(log.responsible || '');
+    setFormOperator(log.operator_name || '');
+    setEditingLogId(log.id);
     setIsAddOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await fleetService.addMaintenanceLog({
+      const payload = {
         machine_id: formMachineId,
         date: formDate,
         main_item: formMainItem,
@@ -116,8 +144,15 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
         parts_cost: Number(formPartsCost || 0),
         labor_cost: Number(formLaborCost || 0),
         parts_replaced: formPartsReplaced,
-        responsible: formResponsible
-      });
+        responsible: formResponsible,
+        operator_name: formOperator
+      };
+
+      if (editingLogId) {
+        await fleetService.updateMaintenanceLog(editingLogId, payload);
+      } else {
+        await fleetService.addMaintenanceLog(payload);
+      }
       setIsAddOpen(false);
       refreshList();
     } catch (err: any) {
@@ -165,6 +200,10 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
     const farmMatch = selectedFarmId === 'ALL' || (machine && machine.farm_id === selectedFarmId);
     const periodMatch = isDateInPeriod(log.date);
     const catMatch = categoryFilter === 'ALL' || log.main_item === categoryFilter;
+    const machineMatch = machineFilter === 'ALL' || log.machine_id === machineFilter;
+    const opMatch = operatorFilter === '' || 
+      (log.operator_name || '').toLowerCase().includes(operatorFilter.toLowerCase()) || 
+      (machine && (machine.driver_name || '').toLowerCase().includes(operatorFilter.toLowerCase()));
 
     const textMatch = 
       (log.service_description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -174,7 +213,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
       (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
       (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return farmMatch && periodMatch && catMatch && textMatch;
+    return farmMatch && periodMatch && catMatch && machineMatch && opMatch && textMatch;
   });
 
   // Totais
@@ -231,6 +270,30 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
           ))}
         </select>
 
+        {/* Equipamento */}
+        <select
+          value={machineFilter}
+          onChange={(e) => setMachineFilter(e.target.value)}
+          className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+        >
+          <option value="ALL">Todas as Máquinas</option>
+          {machines
+            .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+            .map(m => (
+              <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+            ))
+          }
+        </select>
+
+        {/* Operador */}
+        <input
+          type="text"
+          placeholder="Filtrar por operador..."
+          value={operatorFilter}
+          onChange={(e) => setOperatorFilter(e.target.value)}
+          className="w-40 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
+        />
+
         <div className="flex-1 text-right text-xs text-slate-500 font-mono">
           Registros Filtrados: <strong className="text-slate-800">{filteredLogs.length}</strong>
         </div>
@@ -253,7 +316,8 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
                   <th className="py-4 px-6 font-mono text-right">Custo Total</th>
                   <th className="py-4 px-6">Horímetro h/Km</th>
                   <th className="py-4 px-6">Mecânico / Técnico</th>
-                  {userRole === 'admin' && <th className="py-4 px-6 text-center">Ações</th>}
+                  <th className="py-4 px-6">Operador</th>
+                  {userRole !== 'viewer' && <th className="py-4 px-6 text-center">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -297,15 +361,27 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
                         {log.hour_km_at_service.toLocaleString('pt-BR')} h/km
                       </td>
                       <td className="py-4 px-6 text-slate-500 font-medium">{log.responsible}</td>
-                      {userRole === 'admin' && (
+                      <td className="py-4 px-6 text-slate-500 font-medium">{log.operator_name || (machine?.driver_name || '-')}</td>
+                      {userRole !== 'viewer' && (
                         <td className="py-4 px-6 text-center">
-                          <button
-                            onClick={() => handleDelete(log.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Remover Registro"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(log)}
+                              className="p-1.5 text-slate-400 hover:text-[#1B3022] transition-colors cursor-pointer"
+                              title="Editar Registro"
+                            >
+                              <Settings size={14} />
+                            </button>
+                            {userRole === 'admin' && (
+                              <button
+                                onClick={() => handleDelete(log.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                                title="Remover Registro"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -318,7 +394,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
                 <tr className="font-mono text-xs font-bold text-slate-700">
                   <td colSpan={7} className="py-4 px-6 uppercase tracking-wider text-[10px] font-bold text-slate-500 text-left">Gasto Total Acumulado:</td>
                   <td className="py-4 px-6 text-right text-red-600 font-extrabold text-xs">R$ {totalMaintCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td colSpan={4}></td>
+                  <td colSpan={userRole !== 'viewer' ? 4 : 3}></td>
                 </tr>
               </tfoot>
             </table>
@@ -331,8 +407,8 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
         </div>
       </div>
 
-      {/* MODAL: REGISTRAR MANUTENÇÃO */}
-      <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Registrar Serviço de Manutenção">
+          {/* MODAL: REGISTRAR MANUTENÇÃO */}
+      <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title={editingLogId ? "Editar Serviço de Manutenção" : "Registrar Serviço de Manutenção"}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -422,16 +498,28 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Mecânico / Responsável Técnico</label>
-            <input
-              type="text"
-              required
-              placeholder="Ex: Oficina Mecânica Central, Mecânico Marcos"
-              value={formResponsible}
-              onChange={(e) => setFormResponsible(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Mecânico / Responsável Técnico</label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Oficina Central, Marcos"
+                value={formResponsible}
+                onChange={(e) => setFormResponsible(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nome do Operador</label>
+              <input
+                type="text"
+                placeholder="Ex: João da Silva"
+                value={formOperator}
+                onChange={(e) => setFormOperator(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
+              />
+            </div>
           </div>
 
           <div>

@@ -96,6 +96,7 @@ export interface MaintenanceLog {
   total_cost: number; // parts_cost + labor_cost
   location_shop?: string; // FK service_locations
   responsible: string;
+  operator_name?: string;
   next_maintenance_date?: string;
   next_hour_km?: number;
   created_at?: string;

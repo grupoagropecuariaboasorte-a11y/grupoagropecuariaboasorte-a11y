@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS maintenance_logs (
     total_cost NUMERIC GENERATED ALWAYS AS (parts_cost + labor_cost) STORED,
     location_shop VARCHAR(100) REFERENCES service_locations(id) ON DELETE SET NULL,
     responsible VARCHAR(100) NOT NULL,
+    operator_name VARCHAR(100),
     next_maintenance_date DATE,
     next_hour_km NUMERIC,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

@@ -957,11 +957,54 @@ export const fleetService = {
       labor_cost: Number(log.labor_cost) || 0,
       location_shop: log.location_shop || 'oficina_interna',
       responsible: log.responsible || '',
+      operator_name: log.operator_name || '',
       next_maintenance_date: log.next_maintenance_date || null,
       next_hour_km: log.next_hour_km ? Number(log.next_hour_km) : null
     };
     const { data, error } = await supabase!.from('maintenance_logs').insert([cleanLog]).select().single();
-    if (error) throw error;
+    if (error) {
+      // Tentar sem operator_name caso a coluna não exista no Supabase ainda
+      if (error.message?.includes('operator_name')) {
+        const fallbackLog = { ...cleanLog };
+        delete (fallbackLog as any).operator_name;
+        const res = await supabase!.from('maintenance_logs').insert([fallbackLog]).select().single();
+        if (res.error) throw res.error;
+        return res.data;
+      }
+      throw error;
+    }
+    return data;
+  },
+
+  async updateMaintenanceLog(id: string, log: Partial<MaintenanceLog>): Promise<MaintenanceLog> {
+    const cleanLog: any = {};
+    if (log.machine_id) cleanLog.machine_id = log.machine_id;
+    if (log.date) cleanLog.date = log.date;
+    if (log.type) cleanLog.type = log.type;
+    if (log.priority) cleanLog.priority = log.priority;
+    if (log.hour_km_at_service !== undefined) cleanLog.hour_km_at_service = Number(log.hour_km_at_service);
+    if (log.service_description) cleanLog.service_description = log.service_description;
+    if (log.main_item) cleanLog.main_item = log.main_item;
+    if (log.parts_replaced !== undefined) cleanLog.parts_replaced = log.parts_replaced;
+    if (log.quantity !== undefined) cleanLog.quantity = Number(log.quantity);
+    if (log.parts_cost !== undefined) cleanLog.parts_cost = Number(log.parts_cost);
+    if (log.labor_cost !== undefined) cleanLog.labor_cost = Number(log.labor_cost);
+    if (log.location_shop) cleanLog.location_shop = log.location_shop;
+    if (log.responsible !== undefined) cleanLog.responsible = log.responsible;
+    if (log.operator_name !== undefined) cleanLog.operator_name = log.operator_name;
+    if (log.next_maintenance_date !== undefined) cleanLog.next_maintenance_date = log.next_maintenance_date;
+    if (log.next_hour_km !== undefined) cleanLog.next_hour_km = log.next_hour_km ? Number(log.next_hour_km) : null;
+
+    const { data, error } = await supabase!.from('maintenance_logs').update(cleanLog).eq('id', id).select().single();
+    if (error) {
+      if (error.message?.includes('operator_name')) {
+        delete cleanLog.operator_name;
+        const res = await supabase!.from('maintenance_logs').update(cleanLog).eq('id', id).select().single();
+        if (res.error) throw res.error;
+        return res.data;
+      }
+      throw error;
+    }
     return data;
   },
 
