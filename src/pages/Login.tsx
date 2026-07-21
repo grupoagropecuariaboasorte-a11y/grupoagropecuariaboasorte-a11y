@@ -66,7 +66,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
-          .single();
+          .maybeSingle();
 
         let finalRole = profile?.role || 'viewer';
         if ((data.user.email || email).toLowerCase() === 'grupoagropecuariaboasorte@gmail.com') {
