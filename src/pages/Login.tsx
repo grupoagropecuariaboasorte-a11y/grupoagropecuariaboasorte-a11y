@@ -61,19 +61,27 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (error) throw error;
 
       if (data?.user) {
-        // Obter role do perfil
+        // Garantir que o perfil existe no banco de dados para o RLS funcionar
+        const userEmail = (data.user.email || email).toLowerCase();
+        const isAdmin = userEmail === 'grupoagropecuariaboasorte@gmail.com';
+        
+        // Upsert do perfil
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email: userEmail,
+          role: isAdmin ? 'admin' : 'editor',
+          updated_at: new Date().toISOString()
+        });
+
+        // Obter role do perfil atualizado
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
           .maybeSingle();
 
-        let finalRole = profile?.role || 'viewer';
-        if ((data.user.email || email).toLowerCase() === 'grupoagropecuariaboasorte@gmail.com') {
-          finalRole = 'admin';
-        }
-
-        onLoginSuccess(data.user.email || email, finalRole as any);
+        const finalRole = profile?.role || (isAdmin ? 'admin' : 'viewer');
+        onLoginSuccess(userEmail, finalRole as any);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao realizar login. Verifique as credenciais.');

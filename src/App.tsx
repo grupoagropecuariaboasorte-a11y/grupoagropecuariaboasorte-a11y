@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { fleetService } from './lib/fleetService';
+import { supabase } from './lib/supabaseClient';
 import { Farm } from './types';
 
 // Importar Páginas
@@ -51,6 +52,34 @@ function AppContent() {
   useEffect(() => {
     refreshFarms();
   }, []);
+
+  // Garantir que o perfil existe no Supabase para que o RLS funcione (importante se recarregar a página já logado)
+  useEffect(() => {
+    async function ensureProfile() {
+      if (userEmail && supabase) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          if (authData?.user) {
+             const isAdmin = userEmail.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com';
+             await supabase.from('profiles').upsert({
+                id: authData.user.id,
+                email: userEmail.toLowerCase(),
+                role: isAdmin ? 'admin' : 'editor',
+                updated_at: new Date().toISOString()
+             });
+             const { data: profile } = await supabase.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
+             if (profile && profile.role) {
+                setUserRole(profile.role as any);
+                localStorage.setItem('agro_user_role', profile.role);
+             }
+          }
+        } catch (e) {
+          console.error("Erro ao verificar perfil:", e);
+        }
+      }
+    }
+    ensureProfile();
+  }, [userEmail]);
 
   const handleLoginSuccess = (email: string, role: 'viewer' | 'editor' | 'admin') => {
     let finalRole = role;
