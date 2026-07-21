@@ -521,6 +521,33 @@ LocalStorageDb.initAll();
 // EXPORTAÇÃO DOS SERVIÇOS (COM TRATAMENTO DUAL-MODE)
 // =========================================================================
 
+
+function packNotes(notes: string | undefined, price: number | undefined, edit: string | undefined) {
+  let cleanNotes = (notes || '').replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
+  if (price !== undefined) cleanNotes += `\n[META:price=${price}]`;
+  if (edit) cleanNotes += `\n[META:edit=${edit}]`;
+  return cleanNotes.trim();
+}
+
+function unpackFuelStock(stock: any) {
+  if (!stock) return stock;
+  let notes = stock.notes || '';
+  
+  const priceMatch = notes.match(/\[META:price=([^\]]+)\]/);
+  if (priceMatch) stock.price_per_liter = Number(priceMatch[1]);
+  
+  const editMatch = notes.match(/\[META:edit=([^\]]+)\]/);
+  if (editMatch) {
+    stock.edit_justification = editMatch[1];
+  } else {
+    const oldEditMatch = notes.match(/\[Justificativa da alteração:\s*(.*?)\]/);
+    if (oldEditMatch) stock.edit_justification = oldEditMatch[1];
+  }
+
+  stock.notes = notes.replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
+  return stock;
+}
+
 export const fleetService = {
   // =======================================================================
   // AUTH E USUÁRIOS
@@ -737,7 +764,7 @@ export const fleetService = {
     const { data, error } = await query;
     if (error) throw error;
     
-    let allData = data || [];
+    let allData = (data || []).map(unpackFuelStock);
     try {
       if (typeof localStorage !== 'undefined') {
         const deletedStr = localStorage.getItem('deleted_fuel_logs');
@@ -928,31 +955,22 @@ export const fleetService = {
 
 
   async addFuelStock(stock: Partial<FuelStock>): Promise<FuelStock> {
-    
-    const cleanStock = {
+    const cleanStock: any = {
       farm_id: stock.farm_id,
       entry_date: stock.entry_date || new Date().toISOString().split('T')[0],
       liters_received: Number(stock.liters_received) || 0,
-      price_per_liter: Number(stock.price_per_liter) || 5.85,
       supplier: stock.supplier || '',
       minimum_stock_alert: Number(stock.minimum_stock_alert) || 1000,
-      notes: stock.notes || ''
     };
+    
+    cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, undefined);
+
     try {
       const { data, error } = await safeInsert('fuel_stock', cleanStock);
-      if (error) {
-        if (error.message?.includes('price_per_liter')) {
-          const fallbackStock = { ...cleanStock };
-          delete (fallbackStock as any).price_per_liter;
-          const res = await safeInsert('fuel_stock', fallbackStock);
-          if (res.error) throw res.error;
-          return res.data;
-        }
-        throw error;
-      }
-      return data;
+      if (error) throw error;
+      return unpackFuelStock(data);
     } catch (e) {
-      console.error('Erro ao adicionar fuel_stock no Supabase, usando local:', e);
+      console.error('Erro addFuelStock:', e);
       throw e;
     }
   },
@@ -976,40 +994,17 @@ export const fleetService = {
     if (stock.farm_id !== undefined) cleanStock.farm_id = stock.farm_id;
     if (stock.entry_date !== undefined) cleanStock.entry_date = stock.entry_date;
     if (stock.liters_received !== undefined) cleanStock.liters_received = Number(stock.liters_received);
-    if (stock.price_per_liter !== undefined) cleanStock.price_per_liter = Number(stock.price_per_liter);
     if (stock.supplier !== undefined) cleanStock.supplier = stock.supplier;
     if (stock.minimum_stock_alert !== undefined) cleanStock.minimum_stock_alert = Number(stock.minimum_stock_alert);
 
-    let finalNotes = stock.notes !== undefined ? stock.notes : '';
-    if (stock.edit_justification) {
-      finalNotes = finalNotes
-        ? `${finalNotes}
-[Justificativa da alteração: ${stock.edit_justification}]`
-        : `[Justificativa da alteração: ${stock.edit_justification}]`;
-    }
-    if (finalNotes) {
-      cleanStock.notes = finalNotes;
-    } else if (stock.notes !== undefined) {
-      cleanStock.notes = stock.notes;
-    }
+    cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, stock.edit_justification);
 
     try {
       const { data, error } = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
       
-      if (error) {
-        if (error.message?.includes('price_per_liter')) {
-          delete cleanStock.price_per_liter;
-          const res = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
-          if (res.error) throw res.error;
-          if (!res.data) throw new Error('Nenhum dado retornado. Verifique permissões.');
-          return res.data;
-        }
-        throw error;
-      }
-      if (!data) {
-        throw new Error('Nenhum dado retornado. Verifique se o registro existe ou se há bloqueio de permissão.');
-      }
-      return data;
+      if (error) throw error;
+      if (!data) throw new Error('Nenhum dado retornado. Verifique se o registro existe ou se há bloqueio de permissão.');
+      return unpackFuelStock(data);
     } catch (e: any) {
       console.error('Update erro fuel_stock:', e);
       throw e;
@@ -1026,11 +1021,12 @@ export const fleetService = {
       
       if (stock) {
         try {
+          const unpackedStock = unpackFuelStock(stock);
           if (typeof localStorage !== 'undefined') {
             const deletedStr = localStorage.getItem('deleted_fuel_stock');
             const deletedArr = deletedStr ? JSON.parse(deletedStr) : [];
             deletedArr.push({
-              ...stock,
+              ...unpackedStock,
               is_deleted: true,
               deletion_reason: justification,
               updated_at: new Date().toISOString()
