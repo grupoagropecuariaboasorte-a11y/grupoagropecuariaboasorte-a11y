@@ -972,9 +972,6 @@ export const fleetService = {
   },
 
   async updateFuelStock(id: string, stock: Partial<FuelStock>): Promise<FuelStock> {
-    
-
-    // Proactively construct a clean payload for Supabase to avoid column-not-found errors
     const cleanStock: any = {};
     if (stock.farm_id !== undefined) cleanStock.farm_id = stock.farm_id;
     if (stock.entry_date !== undefined) cleanStock.entry_date = stock.entry_date;
@@ -986,7 +983,8 @@ export const fleetService = {
     let finalNotes = stock.notes !== undefined ? stock.notes : '';
     if (stock.edit_justification) {
       finalNotes = finalNotes
-        ? `${finalNotes}\n[Justificativa da alteração: ${stock.edit_justification}]`
+        ? `${finalNotes}
+[Justificativa da alteração: ${stock.edit_justification}]`
         : `[Justificativa da alteração: ${stock.edit_justification}]`;
     }
     if (finalNotes) {
@@ -996,21 +994,24 @@ export const fleetService = {
     }
 
     try {
-      const { data, error } = await safeUpdate('fuel_stock', id, cleanStock);
+      const { data, error } = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
+      
       if (error) {
         if (error.message?.includes('price_per_liter')) {
           delete cleanStock.price_per_liter;
-          const res = await safeUpdate('fuel_stock', id, cleanStock);
+          const res = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
           if (res.error) throw res.error;
+          if (!res.data) throw new Error('Nenhum dado retornado. Verifique permissões.');
           return res.data;
         }
         throw error;
       }
+      if (!data) {
+        throw new Error('Nenhum dado retornado. Verifique se o registro existe ou se há bloqueio de permissão.');
+      }
       return data;
     } catch (e: any) {
-      if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
-        console.error('Tabela fuel_stock inexistente no Supabase, ativando fallback local:', e);
-      }
+      console.error('Update erro fuel_stock:', e);
       throw e;
     }
   },

@@ -153,6 +153,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
         edit_justification: editJustification
       });
       setIsEditOpen(false);
+      setEditingId(null);
       refreshList();
     } catch (err: any) {
       alert('Erro ao atualizar entrada de estoque: ' + err.message);
@@ -176,6 +177,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
     try {
       await fleetService.deleteFuelStock(deletingId, deleteJustification);
       setIsDeleteOpen(false);
+      setDeletingId(null);
       refreshList();
     } catch (err: any) {
       alert('Erro ao remover entrada de estoque: ' + err.message);
@@ -614,7 +616,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
       </Modal>
 
       {/* MODAL EDITAR ENTRADA */}
-      <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="Editar Entrada de Diesel (Tanque)">
+      <Modal isOpen={isEditOpen} onClose={() => { setIsEditOpen(false); setEditingId(null); }} title="Editar Entrada de Diesel (Tanque)">
         <form onSubmit={handleEditSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
