@@ -121,7 +121,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
     setEditFarmId(stock.farm_id || '');
     setEditDate(stock.entry_date || '');
     setEditLiters(stock.liters_received ?? '');
-    setEditPricePerLiter(stock.price_per_liter ?? '');
+    setEditPricePerLiter(stock.price_per_liter !== undefined && stock.price_per_liter !== null ? stock.price_per_liter : 5.85);
     setEditSupplier(stock.supplier ?? '');
     setEditMinAlert(stock.minimum_stock_alert ?? 1000);
     setEditNotes(stock.notes ?? '');
@@ -146,7 +146,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
         farm_id: editFarmId,
         entry_date: editDate,
         liters_received: Number(editLiters),
-        price_per_liter: Number(editPricePerLiter) || 5.85,
+        price_per_liter: editPricePerLiter !== '' && !isNaN(Number(editPricePerLiter)) ? Number(editPricePerLiter) : 5.85,
         supplier: editSupplier,
         minimum_stock_alert: Number(editMinAlert),
         notes: editNotes,

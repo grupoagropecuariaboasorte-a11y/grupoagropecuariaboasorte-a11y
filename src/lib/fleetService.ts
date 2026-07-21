@@ -524,28 +524,39 @@ LocalStorageDb.initAll();
 
 function packNotes(notes: string | undefined, price: number | undefined, edit: string | undefined) {
   let cleanNotes = (notes || '').replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
-  if (price !== undefined) cleanNotes += `\n[META:price=${price}]`;
-  if (edit) cleanNotes += `\n[META:edit=${edit}]`;
+  if (price !== undefined && price !== null && !isNaN(Number(price))) {
+    cleanNotes += `\n[META:price=${Number(price)}]`;
+  }
+  if (edit && edit.trim()) {
+    cleanNotes += `\n[META:edit=${edit.trim()}]`;
+  }
   return cleanNotes.trim();
 }
 
 function unpackFuelStock(stock: any) {
   if (!stock) return stock;
-  let notes = stock.notes || '';
+  const item = { ...stock };
+  let notes = item.notes || '';
   
   const priceMatch = notes.match(/\[META:price=([^\]]+)\]/);
-  if (priceMatch) stock.price_per_liter = Number(priceMatch[1]);
+  if (priceMatch) {
+    item.price_per_liter = Number(priceMatch[1]);
+  } else if (item.price_per_liter !== undefined && item.price_per_liter !== null && item.price_per_liter !== '') {
+    item.price_per_liter = Number(item.price_per_liter);
+  } else {
+    item.price_per_liter = 5.85;
+  }
   
   const editMatch = notes.match(/\[META:edit=([^\]]+)\]/);
   if (editMatch) {
-    stock.edit_justification = editMatch[1];
+    item.edit_justification = editMatch[1];
   } else {
     const oldEditMatch = notes.match(/\[Justificativa da alteração:\s*(.*?)\]/);
-    if (oldEditMatch) stock.edit_justification = oldEditMatch[1];
+    if (oldEditMatch) item.edit_justification = oldEditMatch[1];
   }
 
-  stock.notes = notes.replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
-  return stock;
+  item.notes = notes.replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
+  return item;
 }
 
 export const fleetService = {
@@ -934,12 +945,12 @@ export const fleetService = {
     const { data, error } = await query;
     if (error) throw error;
     
-    let allData = data || [];
+    let allData = (data || []).map(unpackFuelStock);
     try {
       if (typeof localStorage !== 'undefined') {
         const deletedStr = localStorage.getItem('deleted_fuel_stock');
         if (deletedStr) {
-          const deletedArr = JSON.parse(deletedStr);
+          const deletedArr = JSON.parse(deletedStr).map(unpackFuelStock);
           if (farmId && farmId !== 'ALL') {
              allData = allData.concat(deletedArr.filter((d: any) => d.farm_id === farmId));
           } else {
@@ -959,6 +970,7 @@ export const fleetService = {
       farm_id: stock.farm_id,
       entry_date: stock.entry_date || new Date().toISOString().split('T')[0],
       liters_received: Number(stock.liters_received) || 0,
+      price_per_liter: Number(stock.price_per_liter) || 5.85,
       supplier: stock.supplier || '',
       minimum_stock_alert: Number(stock.minimum_stock_alert) || 1000,
     };
@@ -967,7 +979,16 @@ export const fleetService = {
 
     try {
       const { data, error } = await safeInsert('fuel_stock', cleanStock);
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('price_per_liter') || (error as any).code === 'PGRST204') {
+          const fallback = { ...cleanStock };
+          delete fallback.price_per_liter;
+          const res = await safeInsert('fuel_stock', fallback);
+          if (res.error) throw res.error;
+          return unpackFuelStock(res.data);
+        }
+        throw error;
+      }
       return unpackFuelStock(data);
     } catch (e) {
       console.error('Erro addFuelStock:', e);
@@ -996,13 +1017,23 @@ export const fleetService = {
     if (stock.liters_received !== undefined) cleanStock.liters_received = Number(stock.liters_received);
     if (stock.supplier !== undefined) cleanStock.supplier = stock.supplier;
     if (stock.minimum_stock_alert !== undefined) cleanStock.minimum_stock_alert = Number(stock.minimum_stock_alert);
+    if (stock.price_per_liter !== undefined) cleanStock.price_per_liter = Number(stock.price_per_liter);
 
     cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, stock.edit_justification);
 
     try {
       const { data, error } = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
       
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('price_per_liter') || (error as any).code === 'PGRST204') {
+          delete cleanStock.price_per_liter;
+          const res = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();
+          if (res.error) throw res.error;
+          if (!res.data) throw new Error('Nenhum dado retornado.');
+          return unpackFuelStock(res.data);
+        }
+        throw error;
+      }
       if (!data) throw new Error('Nenhum dado retornado. Verifique se o registro existe ou se há bloqueio de permissão.');
       return unpackFuelStock(data);
     } catch (e: any) {
