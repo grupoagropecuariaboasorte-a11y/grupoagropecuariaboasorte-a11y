@@ -5,7 +5,7 @@ import Modal from '../components/Modal';
 import { 
   ClipboardList, Plus, Search, Calendar, ChevronRight, 
   ArrowRight, CheckCircle2, Clock, PlayCircle, Trash2, 
-  AlertTriangle, Wrench, ArrowLeft
+  AlertTriangle, Wrench, ArrowLeft, Filter, Edit
 } from 'lucide-react';
 
 interface WorkOrdersProps {
@@ -19,15 +19,31 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
   const [farms, setFarms] = useState<Farm[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Form States
+  // Filters local
+  const [searchTerm, setSearchTerm] = useState('');
+  const [machineFilter, setMachineFilter] = useState('ALL');
+  const [priorityFilter, setPriorityFilter] = useState('ALL');
+
+  // Form States (Nova OS)
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [formMachineId, setFormMachineId] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formPriority, setFormPriority] = useState<'Alta' | 'Média' | 'Baixa'>('Média');
   const [formAssignedTo, setFormAssignedTo] = useState('');
 
-  // Filters local
-  const [searchTerm, setSearchTerm] = useState('');
+  // Form States (Editar OS)
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editId, setEditId] = useState('');
+  const [editMachineId, setEditMachineId] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editPriority, setEditPriority] = useState('Média');
+  const [editStatus, setEditStatus] = useState<'Aberta' | 'Em Andamento' | 'Concluída' | 'Cancelada'>('Aberta');
+  const [editAssignedTo, setEditAssignedTo] = useState('');
+  const [editOpenDate, setEditOpenDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+
+  // Target de exclusão
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -55,7 +71,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
       }
     }
     loadData();
-  }, []);
+  }, [selectedFarmId]);
 
   const refreshList = async () => {
     const list = await fleetService.getWorkOrders();
@@ -78,7 +94,19 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     setIsAddOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOpenEdit = (wo: WorkOrder) => {
+    setEditId(wo.id);
+    setEditMachineId(wo.machine_id);
+    setEditDescription(wo.reason || wo.description || '');
+    setEditPriority(wo.priority || 'Média');
+    setEditStatus(wo.status || 'Aberta');
+    setEditAssignedTo(wo.responsible || wo.assigned_to || '');
+    setEditOpenDate(wo.open_date ? wo.open_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setEditNotes(wo.notes || '');
+    setIsEditOpen(true);
+  };
+
+  const handleSubmitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await fleetService.addWorkOrder({
@@ -94,6 +122,26 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     }
   };
 
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await fleetService.updateWorkOrder(editId, {
+        machine_id: editMachineId,
+        reason: editDescription,
+        priority: editPriority,
+        status: editStatus,
+        responsible: editAssignedTo,
+        open_date: editOpenDate,
+        notes: editNotes
+      });
+      setIsEditOpen(false);
+      refreshList();
+      alert('Ordem de serviço atualizada!');
+    } catch (err: any) {
+      alert('Erro ao atualizar OS: ' + err.message);
+    }
+  };
+
   const handleUpdateStatus = async (id: string, nextStatus: 'Aberta' | 'Em Andamento' | 'Concluída') => {
     try {
       await fleetService.updateWorkOrder(id, { status: nextStatus });
@@ -103,13 +151,14 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza de que deseja excluir esta Ordem de Serviço?')) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await fleetService.deleteWorkOrder(id);
+      await fleetService.deleteWorkOrder(deleteTarget.id);
+      setDeleteTarget(null);
       refreshList();
     } catch (e: any) {
-      alert('Erro ao excluir: ' + e.message);
+      alert('Erro ao excluir O.S.: ' + e.message);
     }
   };
 
@@ -119,15 +168,20 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
   const filteredOrders = workOrders.filter(wo => {
     const machine = machines.find(m => m.id === wo.machine_id);
     const farmMatch = selectedFarmId === 'ALL' || (machine && machine.farm_id === selectedFarmId);
+    const machineMatch = machineFilter === 'ALL' || wo.machine_id === machineFilter;
+    
+    const prioStr = (wo.priority || '').toLowerCase();
+    const filterPrioStr = priorityFilter.toLowerCase();
+    const priorityMatch = priorityFilter === 'ALL' || prioStr === filterPrioStr;
 
     const textMatch = 
       String(wo.os_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (wo.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (wo.assigned_to || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (wo.description || wo.reason || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (wo.assigned_to || wo.responsible || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
       (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return farmMatch && textMatch;
+    return farmMatch && machineMatch && priorityMatch && textMatch;
   });
 
   const laneAberta = filteredOrders.filter(wo => wo.status === 'Aberta');
@@ -144,8 +198,10 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     'baixa': 'bg-blue-50 text-blue-700 border-blue-100',
   };
 
+  const selectedMachineObj = machineFilter !== 'ALL' ? machines.find(m => m.id === machineFilter) : null;
+
   return (
-    <div className="space-y-6 animate-fadeIn pb-12 flex flex-col h-[calc(100vh-6rem)]">
+    <div className="space-y-6 animate-fadeIn pb-12 flex flex-col min-h-screen">
       
       {/* HEADER DE OS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shrink-0 shadow-xs">
@@ -154,38 +210,126 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
             <ClipboardList size={18} className="text-[#1B3022]" />
             Ordens de Serviço (O.S.)
           </h3>
-          <p className="text-xs text-slate-500 mt-1">Quadro Kanban de controle operacional de corretivas e vistorias pendentes.</p>
+          <p className="text-xs text-slate-500 mt-1">Quadro Kanban de controle operacional de corretivas, vistorias e manutenção com filtro por máquina e CRUD completo.</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Busca interna */}
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-              <Search size={14} />
-            </span>
-            <input
-              type="text"
-              placeholder="Filtro rápido..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl py-1.5 pl-9 pr-4 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
-            />
-          </div>
+        {userRole !== 'viewer' && (
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+          >
+            <Plus size={14} />
+            <span>Abrir Nova O.S.</span>
+          </button>
+        )}
+      </div>
 
-          {userRole !== 'viewer' && (
-            <button
-              onClick={handleOpenAdd}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
-            >
-              <Plus size={14} />
-              <span>Abrir Nova O.S.</span>
-            </button>
-          )}
+      {/* PAINEL DE INFORMAÇÃO DA MÁQUINA FILTRADA */}
+      {selectedMachineObj && (
+        <div className="bg-[#1B3022] text-white p-5 rounded-2xl shadow-md border border-[#1B3022]/80 animate-fadeIn">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center font-mono font-bold text-emerald-300 text-sm shrink-0">
+                {selectedMachineObj.code}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-white">{selectedMachineObj.name}</h4>
+                  <span className="text-[10px] bg-white/10 text-emerald-200 px-2 py-0.5 rounded-md font-mono">
+                    {farms.find(f => f.id === selectedMachineObj.farm_id)?.name || 'Fazenda'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5 font-mono">
+                  Horímetro: <strong className="text-emerald-400">{selectedMachineObj.current_hour_km.toLocaleString('pt-BR')} H/km</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs font-mono">
+              <div className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                Abertas: <strong className="text-red-300">{laneAberta.length}</strong>
+              </div>
+              <div className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                Em Andamento: <strong className="text-amber-300">{laneAndamento.length}</strong>
+              </div>
+              <div className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                Concluídas: <strong className="text-emerald-300">{laneConcluida.length}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BARRA DE FILTROS: MÁQUINA, PRIORIDADE E BUSCA */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-3 items-center shadow-xs">
+        {/* Filtro por Máquina */}
+        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 max-w-xs w-full">
+          <Filter size={14} className="text-[#1B3022] shrink-0" />
+          <select
+            value={machineFilter}
+            onChange={(e) => setMachineFilter(e.target.value)}
+            className="w-full bg-transparent text-xs text-slate-800 font-bold focus:outline-hidden cursor-pointer"
+          >
+            <option value="ALL">Todas as Máquinas</option>
+            {machines
+              .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+              .map((m) => {
+                const farmName = farms.find(f => f.id === m.farm_id)?.name;
+                return (
+                  <option key={m.id} value={m.id}>
+                    {m.code} - {m.name} {farmName ? `(${farmName})` : ''}
+                  </option>
+                );
+              })}
+          </select>
+        </div>
+
+        {/* Filtro por Prioridade */}
+        <select
+          value={priorityFilter}
+          onChange={(e) => setPriorityFilter(e.target.value)}
+          className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+        >
+          <option value="ALL">Todas as Prioridades</option>
+          <option value="Alta">Alta</option>
+          <option value="Média">Média</option>
+          <option value="Baixa">Baixa</option>
+        </select>
+
+        {/* Busca por texto */}
+        <div className="relative flex-1 min-w-[200px]">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+            <Search size={14} />
+          </span>
+          <input
+            type="text"
+            placeholder="Buscar por O.S., defeito, técnico, máquina..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
+          />
+        </div>
+
+        {(machineFilter !== 'ALL' || priorityFilter !== 'ALL' || searchTerm !== '') && (
+          <button
+            onClick={() => {
+              setMachineFilter('ALL');
+              setPriorityFilter('ALL');
+              setSearchTerm('');
+            }}
+            className="text-xs text-red-600 hover:underline font-bold px-2 py-1 cursor-pointer"
+          >
+            Limpar Filtros
+          </button>
+        )}
+
+        <div className="text-xs text-slate-500 font-mono ml-auto">
+          Total O.S.: <strong className="text-slate-800">{filteredOrders.length}</strong>
         </div>
       </div>
 
       {/* QUADRO KANBAN (3 LANES) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[500px]">
         
         {/* LANE 1: ABERTAS */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
@@ -202,33 +346,45 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
           <div className="p-4 overflow-y-auto space-y-4 flex-1">
             {laneAberta.map(wo => {
               const mach = machines.find(m => m.id === wo.machine_id);
+              const descText = wo.description || wo.reason || '';
+              const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
+
               return (
                 <div key={wo.id} className="bg-white border border-slate-200 hover:border-[#1B3022]/30 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
                   <div className="flex justify-between items-start">
                     <div>
                       <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
-                        {wo.os_number}
+                        OS #{wo.os_number || wo.id.substring(0, 6)}
                       </span>
                       <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
                     </div>
-                    {userRole === 'admin' && (
-                      <button 
-                        onClick={() => handleDelete(wo.id)}
-                        className="text-slate-400 hover:text-red-600 p-1 rounded-md hover:bg-slate-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                        title="Excluir O.S."
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    {userRole !== 'viewer' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(wo)}
+                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
+                          title="Editar O.S."
+                        >
+                          <Edit size={13} />
+                        </button>
+                        <button 
+                          onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                          title="Excluir O.S."
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
 
-                  <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{wo.description}&rdquo;</p>
+                  <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{descText}&rdquo;</p>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                     <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
                       Prioridade {wo.priority}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Tec: {wo.assigned_to || 'Sem Técnico'}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Téc: {techText}</span>
                   </div>
 
                   {userRole !== 'viewer' && (
@@ -267,33 +423,45 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
           <div className="p-4 overflow-y-auto space-y-4 flex-1">
             {laneAndamento.map(wo => {
               const mach = machines.find(m => m.id === wo.machine_id);
+              const descText = wo.description || wo.reason || '';
+              const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
+
               return (
                 <div key={wo.id} className="bg-white border border-slate-200 hover:border-[#1B3022]/30 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
                   <div className="flex justify-between items-start">
                     <div>
                       <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-wide bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded">
-                        {wo.os_number}
+                        OS #{wo.os_number || wo.id.substring(0, 6)}
                       </span>
                       <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
                     </div>
-                    {userRole === 'admin' && (
-                      <button 
-                        onClick={() => handleDelete(wo.id)}
-                        className="text-slate-400 hover:text-red-600 p-1 rounded-md hover:bg-slate-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                        title="Excluir O.S."
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    {userRole !== 'viewer' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(wo)}
+                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
+                          title="Editar O.S."
+                        >
+                          <Edit size={13} />
+                        </button>
+                        <button 
+                          onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                          title="Excluir O.S."
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
 
-                  <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{wo.description}&rdquo;</p>
+                  <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{descText}&rdquo;</p>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                     <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
                       Prioridade {wo.priority}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Tec: {wo.assigned_to || 'Sem Técnico'}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Téc: {techText}</span>
                   </div>
 
                   {userRole !== 'viewer' && (
@@ -339,29 +507,48 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
           <div className="p-4 overflow-y-auto space-y-4 flex-1">
             {laneConcluida.map(wo => {
               const mach = machines.find(m => m.id === wo.machine_id);
+              const descText = wo.description || wo.reason || '';
+              const techText = wo.assigned_to || wo.responsible || 'Técnico';
+
               return (
-                <div key={wo.id} className="bg-white/80 border border-slate-200 rounded-xl p-4 text-xs space-y-3 opacity-70 group hover:opacity-100 transition-opacity shadow-xs">
+                <div key={wo.id} className="bg-white/80 border border-slate-200 rounded-xl p-4 text-xs space-y-3 opacity-75 group hover:opacity-100 transition-opacity shadow-xs">
                   <div className="flex justify-between items-start">
                     <div>
                       <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wide bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
-                        {wo.os_number}
+                        OS #{wo.os_number || wo.id.substring(0, 6)}
                       </span>
                       <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
                     </div>
-                    {userRole === 'admin' && (
-                      <button 
-                        onClick={() => handleDelete(wo.id)}
-                        className="text-slate-400 hover:text-red-600 p-1 rounded-md"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    {userRole !== 'viewer' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(wo)}
+                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
+                          title="Editar O.S."
+                        >
+                          <Edit size={13} />
+                        </button>
+                        <button 
+                          onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                          title="Excluir O.S."
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
 
-                  <p className="text-slate-500 leading-normal font-serif italic line-through">&ldquo;{wo.description}&rdquo;</p>
+                  <p className="text-slate-500 leading-normal font-serif italic line-through">&ldquo;{descText}&rdquo;</p>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className="text-[10px] text-slate-400 font-mono">Concluída por: {wo.assigned_to || 'Técnico'}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Concluída por: {techText}</span>
+                    <button
+                      onClick={() => handleUpdateStatus(wo.id, 'Em Andamento')}
+                      className="text-[10px] text-amber-700 hover:underline font-bold"
+                    >
+                      Reabrir
+                    </button>
                   </div>
                 </div>
               );
@@ -379,7 +566,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
 
       {/* MODAL ADICIONAR OS */}
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Abertura de Chamado / Ordem de Serviço (O.S.)">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmitAdd} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Equipamento com Problema</label>
@@ -428,7 +615,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
               required
               value={formDescription}
               onChange={(e) => setFormDescription(e.target.value)}
-              placeholder="Descreva detalhadamente o problem no campo..."
+              placeholder="Descreva detalhadamente o problema no campo..."
               className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] h-24"
             />
           </div>
@@ -450,6 +637,136 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
           </div>
         </form>
       </Modal>
+
+      {/* MODAL EDITAR OS */}
+      <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="Editar Ordem de Serviço (O.S.)">
+        <form onSubmit={handleSubmitEdit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Equipamento</label>
+              <select
+                value={editMachineId}
+                onChange={(e) => setEditMachineId(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+              >
+                {machines.map((m) => (
+                  <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Data de Abertura</label>
+              <input
+                type="date"
+                required
+                value={editOpenDate}
+                onChange={(e) => setEditOpenDate(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nível de Prioridade</label>
+              <select
+                value={editPriority}
+                onChange={(e) => setEditPriority(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+              >
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Status Atual</label>
+              <select
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value as any)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+              >
+                <option value="Aberta">Aberta</option>
+                <option value="Em Andamento">Em Andamento</option>
+                <option value="Concluída">Concluída</option>
+                <option value="Cancelada">Cancelada</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Técnico / Oficina Encarregada</label>
+            <input
+              type="text"
+              required
+              value={editAssignedTo}
+              onChange={(e) => setEditAssignedTo(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Descrição Técnica do Defeito / Motivo</label>
+            <textarea
+              required
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] h-20"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Notas do Serviço / Observações Adicionais</label>
+            <textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Peças utilizadas, laudo do mecânico..."
+              className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] h-16"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsEditOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+            >
+              Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL CONFIRMAR EXCLUSÃO DE OS */}
+      {deleteTarget && (
+        <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirmar Exclusão de O.S.">
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600">
+              Tem certeza de que deseja excluir permanentemente <strong>{deleteTarget.title}</strong>? Esta ação não poderá ser desfeita.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
     </div>
   );

@@ -1295,6 +1295,26 @@ export const fleetService = {
     return data;
   },
 
+  async updateChecklist(id: string, checklist: Partial<Checklist30d>): Promise<Checklist30d> {
+    const cleanChecklist: any = {};
+    if (checklist.machine_id !== undefined) cleanChecklist.machine_id = checklist.machine_id;
+    if (checklist.date !== undefined) cleanChecklist.date = checklist.date;
+    if (checklist.operator_name !== undefined) cleanChecklist.operator_name = checklist.operator_name;
+    if (checklist.hour_km !== undefined) cleanChecklist.hour_km = Number(checklist.hour_km);
+    if (checklist.work_type !== undefined) cleanChecklist.work_type = checklist.work_type;
+    if (checklist.overall_status !== undefined) cleanChecklist.overall_status = checklist.overall_status;
+    if (checklist.failed_items_notes !== undefined) cleanChecklist.failed_items_notes = checklist.failed_items_notes;
+
+    const { data, error } = await safeUpdate('checklists_30d', id, cleanChecklist);
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteChecklist(id: string): Promise<void> {
+    const { error } = await supabase!.from('checklists_30d').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   // VIEW checklist_summary
   async getChecklistSummary(): Promise<ChecklistSummary[]> {
     

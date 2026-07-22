@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
-import { Checklist30d, Farm, Machine, LookupItem } from '../types';
+import { Checklist30d, Farm, Machine } from '../types';
 import Modal from '../components/Modal';
 import { 
   CheckSquare, Plus, Search, Calendar, ShieldCheck, 
-  AlertTriangle, Eye, Info, Check, X, ShieldX 
+  AlertTriangle, Eye, Info, Filter, Edit, Trash2, 
+  ShieldX, Wrench
 } from 'lucide-react';
 
 interface ChecklistProps {
@@ -19,7 +20,12 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Form States
+  // Filtros locais
+  const [searchTerm, setSearchTerm] = useState('');
+  const [machineFilter, setMachineFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Form States (Nova Vistoria)
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [formMachineId, setFormMachineId] = useState('');
   const [formOperator, setFormOperator] = useState('');
@@ -27,6 +33,21 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
   const [formWorkType, setFormWorkType] = useState('Plantio');
   const [formOverallStatus, setFormOverallStatus] = useState<'OK' | 'Necessita Atenção' | 'Máquina Parada'>('OK');
   const [formFailedNotes, setFormFailedNotes] = useState('');
+  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Form States (Editar Vistoria)
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editId, setEditId] = useState('');
+  const [editMachineId, setEditMachineId] = useState('');
+  const [editOperator, setEditOperator] = useState('');
+  const [editHourKm, setEditHourKm] = useState<number | ''>('');
+  const [editWorkType, setEditWorkType] = useState('Plantio');
+  const [editOverallStatus, setEditOverallStatus] = useState<'OK' | 'Necessita Atenção' | 'Máquina Parada'>('OK');
+  const [editFailedNotes, setEditFailedNotes] = useState('');
+  const [editDate, setEditDate] = useState('');
+
+  // Target de exclusão
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
   // Checklist Items State (Os 7 itens de vistoria obrigatórios)
   const [items, setItems] = useState({
@@ -41,9 +62,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
 
   // Modal para Visualizar detalhes
   const [selectedChecklist, setSelectedChecklist] = useState<Checklist30d | null>(null);
-
-  // Filters local
-  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -73,14 +91,14 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
       }
     }
     loadData();
-  }, []);
+  }, [selectedFarmId]);
 
   const refreshList = async () => {
     const list = await fleetService.getChecklists();
     setChecklists(list);
   };
 
-  // Atualizar horímetro ao selecionar a máquina
+  // Atualizar horímetro ao selecionar a máquina na criação
   useEffect(() => {
     if (!formMachineId) return;
     const mach = machines.find(m => m.id === formMachineId);
@@ -94,6 +112,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     setFormFailedNotes('');
     setFormWorkType('Plantio');
     setFormOverallStatus('OK');
+    setFormDate(new Date().toISOString().split('T')[0]);
     setItems({
       engine_oil: 'OK',
       hydraulic_oil: 'OK',
@@ -117,12 +136,23 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     setIsAddOpen(true);
   };
 
+  const handleOpenEdit = (log: Checklist30d) => {
+    setEditId(log.id);
+    setEditMachineId(log.machine_id);
+    setEditOperator(log.operator_name || '');
+    setEditHourKm(log.hour_km ?? '');
+    setEditWorkType(log.work_type || 'Plantio');
+    setEditOverallStatus(log.overall_status || 'OK');
+    setEditFailedNotes(log.failed_items_notes || '');
+    setEditDate(log.date ? log.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setIsEditOpen(true);
+  };
+
   // Alternar valor do item do checklist
   const toggleItem = (key: keyof typeof items) => {
     setItems(prev => {
       const nextVal = prev[key] === 'OK' ? 'Regular/Ajustar' : 'OK';
       
-      // Auto calcular sugestão de status geral ao alterar itens
       setTimeout(() => {
         const anyFailed = Object.values({ ...prev, [key]: nextVal }).some(v => v !== 'OK');
         if (anyFailed) {
@@ -136,11 +166,12 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await fleetService.addChecklist({
         machine_id: formMachineId,
+        date: formDate,
         operator_name: formOperator,
         hour_km: Number(formHourKm),
         work_type: formWorkType,
@@ -152,6 +183,40 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
       refreshList();
     } catch (err: any) {
       alert('Erro ao registrar checklist: ' + err.message);
+    }
+  };
+
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await fleetService.updateChecklist(editId, {
+        machine_id: editMachineId,
+        date: editDate,
+        operator_name: editOperator,
+        hour_km: Number(editHourKm),
+        work_type: editWorkType,
+        overall_status: editOverallStatus,
+        failed_items_notes: editFailedNotes
+      });
+      setIsEditOpen(false);
+      refreshList();
+      alert('Vistoria atualizada com sucesso!');
+    } catch (err: any) {
+      alert('Erro ao atualizar vistoria: ' + err.message);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await fleetService.deleteChecklist(deleteTarget.id);
+      setDeleteTarget(null);
+      if (selectedChecklist?.id === deleteTarget.id) {
+        setSelectedChecklist(null);
+      }
+      refreshList();
+    } catch (err: any) {
+      alert('Erro ao excluir vistoria: ' + err.message);
     }
   };
 
@@ -183,6 +248,8 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
   const filteredLogs = checklists.filter(log => {
     const machine = machines.find(m => m.id === log.machine_id);
     const farmMatch = selectedFarmId === 'ALL' || (machine && machine.farm_id === selectedFarmId);
+    const machineMatch = machineFilter === 'ALL' || log.machine_id === machineFilter;
+    const statusMatch = statusFilter === 'ALL' || log.overall_status === statusFilter;
     const periodMatch = isDateInPeriod(log.date);
 
     const textMatch = 
@@ -192,8 +259,11 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
       (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
       (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return farmMatch && periodMatch && textMatch;
+    return farmMatch && machineMatch && statusMatch && periodMatch && textMatch;
   });
+
+  const selectedMachineObj = machineFilter !== 'ALL' ? machines.find(m => m.id === machineFilter) : null;
+  const selectedMachineChecklists = selectedMachineObj ? checklists.filter(c => c.machine_id === selectedMachineObj.id) : [];
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -205,7 +275,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
             <CheckSquare size={18} className="text-[#1B3022]" />
             Checklist 30 Dias / Diário de Campo
           </h3>
-          <p className="text-xs text-slate-500 mt-1">Registros de inspeções visuais e funcionais das máquinas realizadas por operadores.</p>
+          <p className="text-xs text-slate-500 mt-1">Registros de inspeções visuais e funcionais das máquinas realizadas por operadores com controle CRUD completo.</p>
         </div>
 
         {userRole !== 'viewer' && (
@@ -219,9 +289,76 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
         )}
       </div>
 
-      {/* FILTRO DE BUSCA LOCAL */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-wrap gap-4 items-center shadow-xs">
-        <div className="relative max-w-xs w-full">
+      {/* PAINEL DE INSPEÇÃO DA MÁQUINA SELECIONADA */}
+      {selectedMachineObj && (
+        <div className="bg-[#1B3022] text-white p-5 rounded-2xl shadow-md border border-[#1B3022]/80 animate-fadeIn">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center font-mono font-bold text-emerald-300 text-sm shrink-0">
+                {selectedMachineObj.code}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-white">{selectedMachineObj.name}</h4>
+                  <span className="text-[10px] bg-white/10 text-emerald-200 px-2 py-0.5 rounded-md font-mono">
+                    {farms.find(f => f.id === selectedMachineObj.farm_id)?.name || 'Fazenda'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5 font-mono">
+                  Horímetro Atual: <strong className="text-emerald-400">{selectedMachineObj.current_hour_km.toLocaleString('pt-BR')} H/km</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 rounded-xl text-xs font-mono">
+              <ShieldCheck size={16} className="text-emerald-400" />
+              <span>Vistorias da Máquina:</span>
+              <span className="text-emerald-300 font-bold bg-white/10 px-2 py-0.5 rounded-md">
+                {selectedMachineChecklists.length} registradas
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FILTROS DE BUSCA E SELEÇÃO DE MÁQUINA */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-3 items-center shadow-xs">
+        {/* Filtro por Máquina */}
+        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 max-w-xs w-full">
+          <Filter size={14} className="text-[#1B3022] shrink-0" />
+          <select
+            value={machineFilter}
+            onChange={(e) => setMachineFilter(e.target.value)}
+            className="w-full bg-transparent text-xs text-slate-800 font-bold focus:outline-hidden cursor-pointer"
+          >
+            <option value="ALL">Todas as Máquinas</option>
+            {machines
+              .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+              .map((m) => {
+                const farmName = farms.find(f => f.id === m.farm_id)?.name;
+                return (
+                  <option key={m.id} value={m.id}>
+                    {m.code} - {m.name} {farmName ? `(${farmName})` : ''}
+                  </option>
+                );
+              })}
+          </select>
+        </div>
+
+        {/* Filtro por Avaliação / Status */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+        >
+          <option value="ALL">Todas as Avaliações</option>
+          <option value="OK">Aprovada (OK)</option>
+          <option value="Necessita Atenção">Necessita Atenção</option>
+          <option value="Máquina Parada">Máquina Parada</option>
+        </select>
+
+        {/* Campo de Busca */}
+        <div className="relative flex-1 min-w-[200px]">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
             <Search size={14} />
           </span>
@@ -234,8 +371,21 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
           />
         </div>
 
-        <div className="flex-1 text-right text-xs text-slate-500 font-mono">
-          Vistorias Encontradas: <strong className="text-slate-800">{filteredLogs.length}</strong>
+        {(machineFilter !== 'ALL' || statusFilter !== 'ALL' || searchTerm !== '') && (
+          <button
+            onClick={() => {
+              setMachineFilter('ALL');
+              setStatusFilter('ALL');
+              setSearchTerm('');
+            }}
+            className="text-xs text-red-600 hover:underline font-bold px-2 py-1 cursor-pointer"
+          >
+            Limpar Filtros
+          </button>
+        )}
+
+        <div className="text-xs text-slate-500 font-mono ml-auto">
+          Encontradas: <strong className="text-slate-800">{filteredLogs.length}</strong>
         </div>
       </div>
 
@@ -248,8 +398,8 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
 
             const statusStyles = {
               'OK': 'border-slate-200 bg-white hover:border-[#1B3022]/30',
-              'Necessita Atenção': 'border-amber-200 bg-amber-50 hover:border-amber-350',
-              'Máquina Parada': 'border-rose-200 bg-rose-50 hover:border-rose-350'
+              'Necessita Atenção': 'border-amber-200 bg-amber-50/50 hover:border-amber-350',
+              'Máquina Parada': 'border-rose-200 bg-rose-50/50 hover:border-rose-350'
             };
 
             const pillStyles = {
@@ -261,8 +411,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
             return (
               <div 
                 key={log.id} 
-                className={`border rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 shadow-xs cursor-pointer ${statusStyles[log.overall_status] || statusStyles['OK']}`}
-                onClick={() => setSelectedChecklist(log)}
+                className={`border rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 shadow-xs relative ${statusStyles[log.overall_status] || statusStyles['OK']}`}
               >
                 <div>
                   <div className="flex justify-between items-start border-b border-slate-100 pb-3.5 mb-3.5">
@@ -301,12 +450,34 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                   </div>
                 </div>
 
-                <div className="border-t border-slate-100 pt-3.5 mt-4 flex justify-end">
+                {/* RODAPÉ E AÇÕES CRUD */}
+                <div className="border-t border-slate-100 pt-3.5 mt-4 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1">
+                    {userRole !== 'viewer' && (
+                      <>
+                        <button
+                          onClick={() => handleOpenEdit(log)}
+                          title="Editar Vistoria"
+                          className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 cursor-pointer transition-colors"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget({ id: log.id, title: `Vistoria de ${mach?.code} (${log.operator_name})` })}
+                          title="Excluir Vistoria"
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 cursor-pointer transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
                   <button 
-                    onClick={(e) => { e.stopPropagation(); setSelectedChecklist(log); }}
-                    className="flex items-center gap-1 text-[11px] font-bold text-[#1B3022] hover:underline cursor-pointer"
+                    onClick={() => setSelectedChecklist(log)}
+                    className="flex items-center gap-1 text-[11px] font-bold text-[#1B3022] hover:underline cursor-pointer ml-auto"
                   >
-                    <Eye size={12} /> Ver Ficha de Inspeção
+                    <Eye size={12} /> Ver Ficha
                   </button>
                 </div>
               </div>
@@ -320,9 +491,9 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
         )}
       </div>
 
-      {/* MODAL: FAZER VISTORIA */}
+      {/* MODAL: FAZER VISTORIA (NOVA) */}
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Nova Ficha de Checklist de Ativos (30 Dias)">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmitAdd} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Equipamento Vistoriado</label>
@@ -337,6 +508,17 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                     <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
                   ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Data da Vistoria</label>
+              <input
+                type="date"
+                required
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
+              />
             </div>
 
             <div>
@@ -362,7 +544,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
               />
             </div>
 
-            <div>
+            <div className="col-span-2">
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Atividade de Campo</label>
               <select
                 value={formWorkType}
@@ -379,14 +561,13 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
             </div>
           </div>
 
-          {/* PARÂMETROS OBRIGATÓRIOS DO CHECKLIST - OPERATOR INTERFACE */}
+          {/* PARÂMETROS OBRIGATÓRIOS DO CHECKLIST */}
           <div className="border-t border-b border-slate-200 py-4 my-2">
             <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-4 flex items-center gap-1.5">
               <ShieldCheck size={12} className="text-[#1B3022]" /> Vistoria e Avaliação de Componentes
             </h4>
             
             <div className="space-y-3">
-              {/* Engine oil */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Nível de óleo do motor</span>
                 <button
@@ -402,7 +583,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </button>
               </div>
 
-              {/* Hydraulic oil */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Nível de óleo hidráulico</span>
                 <button
@@ -418,7 +598,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </button>
               </div>
 
-              {/* Radiator fluid */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Água / Fluido do radiador</span>
                 <button
@@ -434,7 +613,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </button>
               </div>
 
-              {/* Tires */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Calibragem / Pneus / Esteira</span>
                 <button
@@ -450,7 +628,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </button>
               </div>
 
-              {/* Brakes */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Sistema de freio mecânico</span>
                 <button
@@ -466,7 +643,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </button>
               </div>
 
-              {/* Lights */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Lanternas / Faróis / Elétrica</span>
                 <button
@@ -482,7 +658,6 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </button>
               </div>
 
-              {/* Safety */}
               <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                 <span className="text-slate-700 font-medium">Equipamento de segurança (Cinto/Extintor)</span>
                 <button
@@ -544,6 +719,138 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
         </form>
       </Modal>
 
+      {/* MODAL: EDITAR VISTORIA */}
+      <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="Editar Lançamento de Vistoria (Checklist)">
+        <form onSubmit={handleSubmitEdit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Equipamento Vistoriado</label>
+              <select
+                value={editMachineId}
+                onChange={(e) => setEditMachineId(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+              >
+                {machines.map((m) => (
+                  <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Data da Vistoria</label>
+              <input
+                type="date"
+                required
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Operador Responsável</label>
+              <input
+                type="text"
+                required
+                value={editOperator}
+                onChange={(e) => setEditOperator(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km</label>
+              <input
+                type="number"
+                required
+                value={editHourKm}
+                onChange={(e) => setEditHourKm(e.target.value !== '' ? Number(e.target.value) : '')}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Atividade de Campo</label>
+              <select
+                value={editWorkType}
+                onChange={(e) => setEditWorkType(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+              >
+                <option value="Plantio">Plantio</option>
+                <option value="Colheita">Colheita</option>
+                <option value="Pulverização">Pulverização</option>
+                <option value="Preparo de Solo">Preparo de Solo</option>
+                <option value="Transporte">Transporte / Logística</option>
+                <option value="Outro">Outra Atividade</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Avaliação Final</label>
+              <select
+                value={editOverallStatus}
+                onChange={(e) => setEditOverallStatus(e.target.value as any)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+              >
+                <option value="OK">OK - Equipamento Liberado</option>
+                <option value="Necessita Atenção">Necessita Atenção (Manutenção Leve)</option>
+                <option value="Máquina Parada">MÁQUINA PARADA (Crítico - Risco de pane)</option>
+              </select>
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Observações / Itens com Falhas</label>
+              <textarea
+                value={editFailedNotes}
+                onChange={(e) => setEditFailedNotes(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] h-20"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsEditOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+            >
+              Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL CONFIRMAR EXCLUSÃO */}
+      {deleteTarget && (
+        <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirmar Exclusão">
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600">
+              Tem certeza de que deseja excluir permanentemente <strong>{deleteTarget.title}</strong>? Esta ação não poderá ser desfeita.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* MODAL: VER DETALHES DO CHECKLIST */}
       {selectedChecklist && (
         <Modal isOpen={!!selectedChecklist} onClose={() => setSelectedChecklist(null)} title="Laudo de Inspeção do Equipamento">
@@ -601,7 +908,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                         value === 'OK' ? 'bg-emerald-50 text-emerald-800 border border-emerald-150' : 'bg-amber-50 text-amber-800 border border-amber-150'
                       }`}>
-                        {value}
+                        {String(value)}
                       </span>
                     </div>
                   );
@@ -652,10 +959,23 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
               )}
             </div>
 
-            <div className="flex justify-end pt-4">
+            <div className="flex justify-between items-center pt-4">
+              {userRole !== 'viewer' && (
+                <button
+                  onClick={() => {
+                    const c = selectedChecklist;
+                    setSelectedChecklist(null);
+                    handleOpenEdit(c);
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-[#1B3022] hover:opacity-90 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <Edit size={13} /> Editar Vistoria
+                </button>
+              )}
+
               <button 
                 onClick={() => setSelectedChecklist(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs rounded-xl font-bold cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs rounded-xl font-bold cursor-pointer ml-auto"
               >
                 Fechar Laudo
               </button>
