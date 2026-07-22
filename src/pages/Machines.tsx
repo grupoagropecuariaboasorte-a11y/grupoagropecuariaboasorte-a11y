@@ -35,6 +35,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
   // Estados globais para cálculo de colunas
   const [allPrevStatuses, setAllPrevStatuses] = useState<PreventivePlanStatus[]>([]);
   const [allFuelLogs, setAllFuelLogs] = useState<FuelLog[]>([]);
+  const [allMaintLogs, setAllMaintLogs] = useState<MaintenanceLog[]>([]);
 
   // Modais de CRUD
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -59,18 +60,20 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     async function loadData() {
       setLoading(true);
       try {
-        const [mList, fList, lData, pStatuses, fuelLogsList] = await Promise.all([
+        const [mList, fList, lData, pStatuses, fuelLogsList, maintLogsList] = await Promise.all([
           fleetService.getMachines(),
           fleetService.getFarms(),
           fleetService.getLookups(),
           fleetService.getPreventivePlanStatus(),
-          fleetService.getFuelLogs()
+          fleetService.getFuelLogs(),
+          fleetService.getMaintenanceLogs()
         ]);
         setMachines(mList);
         setFarms(fList);
         setLookups(lData);
         setAllPrevStatuses(pStatuses);
         setAllFuelLogs(fuelLogsList);
+        setAllMaintLogs(maintLogsList);
         if (fList.length > 0) {
           setFormFarmId(selectedFarmId === 'ALL' ? fList[0].id : selectedFarmId);
         }
@@ -86,14 +89,16 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
   // Recarregar lista
   const refreshList = async () => {
     try {
-      const [mList, pStatuses, fuelLogsList] = await Promise.all([
+      const [mList, pStatuses, fuelLogsList, maintLogsList] = await Promise.all([
         fleetService.getMachines(),
         fleetService.getPreventivePlanStatus(),
-        fleetService.getFuelLogs()
+        fleetService.getFuelLogs(),
+        fleetService.getMaintenanceLogs()
       ]);
       setMachines(mList);
       setAllPrevStatuses(pStatuses);
       setAllFuelLogs(fuelLogsList);
+      setAllMaintLogs(maintLogsList);
     } catch (err) {
       console.error(err);
     }
@@ -338,7 +343,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                   <th className="py-2.5 px-3">Fazenda</th>
                   <th className="py-2.5 px-3">Status</th>
                   <th className="py-2.5 px-3 text-center">Status de Revisão</th>
-                  <th className="py-2.5 px-3 text-right">Horímetro Anterior</th>
+                  <th className="py-2.5 px-3 text-right">Última Revisão</th>
                   <th className="py-2.5 px-3 text-right">Horímetro/Km Atual</th>
                   <th className="py-2.5 px-3 text-right">Próxima Revisão</th>
                   <th className="py-2.5 px-3">Motorista</th>
@@ -366,27 +371,35 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                     ? 'bg-red-50 text-red-700 border-red-100' 
                     : 'bg-emerald-50 text-emerald-700 border-emerald-100';
 
-                  // 2. Cálculo do Horímetro/Km anterior e atual com base nos registros de abastecimento
+                  // 2. Horímetro/Km atual com base nos registros de abastecimento
                   const machineFuelLogsSorted = allFuelLogs
                     .filter(log => log.machine_id === m.id)
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
                   let currentHourKmVal = m.current_hour_km;
-                  let previousHourKmVal = m.initial_hour_km;
-
                   if (machineFuelLogsSorted.length > 0) {
                     currentHourKmVal = machineFuelLogsSorted[0].hour_km_at_fueling;
-                    if (machineFuelLogsSorted.length > 1) {
-                      previousHourKmVal = machineFuelLogsSorted[1].hour_km_at_fueling;
-                    } else {
-                      previousHourKmVal = m.initial_hour_km;
-                    }
-                  } else {
-                    currentHourKmVal = m.current_hour_km;
-                    previousHourKmVal = m.initial_hour_km;
                   }
 
-                  // 3. Cálculo do Horímetro Próxima Revisão
+                  // 3. Cálculo da Hora da Última Revisão
+                  const machineMaintSorted = allMaintLogs
+                    .filter(log => log.machine_id === m.id)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.hour_km_at_service - a.hour_km_at_service);
+
+                  const prevLastHours = machinePrevItems.map(p => p.last_performed_hour_km).filter(h => h > 0);
+                  const maxPrevLastHour = prevLastHours.length > 0 ? Math.max(...prevLastHours) : null;
+                  const lastMaintLogHour = machineMaintSorted.length > 0 ? machineMaintSorted[0].hour_km_at_service : null;
+
+                  let lastRevisionHourVal: number | null = null;
+                  if (lastMaintLogHour !== null && maxPrevLastHour !== null) {
+                    lastRevisionHourVal = Math.max(lastMaintLogHour, maxPrevLastHour);
+                  } else if (lastMaintLogHour !== null) {
+                    lastRevisionHourVal = lastMaintLogHour;
+                  } else if (maxPrevLastHour !== null) {
+                    lastRevisionHourVal = maxPrevLastHour;
+                  }
+
+                  // 4. Cálculo do Horímetro Próxima Revisão
                   const hourKmItems = machinePrevItems.filter(p => p.interval_hour_km > 0);
                   const nextRevisionHourKm = hourKmItems.length > 0
                     ? Math.min(...hourKmItems.map(p => p.last_performed_hour_km + p.interval_hour_km))
@@ -418,8 +431,14 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           {revisionStatusText}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono text-xs font-bold text-slate-500">
-                        {previousHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                      <td className="py-3 px-3 text-right font-mono text-xs font-bold text-[#1B3022]">
+                        {lastRevisionHourVal !== null ? (
+                          <>
+                            {lastRevisionHourVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 font-normal italic text-[10px]">Sem registro</span>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-right font-mono text-xs font-bold text-slate-800">
                         {currentHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>

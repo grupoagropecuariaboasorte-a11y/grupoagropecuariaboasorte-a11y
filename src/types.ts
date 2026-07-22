@@ -41,6 +41,7 @@ export interface FuelStock {
   liters_received: number;
   price_per_liter: number; // Preço de aquisição por litro
   supplier?: string;
+  invoice_number?: string; // Número da NFe / Nota Fiscal
   minimum_stock_alert: number;
   notes?: string;
   created_at?: string;

@@ -522,13 +522,16 @@ LocalStorageDb.initAll();
 // =========================================================================
 
 
-function packNotes(notes: string | undefined, price: number | undefined, edit: string | undefined) {
+function packNotes(notes: string | undefined, price: number | undefined, edit: string | undefined, nfe?: string | undefined) {
   let cleanNotes = (notes || '').replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
   if (price !== undefined && price !== null && !isNaN(Number(price))) {
     cleanNotes += `\n[META:price=${Number(price)}]`;
   }
   if (edit && edit.trim()) {
     cleanNotes += `\n[META:edit=${edit.trim()}]`;
+  }
+  if (nfe && nfe.trim()) {
+    cleanNotes += `\n[META:nfe=${nfe.trim()}]`;
   }
   return cleanNotes.trim();
 }
@@ -553,6 +556,11 @@ function unpackFuelStock(stock: any) {
   } else {
     const oldEditMatch = notes.match(/\[Justificativa da alteração:\s*(.*?)\]/);
     if (oldEditMatch) item.edit_justification = oldEditMatch[1];
+  }
+
+  const nfeMatch = notes.match(/\[META:nfe=([^\]]+)\]/);
+  if (nfeMatch) {
+    item.invoice_number = nfeMatch[1];
   }
 
   item.notes = notes.replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
@@ -843,6 +851,20 @@ export const fleetService = {
 
     const { data, error } = await safeInsert('fuel_logs', logToInsert);
     if (error) throw error;
+
+    // Vincula a máquina dinamicamente à fazenda do abastecimento e atualiza o horímetro
+    if (log.machine_id && log.farm_id) {
+      try {
+        const updateMachineObj: any = { farm_id: log.farm_id };
+        if (log.hour_km_at_fueling) {
+          updateMachineObj.current_hour_km = Number(log.hour_km_at_fueling);
+        }
+        await this.updateMachine(log.machine_id, updateMachineObj);
+      } catch (e) {
+        console.warn('Não foi possível atualizar a fazenda atual da máquina:', e);
+      }
+    }
+
     return data;
   },
 
@@ -870,12 +892,24 @@ export const fleetService = {
     
     if (error) {
       console.error('Update error on fuel_logs:', error);
-      // Fallback for missing columns if we really need to, but let's throw to show the user what's wrong!
       throw error;
     }
     
     if (!data) {
        throw new Error('Nenhum dado retornado. Verifique se o registro existe ou se há bloqueio de permissão.');
+    }
+
+    // Vincula a máquina dinamicamente à fazenda do abastecimento e atualiza o horímetro
+    if (data.machine_id && data.farm_id) {
+      try {
+        const updateMachineObj: any = { farm_id: data.farm_id };
+        if (data.hour_km_at_fueling) {
+          updateMachineObj.current_hour_km = Number(data.hour_km_at_fueling);
+        }
+        await this.updateMachine(data.machine_id, updateMachineObj);
+      } catch (e) {
+        console.warn('Não foi possível atualizar a fazenda atual da máquina:', e);
+      }
     }
     
     return data;
@@ -975,7 +1009,7 @@ export const fleetService = {
       minimum_stock_alert: Number(stock.minimum_stock_alert) || 1000,
     };
     
-    cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, undefined);
+    cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, undefined, stock.invoice_number);
 
     try {
       const { data, error } = await safeInsert('fuel_stock', cleanStock);
@@ -1019,7 +1053,7 @@ export const fleetService = {
     if (stock.minimum_stock_alert !== undefined) cleanStock.minimum_stock_alert = Number(stock.minimum_stock_alert);
     if (stock.price_per_liter !== undefined) cleanStock.price_per_liter = Number(stock.price_per_liter);
 
-    cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, stock.edit_justification);
+    cleanStock.notes = packNotes(stock.notes, stock.price_per_liter, stock.edit_justification, stock.invoice_number);
 
     try {
       const { data, error } = await supabase!.from('fuel_stock').update(cleanStock).eq('id', id).select().maybeSingle();

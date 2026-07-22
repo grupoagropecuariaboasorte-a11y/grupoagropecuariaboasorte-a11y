@@ -26,6 +26,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
   const [formLiters, setFormLiters] = useState<number | ''>('');
   const [formPricePerLiter, setFormPricePerLiter] = useState<number | ''>(5.85);
   const [formSupplier, setFormSupplier] = useState('');
+  const [formInvoiceNumber, setFormInvoiceNumber] = useState('');
   const [formMinAlert, setFormMinAlert] = useState(1000);
   const [formNotes, setFormNotes] = useState('');
 
@@ -37,6 +38,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
   const [editLiters, setEditLiters] = useState<number | ''>('');
   const [editPricePerLiter, setEditPricePerLiter] = useState<number | ''>(5.85);
   const [editSupplier, setEditSupplier] = useState('');
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
   const [editMinAlert, setEditMinAlert] = useState(1000);
   const [editNotes, setEditNotes] = useState('');
   const [editJustification, setEditJustification] = useState('');
@@ -84,6 +86,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
     setFormLiters('');
     setFormPricePerLiter(5.85);
     setFormSupplier('');
+    setFormInvoiceNumber('');
     setFormMinAlert(1000);
     setFormNotes('');
     if (farms.length > 0) {
@@ -98,6 +101,10 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
       alert('Quantidade de litros recebidos deve ser maior que zero!');
       return;
     }
+    if (!formInvoiceNumber.trim()) {
+      alert('O preenchimento do número da NFe (Nota Fiscal) é obrigatório!');
+      return;
+    }
 
     try {
       await fleetService.addFuelStock({
@@ -106,6 +113,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
         liters_received: Number(formLiters),
         price_per_liter: Number(formPricePerLiter) || 5.85,
         supplier: formSupplier,
+        invoice_number: formInvoiceNumber.trim(),
         minimum_stock_alert: Number(formMinAlert),
         notes: formNotes
       });
@@ -123,6 +131,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
     setEditLiters(stock.liters_received ?? '');
     setEditPricePerLiter(stock.price_per_liter !== undefined && stock.price_per_liter !== null ? stock.price_per_liter : 5.85);
     setEditSupplier(stock.supplier ?? '');
+    setEditInvoiceNumber(stock.invoice_number ?? '');
     setEditMinAlert(stock.minimum_stock_alert ?? 1000);
     setEditNotes(stock.notes ?? '');
     setEditJustification(stock.edit_justification ?? '');
@@ -134,6 +143,10 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
     if (!editingId) return;
     if (Number(editLiters) <= 0) {
       alert('Quantidade de litros recebidos deve ser maior que zero!');
+      return;
+    }
+    if (!editInvoiceNumber.trim()) {
+      alert('O preenchimento do número da NFe (Nota Fiscal) é obrigatório!');
       return;
     }
     if (!editJustification.trim()) {
@@ -148,6 +161,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
         liters_received: Number(editLiters),
         price_per_liter: editPricePerLiter !== '' && !isNaN(Number(editPricePerLiter)) ? Number(editPricePerLiter) : 5.85,
         supplier: editSupplier,
+        invoice_number: editInvoiceNumber.trim(),
         minimum_stock_alert: Number(editMinAlert),
         notes: editNotes,
         edit_justification: editJustification
@@ -354,6 +368,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                   <th className="py-4 px-6 text-center">Status</th>
                   <th className="py-4 px-6 font-mono text-right">Lts Recebidos</th>
                   <th className="py-4 px-6 font-mono text-right">Preço/L</th>
+                  <th className="py-4 px-6">NFe / Nota Fiscal</th>
                   <th className="py-4 px-6">Fornecedor</th>
                   <th className="py-4 px-6 font-mono text-right">Alerta Mínimo Definido</th>
                   <th className="py-4 px-6">Observações / Notas</th>
@@ -396,6 +411,16 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                       </td>
                       <td className="py-4 px-6 text-right font-mono text-slate-650">
                         R$ {Number(h.price_per_liter || 5.85).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-4 px-6 font-mono font-bold text-slate-800">
+                        {h.invoice_number ? (
+                          <span className="inline-flex items-center gap-1 text-[#1B3022] bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-md text-[11px]">
+                            <FileText size={12} />
+                            NFe: {h.invoice_number}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">Não informada</span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-slate-600">{h.supplier || 'Não informado'}</td>
                       <td className="py-4 px-6 text-right font-mono text-slate-500">
@@ -564,6 +589,20 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Número da NFe / Nota Fiscal <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: 123456"
+                value={formInvoiceNumber}
+                onChange={(e) => setFormInvoiceNumber(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono font-bold"
+              />
+            </div>
+
+            <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Alerta de Estoque Mínimo (L)</label>
               <input
                 type="number"
@@ -665,6 +704,20 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                 value={editPricePerLiter}
                 onChange={(e) => setEditPricePerLiter(e.target.value !== '' ? Number(e.target.value) : '')}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Número da NFe / Nota Fiscal <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: 123456"
+                value={editInvoiceNumber}
+                onChange={(e) => setEditInvoiceNumber(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono font-bold"
               />
             </div>
 
