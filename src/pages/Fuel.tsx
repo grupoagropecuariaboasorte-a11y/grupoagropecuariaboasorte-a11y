@@ -100,8 +100,12 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   }, []);
 
   const refreshList = async () => {
-    const list = await fleetService.getFuelLogs();
+    const [list, mList] = await Promise.all([
+      fleetService.getFuelLogs(),
+      fleetService.getMachines()
+    ]);
     setFuelLogs(list);
+    setMachines(mList);
   };
 
   // Monitorar discrepâncias de bomba ao alterar a fazenda e a leitura inicial
@@ -130,20 +134,6 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       setFormHourKm(mach.current_hour_km || mach.initial_hour_km);
     }
   }, [formMachineId, machines]);
-
-  // Sincronizar máquina com a fazenda selecionada no formulário
-  useEffect(() => {
-    if (!formFarmId) return;
-    const farmMachines = machines.filter(m => m.farm_id === formFarmId);
-    if (farmMachines.length > 0) {
-      const isCurrentMachineInFarm = farmMachines.some(m => m.id === formMachineId);
-      if (!isCurrentMachineInFarm) {
-        setFormMachineId(farmMachines[0].id);
-      }
-    } else {
-      setFormMachineId('');
-    }
-  }, [formFarmId, machines]);
 
   // Carregar dinamicamente o preço do diesel mais recente para a fazenda selecionada
   useEffect(() => {
@@ -195,20 +185,6 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       }
     }
   }, [editMachineId, machines, isEditOpen, editingLogId, fuelLogs]);
-
-  // Sincronizar máquina com a fazenda selecionada no formulário de edição
-  useEffect(() => {
-    if (!editFarmId || !isEditOpen) return;
-    const farmMachines = machines.filter(m => m.farm_id === editFarmId);
-    if (farmMachines.length > 0) {
-      const isCurrentMachineInFarm = farmMachines.some(m => m.id === editMachineId);
-      if (!isCurrentMachineInFarm) {
-        setEditMachineId(farmMachines[0].id);
-      }
-    } else {
-      setEditMachineId('');
-    }
-  }, [editFarmId, machines, isEditOpen]);
 
   const handleOpenEdit = (log: FuelLog) => {
     setEditingLogId(log.id);
@@ -691,11 +667,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 onChange={(e) => setFormMachineId(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {machines
-                  .filter(m => formFarmId === '' || m.farm_id === formFarmId)
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                  ))}
+                {machines.map((m) => {
+                  const mFarm = farms.find(f => f.id === m.farm_id)?.name;
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {m.code} - {m.name} {mFarm ? `(${mFarm})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -877,11 +856,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 onChange={(e) => setEditMachineId(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
-                {machines
-                  .filter(m => editFarmId === '' || m.farm_id === editFarmId)
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                  ))}
+                {machines.map((m) => {
+                  const mFarm = farms.find(f => f.id === m.farm_id)?.name;
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {m.code} - {m.name} {mFarm ? `(${mFarm})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
