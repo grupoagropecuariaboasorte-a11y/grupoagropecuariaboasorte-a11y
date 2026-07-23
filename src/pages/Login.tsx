@@ -3,7 +3,7 @@ import { supabase, isDemoMode, isSchemaMissing } from '../lib/supabaseClient';
 import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X } from 'lucide-react';
 import SupabaseSetupAssistant from '../components/SupabaseSetupAssistant';
 import { fleetService } from '../lib/fleetService';
-import logoBoaSorte from '../assets/images/logo_boa_sorte_transparent.png';
+import AppLogo from '../components/AppLogo';
 
 interface LoginProps {
   onLoginSuccess: (email: string, role: 'viewer' | 'editor' | 'admin') => void;
@@ -182,11 +182,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <div className="text-center">
           <div className="inline-block relative mb-4">
             <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl" />
-            <img 
-              src={logoBoaSorte} 
-              alt="Boa Sorte Agropecuária Logo" 
+            <AppLogo 
               className="w-28 h-28 rounded-full border-2 border-emerald-500/30 shadow-xl object-cover relative z-10 mx-auto hover:scale-105 transition-transform duration-300"
-              referrerPolicy="no-referrer"
+              alt="Boa Sorte Agropecuária Logo"
             />
           </div>
           <h2 className="text-2xl font-bold text-slate-100 tracking-tight">BOA SORTE AGROPECUÁRIA</h2>

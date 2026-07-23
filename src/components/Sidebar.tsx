@@ -6,7 +6,7 @@ import {
   FileText, Settings, LogOut, Info
 } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabaseClient';
-import logoBoaSorte from '../assets/images/logo_boa_sorte_transparent.png';
+import AppLogo from './AppLogo';
 
 interface SidebarProps {
   userRole: 'viewer' | 'editor' | 'admin';
@@ -67,11 +67,9 @@ export default function Sidebar({ userRole, userEmail, onLogout }: SidebarProps)
       {/* Brand Logo & Name */}
       <div className="p-5 border-b border-white/10 bg-[#122218]">
         <div className="flex items-center gap-3">
-          <img 
-            src={logoBoaSorte} 
-            alt="Boa Sorte Logo" 
+          <AppLogo 
             className="w-10 h-10 rounded-full border border-amber-400/30 object-cover shadow-md shrink-0"
-            referrerPolicy="no-referrer"
+            alt="Boa Sorte Logo"
           />
           <div className="truncate">
             <h1 className="font-bold text-sm tracking-tight text-white leading-tight uppercase truncate">BOA SORTE</h1>
