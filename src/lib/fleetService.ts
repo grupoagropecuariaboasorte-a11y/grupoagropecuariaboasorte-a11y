@@ -514,8 +514,9 @@ class LocalStorageDb {
   }
 }
 
-// Inicializa o banco local ao carregar este arquivo para garantir que esteja pronto para fallback
-LocalStorageDb.initAll();
+// Inicializa o banco local apenas sob demanda se necessário, sem carregar automaticamente no boot
+// LocalStorageDb.initAll();
+
 
 // =========================================================================
 // EXPORTAÇÃO DOS SERVIÇOS (COM TRATAMENTO DUAL-MODE)
@@ -657,14 +658,13 @@ export const fleetService = {
   // FAZENDAS (FARMS)
   // =======================================================================
   async getFarms(): Promise<Farm[]> {
-    
     try {
       const { data, error } = await supabase!.from('farms').select('*').order('name', { ascending: true });
       if (error) throw error;
       return data || [];
     } catch (e) {
-      handleDbError(e, 'Erro ao buscar fazendas no Supabase, usando local:');
-      return LocalStorageDb.get('farms', SEED_FARMS);
+      handleDbError(e, 'Erro ao buscar fazendas no Supabase:');
+      throw e;
     }
   },
 
@@ -784,20 +784,6 @@ export const fleetService = {
     if (error) throw error;
     
     let allData = (data || []).map(unpackFuelStock);
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const deletedStr = localStorage.getItem('deleted_fuel_logs');
-        if (deletedStr) {
-          const deletedArr = JSON.parse(deletedStr);
-          if (farmId && farmId !== 'ALL') {
-             allData = allData.concat(deletedArr.filter((d: any) => d.farm_id === farmId));
-          } else {
-             allData = allData.concat(deletedArr);
-          }
-        }
-      }
-    } catch(e) {}
-    
     allData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return allData;
   },
@@ -918,26 +904,8 @@ export const fleetService = {
 
   async deleteFuelLog(id: string, justification: string): Promise<void> {
     try {
-      const { data: logToDel } = await supabase!.from('fuel_logs').select('*').eq('id', id).maybeSingle();
-      
       const { error } = await supabase!.from('fuel_logs').delete().eq('id', id);
       if (error) throw error;
-      
-      if (logToDel) {
-        try {
-          if (typeof localStorage !== 'undefined') {
-            const deletedStr = localStorage.getItem('deleted_fuel_logs');
-            const deletedArr = deletedStr ? JSON.parse(deletedStr) : [];
-            deletedArr.push({
-              ...logToDel,
-              is_deleted: true,
-              deletion_reason: justification,
-              updated_at: new Date().toISOString()
-            });
-            localStorage.setItem('deleted_fuel_logs', JSON.stringify(deletedArr));
-          }
-        } catch(e) {}
-      }
     } catch (e: any) {
       console.error('Erro ao excluir fuel_log:', e);
       throw e;
@@ -980,20 +948,6 @@ export const fleetService = {
     if (error) throw error;
     
     let allData = (data || []).map(unpackFuelStock);
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const deletedStr = localStorage.getItem('deleted_fuel_stock');
-        if (deletedStr) {
-          const deletedArr = JSON.parse(deletedStr).map(unpackFuelStock);
-          if (farmId && farmId !== 'ALL') {
-             allData = allData.concat(deletedArr.filter((d: any) => d.farm_id === farmId));
-          } else {
-             allData = allData.concat(deletedArr);
-          }
-        }
-      }
-    } catch(e) {}
-    
     allData.sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
     return allData;
   },
@@ -1078,30 +1032,8 @@ export const fleetService = {
 
   async deleteFuelStock(id: string, justification: string): Promise<void> {
     try {
-      // Buscar antes de deletar
-      const { data: stock } = await supabase!.from('fuel_stock').select('*').eq('id', id).maybeSingle();
-      
       const { error } = await supabase!.from('fuel_stock').delete().eq('id', id);
       if (error) throw error;
-      
-      if (stock) {
-        try {
-          const unpackedStock = unpackFuelStock(stock);
-          if (typeof localStorage !== 'undefined') {
-            const deletedStr = localStorage.getItem('deleted_fuel_stock');
-            const deletedArr = deletedStr ? JSON.parse(deletedStr) : [];
-            deletedArr.push({
-              ...unpackedStock,
-              is_deleted: true,
-              deletion_reason: justification,
-              updated_at: new Date().toISOString()
-            });
-            localStorage.setItem('deleted_fuel_stock', JSON.stringify(deletedArr));
-          }
-        } catch(e) {
-          console.warn('Failed to save deleted item to local storage', e);
-        }
-      }
     } catch (e: any) {
       if (e?.code === '42P01' || e?.message?.includes('relation "') || e?.message?.includes('does not exist')) {
         console.error('Tabela fuel_stock inexistente no Supabase:', e);
