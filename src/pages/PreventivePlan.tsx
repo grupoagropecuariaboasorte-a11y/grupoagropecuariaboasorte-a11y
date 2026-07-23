@@ -371,7 +371,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
             Cronograma e Lançamentos de Manutenção Preventiva
           </h3>
           <p className="text-xs text-slate-500 mt-1">
-            Controle de revisões por dias acumulados e horímetro. Inspeção individual por máquina com histórico de alterações.
+            Controle de revisões e manutenções preventivas por horímetro/KM. Próxima troca calculada dinamicamente com base no uso do equipamento.
           </p>
         </div>
 
@@ -626,16 +626,43 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
 
                       <div className="border-t border-slate-100 pt-2.5 mt-2.5 grid grid-cols-2 gap-2 text-[11px]">
                         <div>
-                          <p className="text-slate-400 font-mono">Dias Restantes</p>
-                          <p className={`font-mono font-bold ${p.days_remaining < 0 ? 'text-red-600' : 'text-slate-700'}`}>
-                            {p.interval_days > 0 ? `${p.days_remaining} dias` : 'N/A'}
+                          <p className="text-slate-400 font-mono flex items-center gap-1">
+                            <Clock size={11} className="text-[#1B3022]" />
+                            Próxima Troca
                           </p>
+                          <p className="font-mono font-bold text-[#1B3022] text-xs">
+                            {p.interval_hour_km > 0 
+                              ? `${((p.last_performed_hour_km || 0) + (p.interval_hour_km || 0)).toLocaleString('pt-BR')} h/km`
+                              : 'N/A'}
+                          </p>
+                          {p.interval_hour_km > 0 && (
+                            <span className="text-[9px] text-slate-400 block font-mono">
+                              (Intervalo: +{p.interval_hour_km.toLocaleString('pt-BR')} h/km)
+                            </span>
+                          )}
                         </div>
                         <div>
-                          <p className="text-slate-400 font-mono">Horas Restantes</p>
-                          <p className={`font-mono font-bold ${p.hour_km_remaining < 0 ? 'text-red-600' : 'text-slate-700'}`}>
-                            {p.interval_hour_km > 0 ? `${p.hour_km_remaining} h` : 'N/A'}
+                          <p className="text-slate-400 font-mono">Horas / KM Restantes</p>
+                          <p className={`font-mono font-bold text-xs ${
+                            p.interval_hour_km <= 0 
+                              ? 'text-slate-400' 
+                              : p.hour_km_remaining < 0 
+                                ? 'text-red-600' 
+                                : p.hour_km_remaining <= 50 
+                                  ? 'text-amber-600' 
+                                  : 'text-emerald-700'
+                          }`}>
+                            {p.interval_hour_km > 0 ? (
+                              p.hour_km_remaining < 0 ? (
+                                `Atrasado (${Math.abs(p.hour_km_remaining).toLocaleString('pt-BR')} h/km)`
+                              ) : (
+                                `Faltam ${p.hour_km_remaining.toLocaleString('pt-BR')} h/km`
+                              )
+                            ) : 'N/A'}
                           </p>
+                          <span className="text-[9px] text-slate-400 block font-mono">
+                            Horímetro Atual: {mach?.current_hour_km?.toLocaleString('pt-BR') || '0'} h/km
+                          </span>
                         </div>
                       </div>
                     </div>
