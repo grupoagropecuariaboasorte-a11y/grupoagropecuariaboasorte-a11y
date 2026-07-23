@@ -1342,10 +1342,99 @@ export const fleetService = {
   },
 
   async getFuelLast12Months(): Promise<any[]> {
-    
-
     const { data, error } = await supabase!.from('dashboard_fuel_last_12_months').select('*');
     if (error) throw error;
     return data || [];
+  },
+
+  // =======================================================================
+  // BACKUP E RESTAURAÇÃO (BACKUP & RESTORE)
+  // =======================================================================
+  async exportBackup(): Promise<any> {
+    const tables = [
+      'equipment_types',
+      'fuel_types',
+      'maintenance_types',
+      'priorities',
+      'service_locations',
+      'farms',
+      'machines',
+      'fuel_stock',
+      'fuel_logs',
+      'preventive_plan',
+      'maintenance_logs',
+      'checklists_30d',
+      'work_orders'
+    ];
+
+    const backupData: Record<string, any> = {
+      system: 'Boa Sorte Agropecuária - Gestão de Frota',
+      version: '1.2.0',
+      exported_at: new Date().toISOString(),
+      tables: {}
+    };
+
+    for (const table of tables) {
+      try {
+        const { data, error } = await supabase!.from(table).select('*');
+        if (!error && data) {
+          backupData.tables[table] = data;
+        }
+      } catch (e) {
+        console.warn(`Aviso ao exportar tabela ${table}:`, e);
+      }
+    }
+
+    return backupData;
+  },
+
+  async restoreBackup(backupData: any): Promise<{ success: boolean; summary: string }> {
+    if (!backupData || (!backupData.tables && typeof backupData !== 'object')) {
+      throw new Error('Arquivo de backup inválido. Formato JSON incompatível.');
+    }
+
+    const tablesObj = backupData.tables || backupData;
+
+    const tableOrder = [
+      'equipment_types',
+      'fuel_types',
+      'maintenance_types',
+      'priorities',
+      'service_locations',
+      'farms',
+      'machines',
+      'fuel_stock',
+      'fuel_logs',
+      'preventive_plan',
+      'maintenance_logs',
+      'checklists_30d',
+      'work_orders'
+    ];
+
+    let restoredCount = 0;
+    const details: string[] = [];
+
+    for (const table of tableOrder) {
+      const rows = tablesObj[table];
+      if (Array.isArray(rows) && rows.length > 0) {
+        try {
+          const { error } = await supabase!.from(table).upsert(rows);
+          if (error) {
+            console.error(`Erro ao restaurar tabela ${table}:`, error);
+            details.push(`${table}: ${error.message}`);
+          } else {
+            restoredCount += rows.length;
+            details.push(`${table} (${rows.length})`);
+          }
+        } catch (e: any) {
+          details.push(`${table}: ${e.message || e}`);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      summary: `Restauração concluída! Total de ${restoredCount} registros sincronizados no banco de dados.\nTabelas: ${details.join(', ')}`
+    };
   }
 };
