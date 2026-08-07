@@ -1,0 +1,144 @@
+/* =========================================================================
+   INTERFACE EXCLUSIVA PARA TABLETS DE 12,8 POLEGADAS (11" a 13.5")
+   OTIMIZADO PARA TOQUE - COM DETECÇÃO AUTOMÁTICA
+   ========================================================================= */
+
+/* 1. Ativação via classe no HTML/Body (detectado por JavaScript) ou Mídia Query para Tablets Touch */
+html.is-tablet-12inch,
+body.is-tablet-12inch {
+  font-size: 17px !important;
+}
+
+@media (hover: none) and (pointer: coarse) and (min-width: 800px) and (max-width: 1400px) {
+
+  /* --- TIPOGRAFIA GERAL E BASE --- */
+  html,
+  body {
+    font-size: 17px !important;
+  }
+
+  /* Aumentar títulos e cabeçalhos em modais e painéis */
+  .is-tablet-12inch h1,
+  html.is-tablet-12inch h1 {
+    font-size: 1.65rem !important;
+    line-height: 2.1rem !important;
+  }
+
+  .is-tablet-12inch h2,
+  html.is-tablet-12inch h2 {
+    font-size: 1.35rem !important;
+    line-height: 1.8rem !important;
+  }
+
+  .is-tablet-12inch h3,
+  html.is-tablet-12inch h3 {
+    font-size: 1.15rem !important;
+    line-height: 1.55rem !important;
+  }
+
+  /* --- BOTÕES E ALVOS DE TOQUE (MIN 46px) --- */
+  .is-tablet-12inch button,
+  .is-tablet-12inch a[role="button"],
+  html.is-tablet-12inch button {
+    min-height: 46px;
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    font-size: 0.95rem !important;
+    border-radius: 0.85rem !important;
+    touch-action: manipulation;
+  }
+
+  /* Botões pequenos (como ícones em tabelas) devem ter área de toque mínima confortável (42x42px) */
+  .is-tablet-12inch table button,
+  html.is-tablet-12inch table button {
+    min-height: 42px !important;
+    min-width: 42px !important;
+    padding: 0.5rem 0.75rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* --- CAMPOS DE ENTRADA, SELECTS E TEXTAREAS (MIN 48px e Fonte 16px) --- */
+  .is-tablet-12inch input:not([type="checkbox"]):not([type="radio"]),
+  .is-tablet-12inch select,
+  .is-tablet-12inch textarea,
+  html.is-tablet-12inch input:not([type="checkbox"]):not([type="radio"]),
+  html.is-tablet-12inch select,
+  html.is-tablet-12inch textarea {
+    min-height: 48px !important;
+    font-size: 16px !important; /* Evita zoom automático em iOS/Android e melhora leitura */
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    border-radius: 0.85rem !important;
+  }
+
+  /* Checkboxes e Radios maiores para toque */
+  .is-tablet-12inch input[type="checkbox"],
+  .is-tablet-12inch input[type="radio"],
+  html.is-tablet-12inch input[type="checkbox"],
+  html.is-tablet-12inch input[type="radio"] {
+    width: 22px !important;
+    height: 22px !important;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  /* --- TABELAS E CELULAS COM ESPAÇAMENTO OTIMIZADO PARA TOQUE --- */
+  .is-tablet-12inch table th,
+  html.is-tablet-12inch table th {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    font-size: 0.85rem !important;
+  }
+
+  .is-tablet-12inch table td,
+  html.is-tablet-12inch table td {
+    padding-top: 1.1rem !important;
+    padding-bottom: 1.1rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* --- SIDEBAR E TOPBAR EM TABLETS --- */
+  .is-tablet-12inch nav a,
+  .is-tablet-12inch nav button,
+  html.is-tablet-12inch nav a,
+  html.is-tablet-12inch nav button {
+    min-height: 52px !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.85rem !important;
+    font-size: 1rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  /* Topbar mais alta e com elementos espaçados */
+  .is-tablet-12inch header,
+  html.is-tablet-12inch header {
+    min-height: 78px !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.85rem !important;
+  }
+
+  /* --- MODAIS E CARDS COM MAIOR ESPAÇAMENTO INTERNO --- */
+  .is-tablet-12inch .bg-white,
+  .is-tablet-12inch .bg-slate-900,
+  html.is-tablet-12inch .bg-white,
+  html.is-tablet-12inch .bg-slate-900 {
+    border-radius: 1.25rem !important;
+  }
+
+  /* --- SCROLLBAR MAIS LARGO EM TABLETS PARA TOQUE --- */
+  .is-tablet-12inch ::-webkit-scrollbar,
+  html.is-tablet-12inch ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+}
