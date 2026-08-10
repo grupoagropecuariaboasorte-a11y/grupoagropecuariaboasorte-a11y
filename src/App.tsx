@@ -52,7 +52,8 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/checklist',
     '/ordens-servico',
     '/ranking-custos',
-    '/relatorio-mensal'
+    '/relatorio-mensal',
+    '/configuracoes'
   ],
   fuel: [
     '/combustivel',
