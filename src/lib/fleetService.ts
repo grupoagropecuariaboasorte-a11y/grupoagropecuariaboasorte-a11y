@@ -1135,7 +1135,6 @@ export const fleetService = {
   },
 
   async updateMachine(id: string, machine: Partial<Machine>): Promise<Machine> {
-    
     const cleanMachine: any = {};
     if (machine.code !== undefined) cleanMachine.code = machine.code;
     if (machine.name !== undefined) cleanMachine.name = machine.name;
@@ -1153,7 +1152,23 @@ export const fleetService = {
     cleanMachine.updated_at = new Date().toISOString();
 
     const { data, error } = await safeUpdate('machines', id, cleanMachine);
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao atualizar máquina via safeUpdate:', error);
+      throw error;
+    }
+
+    if (!data) {
+      // Direct update fallback if safeUpdate select returned null
+      const { error: directErr } = await supabase!.from('machines').update(cleanMachine).eq('id', id);
+      if (directErr) {
+        console.error('Erro ao atualizar máquina no Supabase:', directErr);
+        throw directErr;
+      }
+      const machines = await this.getMachines();
+      const updated = machines.find(m => m.id === id);
+      if (updated) return updated;
+    }
+
     return data;
   },
 

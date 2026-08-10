@@ -589,20 +589,20 @@ USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'))
 
 -- farms
 CREATE POLICY write_farms_admin ON farms FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')))
+WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 -- machines
 CREATE POLICY write_machines_admin ON machines FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')))
+WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 -- lookup tables
-CREATE POLICY write_eq_types ON equipment_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
-CREATE POLICY write_f_types ON fuel_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
-CREATE POLICY write_m_types ON maintenance_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
-CREATE POLICY write_prio ON priorities FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
-CREATE POLICY write_locations ON service_locations FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+CREATE POLICY write_eq_types ON equipment_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
+CREATE POLICY write_f_types ON fuel_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
+CREATE POLICY write_m_types ON maintenance_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
+CREATE POLICY write_prio ON priorities FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
+CREATE POLICY write_locations ON service_locations FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 -- POLÍTICAS DE ESCRITA OPERACIONAL (EDITORES, CONTROLE, MECÂNICOS, ABASTECIMENTO e ADMINS)
 -- fuel_stock

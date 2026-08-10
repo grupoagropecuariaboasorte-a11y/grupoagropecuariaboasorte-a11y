@@ -4,8 +4,8 @@
 -- 1. TABELA DE FAZENDAS (farms)
 DROP POLICY IF EXISTS write_farms_admin ON farms;
 CREATE POLICY write_farms_admin ON farms FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')))
+WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 -- 2. TABELA DE MÁQUINAS E IMPLEMENTOS (machines)
 DROP POLICY IF EXISTS write_machines_admin ON machines;
@@ -16,23 +16,23 @@ WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('a
 -- 3. TABELAS DE APOIO / LOOKUPS (equipment_types, fuel_types, maintenance_types, priorities, service_locations)
 DROP POLICY IF EXISTS write_eq_types ON equipment_types;
 CREATE POLICY write_eq_types ON equipment_types FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 DROP POLICY IF EXISTS write_f_types ON fuel_types;
 CREATE POLICY write_f_types ON fuel_types FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 DROP POLICY IF EXISTS write_m_types ON maintenance_types;
 CREATE POLICY write_m_types ON maintenance_types FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 DROP POLICY IF EXISTS write_prio ON priorities;
 CREATE POLICY write_prio ON priorities FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 DROP POLICY IF EXISTS write_locations ON service_locations;
 CREATE POLICY write_locations ON service_locations FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
 
 -- 4. TABELAS OPERACIONAIS (fuel_stock, fuel_logs, preventive_plan, maintenance_logs, checklists_30d, work_orders)
 DROP POLICY IF EXISTS write_fuel_stock_editor ON fuel_stock;

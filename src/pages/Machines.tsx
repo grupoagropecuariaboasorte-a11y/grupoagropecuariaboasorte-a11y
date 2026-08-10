@@ -239,7 +239,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
         driver_name: formDriver
       });
       setIsEditOpen(false);
-      refreshList();
+      await refreshList();
       // Atualizar drawer se estiver aberto
       if (selectedMachine && selectedMachine.id === editId) {
         const updated = await fleetService.getMachines();
@@ -247,7 +247,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
         if (m) setSelectedMachine(m);
       }
     } catch (err: any) {
-      alert('Erro ao atualizar: ' + err.message);
+      alert('Erro ao atualizar: ' + (err.message || err));
     }
   };
 
