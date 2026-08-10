@@ -599,7 +599,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <Map size={14} className="text-[#1B3022]" /> Fazendas Cadastradas ({farms.length})
             </h4>
-            {(userRole === 'admin' || userRole === 'editor') && (
+            {(userRole === 'admin' || userRole === 'editor' || userRole === 'control') && (
               <button
                 onClick={() => setIsFarmOpen(true)}
                 className="flex items-center gap-1 text-xs text-[#1B3022] hover:opacity-80 font-bold cursor-pointer transition-all"
@@ -619,7 +619,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  {(userRole === 'admin' || userRole === 'editor') && (
+                  {(userRole === 'admin' || userRole === 'editor' || userRole === 'control') && (
                     <button
                       onClick={() => handleOpenEditFarm(f)}
                       className="p-1.5 text-slate-500 hover:text-[#1B3022] hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"

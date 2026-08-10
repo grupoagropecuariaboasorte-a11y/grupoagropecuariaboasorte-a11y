@@ -56,6 +56,7 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
   const [formYear, setFormYear] = useState(new Date().getFullYear());
   const [formSerial, setFormSerial] = useState('');
   const [formInitialHourKm, setFormInitialHourKm] = useState(0);
+  const [formCurrentHourKm, setFormCurrentHourKm] = useState(0);
   const [formStatus, setFormStatus] = useState<'Ativa' | 'Em manutenção' | 'Parada' | 'Vendida/Baixada'>('Ativa');
   const [formFarmId, setFormFarmId] = useState('');
   const [formDriver, setFormDriver] = useState('');
@@ -127,6 +128,7 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
     setFormYear(new Date().getFullYear());
     setFormSerial('');
     setFormInitialHourKm(0);
+    setFormCurrentHourKm(0);
     setFormStatus('Ativa');
     setFormFarmId(selectedFarmId === 'ALL' ? (farms[0]?.id || '') : selectedFarmId);
     setFormDriver('');
@@ -137,6 +139,8 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
     e.preventDefault();
     try {
       const codeToUse = (formCode.trim() || getNextImplementCode(implementsList)).toUpperCase();
+      const initVal = Number(formInitialHourKm) || 0;
+      const currVal = Number(formCurrentHourKm) || initVal;
       await fleetService.addMachine({
         code: codeToUse,
         name: formName,
@@ -145,8 +149,8 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
         model: formModel || formCategory,
         year: formYear,
         serial_number: formSerial,
-        initial_hour_km: formInitialHourKm,
-        current_hour_km: formInitialHourKm,
+        initial_hour_km: initVal,
+        current_hour_km: currVal,
         status: formStatus,
         farm_id: formFarmId,
         driver_name: formDriver
@@ -168,6 +172,7 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
     setFormYear(m.year || new Date().getFullYear());
     setFormSerial(m.serial_number || '');
     setFormInitialHourKm(m.initial_hour_km || 0);
+    setFormCurrentHourKm(m.current_hour_km || 0);
     setFormStatus(m.status || 'Ativa');
     setFormFarmId(m.farm_id || '');
     setFormDriver(m.driver_name || '');
@@ -186,7 +191,8 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
         model: formModel || formCategory,
         year: formYear,
         serial_number: formSerial,
-        initial_hour_km: formInitialHourKm,
+        initial_hour_km: Number(formInitialHourKm),
+        current_hour_km: Number(formCurrentHourKm),
         status: formStatus,
         farm_id: formFarmId,
         driver_name: formDriver
@@ -688,6 +694,27 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
                 <option value="Parada">Parado</option>
                 <option value="Vendida/Baixada">Vendida / Baixada</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Inicial</label>
+              <input
+                type="number"
+                value={formInitialHourKm}
+                onChange={(e) => setFormInitialHourKm(Number(e.target.value))}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Atual</label>
+              <input
+                type="number"
+                value={formCurrentHourKm}
+                onChange={(e) => setFormCurrentHourKm(Number(e.target.value))}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
+              />
             </div>
           </div>
 

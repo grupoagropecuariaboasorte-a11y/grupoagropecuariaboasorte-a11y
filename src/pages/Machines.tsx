@@ -50,6 +50,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
   const [formYear, setFormYear] = useState(new Date().getFullYear());
   const [formSerial, setFormSerial] = useState('');
   const [formInitialHourKm, setFormInitialHourKm] = useState(0);
+  const [formCurrentHourKm, setFormCurrentHourKm] = useState(0);
   const [formStatus, setFormStatus] = useState<'Ativa' | 'Em manutenção' | 'Parada' | 'Vendida/Baixada'>('Ativa');
   const [formFarmId, setFormFarmId] = useState('');
   const [formDriver, setFormDriver] = useState('');
@@ -166,6 +167,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     setFormYear(new Date().getFullYear());
     setFormSerial('');
     setFormInitialHourKm(0);
+    setFormCurrentHourKm(0);
     setFormStatus('Ativa');
     if (farms.length > 0) {
       setFormFarmId(selectedFarmId === 'ALL' ? farms[0].id : selectedFarmId);
@@ -179,6 +181,8 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     try {
       const onlyMachs = machines.filter(m => !isImplement(m));
       const codeToUse = (formCode.trim() || getNextMachineCode(onlyMachs)).toUpperCase();
+      const initVal = Number(formInitialHourKm) || 0;
+      const currVal = Number(formCurrentHourKm) || initVal;
       await fleetService.addMachine({
         code: codeToUse,
         name: formName,
@@ -187,8 +191,8 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
         model: formModel,
         year: Number(formYear),
         serial_number: formSerial,
-        initial_hour_km: Number(formInitialHourKm),
-        current_hour_km: Number(formInitialHourKm),
+        initial_hour_km: initVal,
+        current_hour_km: currVal,
         status: formStatus,
         farm_id: formFarmId,
         driver_name: formDriver
@@ -202,16 +206,17 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
 
   const handleOpenEdit = (m: Machine) => {
     setEditId(m.id);
-    setFormCode(m.code);
-    setFormName(m.name);
-    setFormType(m.type);
-    setFormBrand(m.brand);
-    setFormModel(m.model);
-    setFormYear(m.year);
+    setFormCode(m.code || '');
+    setFormName(m.name || '');
+    setFormType(m.type || 'trator');
+    setFormBrand(m.brand || '');
+    setFormModel(m.model || '');
+    setFormYear(m.year || new Date().getFullYear());
     setFormSerial(m.serial_number || '');
-    setFormInitialHourKm(m.initial_hour_km);
-    setFormStatus(m.status);
-    setFormFarmId(m.farm_id);
+    setFormInitialHourKm(m.initial_hour_km || 0);
+    setFormCurrentHourKm(m.current_hour_km || 0);
+    setFormStatus(m.status || 'Ativa');
+    setFormFarmId(m.farm_id || '');
     setFormDriver(m.driver_name || '');
     setIsEditOpen(true);
   };
@@ -227,6 +232,8 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
         model: formModel,
         year: Number(formYear),
         serial_number: formSerial,
+        initial_hour_km: Number(formInitialHourKm),
+        current_hour_km: Number(formCurrentHourKm),
         status: formStatus,
         farm_id: formFarmId,
         driver_name: formDriver
@@ -1005,9 +1012,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               <input
                 type="text"
                 required
-                disabled
                 value={formCode}
-                className="w-full bg-slate-100 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-500 font-mono cursor-not-allowed"
+                onChange={(e) => setFormCode(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
               />
             </div>
             <div>
@@ -1034,7 +1041,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Fazenda Locada</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Fazenda Locada (Localidade)</label>
               <select
                 value={formFarmId}
                 onChange={(e) => setFormFarmId(e.target.value)}
@@ -1079,9 +1086,28 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nº de Série / Chassi / Placa</label>
               <input
                 type="text"
+                placeholder="Ex: ABC-1D23 ou Nº Chassi"
                 value={formSerial}
                 onChange={(e) => setFormSerial(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Inicial</label>
+              <input
+                type="number"
+                value={formInitialHourKm}
+                onChange={(e) => setFormInitialHourKm(Number(e.target.value))}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Atual</label>
+              <input
+                type="number"
+                value={formCurrentHourKm}
+                onChange={(e) => setFormCurrentHourKm(Number(e.target.value))}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
               />
             </div>
             <div>
