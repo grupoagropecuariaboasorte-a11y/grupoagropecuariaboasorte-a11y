@@ -432,7 +432,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
                       const isMainAdmin = u.email.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com';
                       const selectedRole = selectedRoles[u.id] || u.role;
                       const isChanged = selectedRole !== u.role;
-                      const isAdminOrMaster = userRole === 'admin' || userRole === 'control' || ((typeof window !== 'undefined' ? localStorage.getItem('agro_user_email') : '') || '').toLowerCase() === 'grupoagropecuariaboasorte@gmail.com';
+                      const isAdminOrMaster = userRole === 'admin' || ((typeof window !== 'undefined' ? localStorage.getItem('agro_user_email') : '') || '').toLowerCase() === 'grupoagropecuariaboasorte@gmail.com';
 
                       return (
                         <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
@@ -471,7 +471,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
                             <div className="flex items-center justify-end gap-2">
                               <select
                                 value={selectedRole}
-                                disabled={isMainAdmin || updatingUserId === u.id}
+                                disabled={isMainAdmin || updatingUserId === u.id || userRole !== 'admin'}
                                 onChange={(e) => setSelectedRoles(prev => ({ ...prev, [u.id]: e.target.value as UserRole }))}
                                 className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                               >
@@ -486,7 +486,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
 
                               <button
                                 onClick={() => handleRoleChange(u.id, u.email, selectedRole)}
-                                disabled={isMainAdmin || updatingUserId === u.id || !isChanged}
+                                disabled={isMainAdmin || updatingUserId === u.id || !isChanged || userRole !== 'admin'}
                                 className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg transition-all shadow-2xs cursor-pointer ${
                                   isChanged 
                                     ? 'bg-[#1B3022] hover:bg-[#2C4A34] text-white' 

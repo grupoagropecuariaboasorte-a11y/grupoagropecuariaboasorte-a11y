@@ -589,8 +589,8 @@ USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'))
 
 -- farms
 CREATE POLICY write_farms_admin ON farms FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')))
+WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control')));
 
 -- machines
 CREATE POLICY write_machines_admin ON machines FOR ALL TO authenticated 
