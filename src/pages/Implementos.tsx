@@ -282,7 +282,7 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
         </div>
 
         {/* Botão de Cadastrar Implemento */}
-        {(userRole === 'admin' || userRole === 'control' || userRole === 'editor') && (
+        {userRole !== 'viewer' && (
           <button
             onClick={handleOpenCreate}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1B3022] hover:bg-[#284532] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
@@ -434,7 +434,7 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
                         <Info size={15} />
                       </button>
 
-                      {(userRole === 'admin' || userRole === 'control' || userRole === 'editor') && (
+                      {userRole !== 'viewer' && (
                         <>
                           <button
                             onClick={() => handleOpenEdit(item)}
