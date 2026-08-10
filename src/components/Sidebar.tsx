@@ -62,7 +62,7 @@ export default function Sidebar({ userRole, userEmail, onLogout }: SidebarProps)
     { path: '/ordens-servico', label: 'Ordens de Serviço', icon: ClipboardList, roles: ['admin', 'control', 'mechanic', 'editor', 'viewer'] },
     { path: '/ranking-custos', label: 'Ranking de Custos', icon: TrendingUp, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/relatorio-mensal', label: 'Relatório Mensal', icon: FileText, roles: ['admin', 'control', 'editor', 'viewer'] },
-    { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin', 'control'] },
+    { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
   ];
 
   const menuItems = allMenuItems.filter(item => item.roles.includes(userRole as any));

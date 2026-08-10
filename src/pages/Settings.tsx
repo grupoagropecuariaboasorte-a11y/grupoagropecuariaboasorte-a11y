@@ -101,7 +101,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
   });
 
   const fetchUsers = async () => {
-    if (userRole !== 'admin' && userRole !== 'control') return;
+    if (userRole !== 'admin') return;
     setLoadingUsers(true);
     try {
       const list = await fleetService.getUsers();
@@ -114,7 +114,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
   };
 
   useEffect(() => {
-    if (userRole === 'admin' || userRole === 'control') {
+    if (userRole === 'admin') {
       fetchUsers();
     }
   }, [userRole]);
@@ -328,13 +328,13 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
     reader.readAsText(file);
   };
 
-  if (userRole !== 'admin' && userRole !== 'control') {
+  if (userRole !== 'admin') {
     return (
       <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 shadow-xs max-w-lg mx-auto mt-12 animate-fadeIn">
         <ShieldCheck size={48} className="mx-auto text-amber-500 mb-4" />
         <h3 className="text-lg font-bold text-slate-800 mb-2">Acesso Restrito</h3>
         <p className="text-sm text-slate-600">
-          A aba <strong>Configurações</strong> é de acesso exclusivo para usuários administradores ou com perfil de controle.
+          A aba <strong>Configurações</strong> é de acesso exclusivo para usuários administradores.
         </p>
       </div>
     );
@@ -383,8 +383,8 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
           </div>
         </div>
 
-        {/* Usuários - Visível para Administrador e Controle */}
-        {(userRole === 'admin' || userRole === 'control') && (
+        {/* Usuários - Visível para Administrador */}
+        {userRole === 'admin' && (
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 mb-4">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
@@ -628,7 +628,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
                       <Pencil size={14} />
                     </button>
                   )}
-                  {(userRole === 'admin' || userRole === 'control') && farms.length > 1 && (
+                  {userRole === 'admin' && farms.length > 1 && (
                     <button
                       onClick={() => handleDeleteFarm(f.id)}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -711,7 +711,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
               <RefreshCw size={13} className={loadingDeletedLogs ? 'animate-spin' : ''} />
               Atualizar
             </button>
-            {(userRole === 'admin' || userRole === 'control') && deletedLogs.length > 0 && (
+            {userRole === 'admin' && deletedLogs.length > 0 && (
               <button
                 onClick={handleClearDeletedLogs}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
