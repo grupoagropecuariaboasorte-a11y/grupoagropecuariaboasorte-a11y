@@ -100,17 +100,21 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         }
 
         // Atualizar timestamp sem sobrescrever o email com role codificado
-        if (profile) {
-          await supabase.from('profiles').update({
-            updated_at: new Date().toISOString()
-          }).eq('id', data.user.id).catch(() => {});
-        } else {
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            email: userEmail,
-            role: finalRole,
-            updated_at: new Date().toISOString()
-          }).catch(() => {});
+        try {
+          if (profile) {
+            await supabase.from('profiles').update({
+              updated_at: new Date().toISOString()
+            }).eq('id', data.user.id);
+          } else {
+            await supabase.from('profiles').insert({
+              id: data.user.id,
+              email: userEmail,
+              role: finalRole,
+              updated_at: new Date().toISOString()
+            });
+          }
+        } catch (dbErr) {
+          console.warn('[LOGIN] Aviso ao atualizar timestamp no profiles:', dbErr);
         }
 
         onLoginSuccess(userEmail, finalRole);

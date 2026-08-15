@@ -160,12 +160,16 @@ function AppContent() {
                 localStorage.setItem('agro_user_role', effectiveRole);
              } else {
                 const defaultRole: UserRole = isAdmin ? 'admin' : 'registered';
-                await supabase.from('profiles').insert({
-                   id: authData.user.id,
-                   email: userEmail.toLowerCase(),
-                   role: defaultRole,
-                   updated_at: new Date().toISOString()
-                }).catch(err => console.warn('Erro ao criar perfil default:', err));
+                try {
+                  await supabase.from('profiles').insert({
+                     id: authData.user.id,
+                     email: userEmail.toLowerCase(),
+                     role: defaultRole,
+                     updated_at: new Date().toISOString()
+                  });
+                } catch (err) {
+                  console.warn('Erro ao criar perfil default:', err);
+                }
 
                 setUserRole(defaultRole);
                 localStorage.setItem('agro_user_role', defaultRole);
