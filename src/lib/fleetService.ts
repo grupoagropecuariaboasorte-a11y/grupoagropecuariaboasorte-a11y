@@ -1228,6 +1228,65 @@ export const fleetService = {
     }
   },
 
+  // Busca a última leitura final da bomba registrada para uma fazenda
+  async getLatestPumpReading(farmId: string): Promise<number | null> {
+    if (!farmId || farmId === 'ALL') return null;
+    try {
+      const { data, error } = await supabase!
+        .from('fuel_logs')
+        .select('pump_reading_end, date, id')
+        .eq('farm_id', farmId)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        // Fallback caso a ordenação composta ou created_at falhe
+        const fallback = await supabase!
+          .from('fuel_logs')
+          .select('pump_reading_end, date, id')
+          .eq('farm_id', farmId)
+          .order('date', { ascending: false })
+          .limit(1);
+        if (fallback.data && fallback.data.length > 0) {
+          const val = Number(fallback.data[0].pump_reading_end);
+          return isNaN(val) ? null : val;
+        }
+        return null;
+      }
+
+      if (data && data.length > 0) {
+        const val = Number(data[0].pump_reading_end);
+        return isNaN(val) ? null : val;
+      }
+      return null;
+    } catch (e) {
+      console.error('Erro ao buscar última leitura da bomba:', e);
+      return null;
+    }
+  },
+
+  // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda
+  async getPumpDiscrepancy(farmId: string, currentStart: number): Promise<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog: boolean }> {
+    if (!farmId || farmId === 'ALL') {
+      return { lastEnd: null, hasDiscrepancy: false, isFirstLog: true };
+    }
+
+    const lastEnd = await this.getLatestPumpReading(farmId);
+    if (lastEnd === null) {
+      return { lastEnd: null, hasDiscrepancy: false, isFirstLog: true };
+    }
+
+    const numStart = Number(currentStart);
+    const numLastEnd = Number(lastEnd);
+
+    return {
+      lastEnd: numLastEnd,
+      hasDiscrepancy: isNaN(numStart) || numStart !== numLastEnd,
+      isFirstLog: false
+    };
+  },
+
   async addFuelLog(log: Partial<FuelLog>): Promise<FuelLog> {
     const farmId = log.farm_id || '11111111-1111-1111-1111-111111111111';
     const latestPrice = await this.getLatestDieselPrice(farmId);
@@ -1235,8 +1294,37 @@ export const fleetService = {
       ? Number(log.price_per_liter)
       : latestPrice;
 
-    const pStart = Number(log.pump_reading_start) || 0;
-    const pEnd = Number(log.pump_reading_end) || 0;
+    const pStart = Number(log.pump_reading_start);
+    const pEnd = Number(log.pump_reading_end);
+
+    if (isNaN(pStart) || isNaN(pEnd)) {
+      throw new Error('As leituras de início e fim da bomba devem ser números válidos.');
+    }
+
+    if (pEnd <= pStart) {
+      throw new Error(`A leitura final da bomba (${pEnd} L) deve ser estritamente maior que a leitura inicial (${pStart} L).`);
+    }
+
+    // Validação rígida de sequência da bomba e bloqueio de duplicidade
+    if (log.farm_id && log.farm_id !== 'ALL') {
+      const lastReading = await this.getLatestPumpReading(log.farm_id);
+      if (lastReading !== null && pStart !== lastReading) {
+        throw new Error(`Sequência da bomba violada! O último fechamento registrado para esta fazenda foi de ${lastReading} L. O novo abastecimento deve iniciar obrigatoriamente em ${lastReading} L (foi informado ${pStart} L).`);
+      }
+
+      // Prevenção de duplicidade idêntica (mesma fazenda, início e fim de bomba)
+      const { data: existingDup } = await supabase!
+        .from('fuel_logs')
+        .select('id, date')
+        .eq('farm_id', log.farm_id)
+        .eq('pump_reading_start', pStart)
+        .eq('pump_reading_end', pEnd)
+        .limit(1);
+
+      if (existingDup && existingDup.length > 0) {
+        throw new Error(`Abastecimento duplicado detectado! Já existe um registro gravado nesta fazenda com início ${pStart} L e fim ${pEnd} L.`);
+      }
+    }
 
     const logToInsert = {
       farm_id: log.farm_id,
@@ -1350,29 +1438,6 @@ export const fleetService = {
     }
   },
 
-
-  // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda
-  async getPumpDiscrepancy(farmId: string, currentStart: number): Promise<{ lastEnd: number; hasDiscrepancy: boolean }> {
-    
-
-    // No Supabase usamos a view ou fazemos query direta
-    const { data, error } = await supabase!
-      .from('fuel_logs')
-      .select('pump_reading_end')
-      .eq('farm_id', farmId)
-      .order('date', { ascending: false })
-      .limit(1);
-
-    if (error || !data || data.length === 0) {
-      return { lastEnd: currentStart, hasDiscrepancy: false };
-    }
-
-    const lastEnd = Number(data[0].pump_reading_end);
-    return {
-      lastEnd,
-      hasDiscrepancy: lastEnd !== currentStart
-    };
-  },
 
   // =======================================================================
   // ESTOQUE DE DIESEL (FUEL STOCK)

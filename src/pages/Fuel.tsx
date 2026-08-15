@@ -35,10 +35,13 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   const [formNotes, setFormNotes] = useState('');
 
   // Discrepancy Check state
-  const [discrepancyInfo, setDiscrepancyInfo] = useState<{ lastEnd: number; hasDiscrepancy: boolean } | null>(null);
+  const [discrepancyInfo, setDiscrepancyInfo] = useState<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog?: boolean } | null>(null);
+  const [isLoadingPump, setIsLoadingPump] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Edit Form States
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editFarmId, setEditFarmId] = useState('');
   const [editMachineId, setEditMachineId] = useState('');
@@ -51,7 +54,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   const [editSupplier, setEditSupplier] = useState('');
   const [editResponsible, setEditResponsible] = useState('');
   const [editNotes, setEditNotes] = useState('');
-  const [editDiscrepancyInfo, setEditDiscrepancyInfo] = useState<{ lastEnd: number; hasDiscrepancy: boolean } | null>(null);
+  const [editDiscrepancyInfo, setEditDiscrepancyInfo] = useState<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog?: boolean } | null>(null);
 
   // Delete Confirmation State
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -109,23 +112,46 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     setMachines(mList);
   };
 
-  // Monitorar discrepâncias de bomba ao alterar a fazenda e a leitura inicial
-  useEffect(() => {
-    if (!formFarmId || formPumpStart === '') {
+  // Carregar sequência de bomba para a fazenda
+  const loadPumpSequenceForFarm = async (farmId: string) => {
+    if (!farmId || farmId === 'ALL') {
       setDiscrepancyInfo(null);
       return;
     }
+    setIsLoadingPump(true);
+    try {
+      const lastReading = await fleetService.getLatestPumpReading(farmId);
+      if (lastReading !== null) {
+        setFormPumpStart(lastReading);
+        setDiscrepancyInfo({ lastEnd: lastReading, hasDiscrepancy: false, isFirstLog: false });
+      } else {
+        setFormPumpStart('');
+        setDiscrepancyInfo({ lastEnd: null, hasDiscrepancy: false, isFirstLog: true });
+      }
+    } catch (e) {
+      console.error('Erro ao carregar leitura da bomba:', e);
+      setDiscrepancyInfo(null);
+    } finally {
+      setIsLoadingPump(false);
+    }
+  };
 
-    async function checkPump() {
-      try {
-        const res = await fleetService.getPumpDiscrepancy(formFarmId, Number(formPumpStart));
-        setDiscrepancyInfo(res);
-      } catch (e) {
-        console.error(e);
+  // Monitorar discrepâncias de bomba ao alterar a fazenda e a leitura inicial manualmente
+  useEffect(() => {
+    if (!formFarmId || formPumpStart === '') {
+      return;
+    }
+
+    if (discrepancyInfo && !discrepancyInfo.isFirstLog && discrepancyInfo.lastEnd !== null) {
+      const isDiff = Number(formPumpStart) !== Number(discrepancyInfo.lastEnd);
+      if (discrepancyInfo.hasDiscrepancy !== isDiff) {
+        setDiscrepancyInfo({
+          ...discrepancyInfo,
+          hasDiscrepancy: isDiff
+        });
       }
     }
-    checkPump();
-  }, [formFarmId, formPumpStart]);
+  }, [formFarmId, formPumpStart, discrepancyInfo]);
 
   // Atualizar horímetro sugerido ao selecionar a máquina
   useEffect(() => {
@@ -162,7 +188,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       try {
         const currentLog = fuelLogs.find(l => l.id === editingLogId);
         if (currentLog && currentLog.pump_reading_start === Number(editPumpStart) && currentLog.farm_id === editFarmId) {
-          setEditDiscrepancyInfo({ lastEnd: Number(editPumpStart), hasDiscrepancy: false });
+          setEditDiscrepancyInfo({ lastEnd: Number(editPumpStart), hasDiscrepancy: false, isFirstLog: false });
           return;
         }
 
@@ -210,43 +236,51 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   const selectedAddMachine = machines.find(m => m.id === formMachineId);
   const lastAddMachineHour = selectedAddMachine ? (selectedAddMachine.current_hour_km || selectedAddMachine.initial_hour_km || 0) : 0;
 
+  const isAddPumpMissing = formPumpStart === '' || formPumpEnd === '';
   const isAddPumpEndInvalid = formPumpStart !== '' && formPumpEnd !== '' && Number(formPumpEnd) <= Number(formPumpStart);
-  const isAddPumpDiscrepancy = Boolean(discrepancyInfo && discrepancyInfo.hasDiscrepancy);
+  const isAddPumpDiscrepancy = Boolean(
+    discrepancyInfo &&
+    !discrepancyInfo.isFirstLog &&
+    discrepancyInfo.lastEnd !== null &&
+    (formPumpStart === '' || Number(formPumpStart) !== Number(discrepancyInfo.lastEnd))
+  );
   const isAddHourKmInvalid = formHourKm !== '' && selectedAddMachine !== undefined && lastAddMachineHour > 0 && Number(formHourKm) < lastAddMachineHour;
   const isAddNegative = (formPumpStart !== '' && Number(formPumpStart) < 0) || (formPumpEnd !== '' && Number(formPumpEnd) < 0) || (formHourKm !== '' && Number(formHourKm) < 0);
 
-  const hasAddAlert = isAddPumpEndInvalid || isAddPumpDiscrepancy || isAddHourKmInvalid || isAddNegative;
+  const hasAddAlert = isAddPumpMissing || isAddPumpEndInvalid || isAddPumpDiscrepancy || isAddHourKmInvalid || isAddNegative;
 
   // Validações do Modal de Edição (EDIT)
   const selectedEditMachine = machines.find(m => m.id === editMachineId);
   const lastEditMachineHour = selectedEditMachine ? (selectedEditMachine.current_hour_km || selectedEditMachine.initial_hour_km || 0) : 0;
 
+  const isEditPumpMissing = editPumpStart === '' || editPumpEnd === '';
   const isEditPumpEndInvalid = editPumpStart !== '' && editPumpEnd !== '' && Number(editPumpEnd) <= Number(editPumpStart);
   const isEditPumpDiscrepancy = Boolean(editDiscrepancyInfo && editDiscrepancyInfo.hasDiscrepancy);
   const isEditHourKmInvalid = editHourKm !== '' && selectedEditMachine !== undefined && lastEditMachineHour > 0 && Number(editHourKm) < lastEditMachineHour;
   const isEditNegative = (editPumpStart !== '' && Number(editPumpStart) < 0) || (editPumpEnd !== '' && Number(editPumpEnd) < 0) || (editHourKm !== '' && Number(editHourKm) < 0);
 
-  const hasEditAlert = isEditPumpEndInvalid || isEditPumpDiscrepancy || isEditHourKmInvalid || isEditNegative;
+  const hasEditAlert = isEditPumpMissing || isEditPumpEndInvalid || isEditPumpDiscrepancy || isEditHourKmInvalid || isEditNegative;
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingLogId) return;
+    if (!editingLogId || isEditSubmitting) return;
 
     if (hasEditAlert) {
       if (isEditPumpDiscrepancy) {
         alert('Alteração não permitida: A leitura inicial da bomba não confere com o fechamento anterior!');
       } else if (isEditPumpEndInvalid) {
-        alert('Alteração não permitida: A leitura final da bomba deve ser maior que a leitura inicial!');
+        alert('Alteração não permitida: A leitura final da bomba deve ser estritamente maior que a leitura inicial!');
       } else if (isEditHourKmInvalid) {
         alert('Alteração não permitida: O horímetro/km informado é menor que o horímetro atual da máquina!');
       } else if (isEditNegative) {
         alert('Alteração não permitida: Leituras de bomba e horímetro não podem ser negativas!');
       } else {
-        alert('Alteração não permitida devido a alertas de erro ou divergência de informações!');
+        alert('Alteração não permitida devido a campos vazios ou divergência de informações!');
       }
       return;
     }
 
+    setIsEditSubmitting(true);
     try {
       await fleetService.updateFuelLog(editingLogId, {
         farm_id: editFarmId,
@@ -262,9 +296,11 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       });
       setIsEditOpen(false);
       setEditingLogId(null);
-      refreshList();
+      await refreshList();
     } catch (err: any) {
-      alert('Erro ao atualizar abastecimento: ' + err.message);
+      alert('Erro ao atualizar abastecimento: ' + (err.message || err));
+    } finally {
+      setIsEditSubmitting(false);
     }
   };
 
@@ -285,11 +321,10 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   };
 
   // =========================================================================
-  // SUBMISSÃO DO ABASTECIMENTO
+  // SUBMISSÃO DO ABASTECIMENTO COM TRAVA ANTI-DUPLICIDADE
   // =========================================================================
-  const handleOpenAdd = () => {
+  const handleOpenAdd = async () => {
     setFormDate(new Date().toISOString().slice(0, 16));
-    setFormPumpStart('');
     setFormPumpEnd('');
     setFormNotes('');
     setFormResponsible('');
@@ -308,43 +343,75 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       setFormHourKm('');
     }
     setIsAddOpen(true);
+    if (defaultFarm) {
+      await loadPumpSequenceForFarm(defaultFarm);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isSubmitting) return;
+
+    if (!formFarmId) {
+      alert('Por favor, selecione uma fazenda.');
+      return;
+    }
+
+    if (formPumpStart === '' || formPumpEnd === '') {
+      alert('Por favor, preencha as leituras inicial e final da bomba.');
+      return;
+    }
+
+    const startVal = Number(formPumpStart);
+    const endVal = Number(formPumpEnd);
+
+    if (isNaN(startVal) || isNaN(endVal)) {
+      alert('As leituras da bomba devem ser valores numéricos válidos.');
+      return;
+    }
+
+    if (endVal <= startVal) {
+      alert(`Lançamento bloqueado: A leitura final da bomba (${endVal} L) deve ser estritamente maior que a leitura inicial (${startVal} L)!`);
+      return;
+    }
+
     if (hasAddAlert) {
       if (isAddPumpDiscrepancy) {
-        alert('Lançamento não permitido: A leitura inicial da bomba não confere com o fechamento anterior!');
+        alert(`Lançamento bloqueado: A leitura inicial (${startVal} L) não coincide com o fechamento anterior (${discrepancyInfo?.lastEnd} L)!`);
       } else if (isAddPumpEndInvalid) {
-        alert('Lançamento não permitido: A leitura final da bomba deve ser maior que a leitura inicial!');
+        alert('Lançamento bloqueado: A leitura final da bomba deve ser maior que a leitura inicial!');
       } else if (isAddHourKmInvalid) {
-        alert('Lançamento não permitido: O horímetro/km informado é menor que o horímetro atual da máquina!');
+        alert('Lançamento bloqueado: O horímetro/km informado é menor que o horímetro atual da máquina!');
       } else if (isAddNegative) {
-        alert('Lançamento não permitido: Leituras de bomba e horímetro não podem ser negativas!');
+        alert('Lançamento bloqueado: Leituras de bomba e horímetro não podem ser negativas!');
       } else {
-        alert('Lançamento não permitido devido a alertas de erro ou divergência de informações!');
+        alert('Lançamento bloqueado devido a alertas ou divergência de informações!');
       }
       return;
     }
 
+    // Trava de submissão imediata contra duplo clique
+    setIsSubmitting(true);
     try {
       await fleetService.addFuelLog({
         farm_id: formFarmId,
         machine_id: formMachineId,
         date: new Date(formDate).toISOString(),
         fuel_type: formFuelType,
-        pump_reading_start: Number(formPumpStart),
-        pump_reading_end: Number(formPumpEnd),
+        pump_reading_start: startVal,
+        pump_reading_end: endVal,
         hour_km_at_fueling: Number(formHourKm),
         supplier: formSupplier,
         responsible: formResponsible,
         notes: formNotes
       });
       setIsAddOpen(false);
-      refreshList();
+      await refreshList();
     } catch (err: any) {
-      alert('Erro ao registrar abastecimento: ' + err.message);
+      alert('Erro ao registrar abastecimento: ' + (err.message || err));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -689,7 +756,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Fazenda</label>
               <select
                 value={formFarmId}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const selected = e.target.value;
                   setFormFarmId(selected);
                   const farmMachines = machines.filter(m => !isImplement(m) && m.farm_id === selected);
@@ -699,6 +766,10 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   } else {
                     setFormMachineId('');
                     setFormHourKm('');
+                  }
+                  setFormPumpEnd('');
+                  if (selected) {
+                    await loadPumpSequenceForFarm(selected);
                   }
                 }}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
@@ -755,15 +826,25 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Leitura INICIAL da Bomba (L)</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500">Leitura INICIAL da Bomba (L)</label>
+                {isLoadingPump && <span className="text-[10px] text-amber-600 animate-pulse font-medium">Buscando último fechamento...</span>}
+              </div>
               <input
                 type="number"
                 required
-                placeholder="Ex: 1040"
+                placeholder={isLoadingPump ? "Carregando..." : "Ex: 1040"}
                 value={formPumpStart}
                 onChange={(e) => setFormPumpStart(e.target.value !== '' ? Number(e.target.value) : '')}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022] font-mono"
               />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                {discrepancyInfo?.isFirstLog
+                  ? 'Primeiro abastecimento desta fazenda: defina o início da bomba.'
+                  : discrepancyInfo?.lastEnd !== null
+                    ? `Preenchido automaticamente com o fechamento anterior (${discrepancyInfo?.lastEnd} L).`
+                    : 'Leitura inicial da bomba de combustível.'}
+              </span>
             </div>
 
             <div>
@@ -776,6 +857,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 onChange={(e) => setFormPumpEnd(e.target.value !== '' ? Number(e.target.value) : '')}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022] font-mono"
               />
+              <span className="text-[10px] text-slate-400 mt-1 block">Leitura final registrada na bomba após o abastecimento.</span>
             </div>
 
             <div>
@@ -913,22 +995,26 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => setIsAddOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={hasAddAlert}
-              className={`px-4 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all ${
-                hasAddAlert
+              disabled={hasAddAlert || isSubmitting}
+              className={`px-5 py-2.5 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 ${
+                hasAddAlert || isSubmitting
                   ? 'bg-slate-400 cursor-not-allowed opacity-60'
-                  : 'bg-[#1B3022] hover:opacity-90 cursor-pointer'
+                  : 'bg-[#1B3022] hover:opacity-90 cursor-pointer active:scale-98'
               }`}
               title={hasAddAlert ? 'Lançamento bloqueado devido a alertas ou divergências' : 'Confirmar Abastecimento'}
             >
-              Confirmar Abastecimento
+              {isSubmitting && (
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )}
+              <span>{isSubmitting ? 'Registrando Abastecimento...' : 'Confirmar Abastecimento'}</span>
             </button>
           </div>
         </form>
@@ -1154,22 +1240,26 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
+              disabled={isEditSubmitting}
               onClick={() => setIsEditOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={hasEditAlert}
-              className={`px-4 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all ${
-                hasEditAlert
+              disabled={hasEditAlert || isEditSubmitting}
+              className={`px-5 py-2.5 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 ${
+                hasEditAlert || isEditSubmitting
                   ? 'bg-slate-400 cursor-not-allowed opacity-60'
-                  : 'bg-[#1B3022] hover:opacity-90 cursor-pointer'
+                  : 'bg-[#1B3022] hover:opacity-90 cursor-pointer active:scale-98'
               }`}
               title={hasEditAlert ? 'Alteração bloqueada devido a alertas ou divergências' : 'Salvar Alterações'}
             >
-              Salvar Alterações
+              {isEditSubmitting && (
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )}
+              <span>{isEditSubmitting ? 'Salvando Alterações...' : 'Salvar Alterações'}</span>
             </button>
           </div>
         </form>
