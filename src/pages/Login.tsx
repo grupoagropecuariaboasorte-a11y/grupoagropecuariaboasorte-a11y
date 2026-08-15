@@ -87,6 +87,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           .eq('id', data.user.id)
           .maybeSingle();
 
+        let persistedMap: Record<string, UserRole> = {};
+        try {
+          persistedMap = JSON.parse(localStorage.getItem('agro_persisted_roles') || '{}');
+        } catch (e) {}
+
         let finalRole: UserRole = 'registered';
         if (isAdmin) {
           finalRole = 'admin';
@@ -97,6 +102,15 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             if (parts[1]) role = parts[1] as UserRole;
           }
           finalRole = role || 'registered';
+        }
+
+        // Se o Supabase retornou 'registered' mas há permissão concedida salva
+        if (finalRole === 'registered') {
+          if (persistedMap[data.user.id]) {
+            finalRole = persistedMap[data.user.id];
+          } else if (persistedMap[userEmail]) {
+            finalRole = persistedMap[userEmail];
+          }
         }
 
         // Atualizar timestamp sem sobrescrever o email com role codificado

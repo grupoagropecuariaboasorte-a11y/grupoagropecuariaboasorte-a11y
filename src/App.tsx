@@ -77,7 +77,19 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/ranking-custos',
     '/relatorio-mensal'
   ],
-  viewer: [],
+  viewer: [
+    '/',
+    '/maquinas',
+    '/implementos',
+    '/combustivel',
+    '/estoque-diesel',
+    '/manutencao',
+    '/plano-preventivo',
+    '/checklist',
+    '/ordens-servico',
+    '/ranking-custos',
+    '/relatorio-mensal'
+  ],
   registered: []
 };
 
@@ -85,7 +97,7 @@ const ROLE_DEFAULT_PATH: Record<UserRole, string> = {
   admin: '/',
   control: '/',
   fuel: '/combustivel',
-  mechanic: '/manutencao',
+  mechanic: '/ordens-servico',
   editor: '/',
   viewer: '/',
   registered: '/'
@@ -116,10 +128,16 @@ function AppContent() {
   // Estados de Sessão
   const [userEmail, setUserEmail] = useState<string>(() => localStorage.getItem('agro_user_email') || '');
   const [userRole, setUserRole] = useState<UserRole>(() => {
-    const email = localStorage.getItem('agro_user_email') || '';
-    if (email.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com') {
+    const email = (localStorage.getItem('agro_user_email') || '').toLowerCase();
+    if (email === 'grupoagropecuariaboasorte@gmail.com') {
       return 'admin';
     }
+    try {
+      const persisted = JSON.parse(localStorage.getItem('agro_persisted_roles') || '{}');
+      if (email && persisted[email]) {
+        return persisted[email];
+      }
+    } catch (e) {}
     return (localStorage.getItem('agro_user_role') as UserRole) || 'registered';
   });
 
@@ -140,30 +158,48 @@ function AppContent() {
     refreshFarms();
   }, []);
 
-  // Garantir que o perfil existe no Supabase para que o RLS funcionar (importante se recarregar a página já logado)
+  // Garantir que o perfil existe no Supabase para que o RLS funcione (importante se recarregar a página já logado)
   useEffect(() => {
     async function ensureProfile() {
       if (userEmail && supabase) {
         try {
           const { data: authData } = await supabase.auth.getUser();
           if (authData?.user) {
-             const isAdmin = userEmail.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com';
+             const cleanEmail = userEmail.toLowerCase();
+             const isAdmin = cleanEmail === 'grupoagropecuariaboasorte@gmail.com';
              const { data: profile } = await supabase.from('profiles').select('*').eq('id', authData.user.id).maybeSingle();
+
+             let persistedMap: Record<string, UserRole> = {};
+             try {
+               persistedMap = JSON.parse(localStorage.getItem('agro_persisted_roles') || '{}');
+             } catch (e) {}
+
              if (profile) {
                 let role = profile.role as UserRole;
                 if (profile.email && profile.email.includes('|role:')) {
                   const parts = profile.email.split('|role:');
                   if (parts[1]) role = parts[1] as UserRole;
                 }
+
+                if ((!role || role === 'registered') && (persistedMap[authData.user.id] || persistedMap[cleanEmail])) {
+                  role = persistedMap[authData.user.id] || persistedMap[cleanEmail];
+                }
+
                 const effectiveRole = isAdmin ? 'admin' : (role || 'registered');
                 setUserRole(effectiveRole);
                 localStorage.setItem('agro_user_role', effectiveRole);
              } else {
-                const defaultRole: UserRole = isAdmin ? 'admin' : 'registered';
+                let defaultRole: UserRole = isAdmin ? 'admin' : 'registered';
+                if (persistedMap[authData.user.id]) {
+                  defaultRole = persistedMap[authData.user.id];
+                } else if (persistedMap[cleanEmail]) {
+                  defaultRole = persistedMap[cleanEmail];
+                }
+
                 try {
                   await supabase.from('profiles').insert({
                      id: authData.user.id,
-                     email: userEmail.toLowerCase(),
+                     email: cleanEmail,
                      role: defaultRole,
                      updated_at: new Date().toISOString()
                   });
