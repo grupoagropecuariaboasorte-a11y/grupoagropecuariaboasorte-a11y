@@ -116,6 +116,7 @@ export interface MaintenanceLog {
   location_shop?: string; // FK service_locations
   responsible: string;
   operator_name?: string;
+  notes?: string;
   next_maintenance_date?: string;
   next_hour_km?: number;
   created_at?: string;

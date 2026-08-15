@@ -148,14 +148,19 @@ function AppContent() {
           const { data: authData } = await supabase.auth.getUser();
           if (authData?.user) {
              const isAdmin = userEmail.toLowerCase() === 'grupoagropecuariaboasorte@gmail.com';
-             const { data: profile } = await supabase.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
-             if (profile && profile.role) {
-                const effectiveRole = isAdmin ? 'admin' : (profile.role as UserRole);
+             const { data: profile } = await supabase.from('profiles').select('*').eq('id', authData.user.id).maybeSingle();
+             if (profile) {
+                let role = profile.role as UserRole;
+                if (profile.email && profile.email.includes('|role:')) {
+                  const parts = profile.email.split('|role:');
+                  if (parts[1]) role = parts[1] as UserRole;
+                }
+                const effectiveRole = isAdmin ? 'admin' : (role || 'registered');
                 setUserRole(effectiveRole);
                 localStorage.setItem('agro_user_role', effectiveRole);
              } else {
                 const defaultRole: UserRole = isAdmin ? 'admin' : 'registered';
-                await supabase.from('profiles').upsert({
+                await supabase.from('profiles').insert({
                    id: authData.user.id,
                    email: userEmail.toLowerCase(),
                    role: defaultRole,
@@ -343,7 +348,7 @@ function AppContent() {
               path="/ordens-servico" 
               element={
                 <ProtectedRoute path="/ordens-servico" userRole={userRole}>
-                  <WorkOrders selectedFarmId={selectedFarmId} userRole={userRole} />
+                  <WorkOrders selectedFarmId={selectedFarmId} userRole={userRole} userEmail={userEmail} />
                 </ProtectedRoute>
               } 
             />

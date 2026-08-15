@@ -11,9 +11,10 @@ import {
 interface WorkOrdersProps {
   selectedFarmId: string;
   userRole: UserRole;
+  userEmail?: string;
 }
 
-export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps) {
+export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }: WorkOrdersProps) {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [farms, setFarms] = useState<Farm[]>([]);
@@ -42,6 +43,19 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
   const [editAssignedTo, setEditAssignedTo] = useState('');
   const [editOpenDate, setEditOpenDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
+
+  // Modal Conclusão de Serviço (Mechanic workflow)
+  const [isCompleteOpen, setIsCompleteOpen] = useState(false);
+  const [completeWo, setCompleteWo] = useState<WorkOrder | null>(null);
+  const [completeCloseDate, setCompleteCloseDate] = useState('');
+  const [completeResponsible, setCompleteResponsible] = useState('');
+  const [completeServiceReport, setCompleteServiceReport] = useState('');
+  const [completePartsReplaced, setCompletePartsReplaced] = useState('');
+  const [completePartsCost, setCompletePartsCost] = useState('');
+  const [completeLaborCost, setCompleteLaborCost] = useState('');
+  const [completeHourKm, setCompleteHourKm] = useState('');
+  const [completeRegisterMaintenance, setCompleteRegisterMaintenance] = useState(true);
+  const [completeNotes, setCompleteNotes] = useState('');
 
   // Target de exclusão
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
@@ -193,9 +207,100 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
     }
   };
 
+  const handleStartService = async (wo: WorkOrder) => {
+    try {
+      setSubmitting(true);
+      const assigned = wo.responsible || wo.assigned_to || userEmail || 'Mecânico';
+      await fleetService.updateWorkOrder(wo.id, {
+        status: 'Em Andamento',
+        responsible: assigned
+      });
+      await refreshList();
+    } catch (e: any) {
+      console.error('Erro ao iniciar serviço:', e);
+      alert('Erro ao iniciar serviço: ' + (e?.message || e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOpenCompleteModal = (wo: WorkOrder) => {
+    const mach = machines.find(m => m.id === wo.machine_id);
+    setCompleteWo(wo);
+    setCompleteCloseDate(new Date().toISOString().split('T')[0]);
+    setCompleteResponsible(wo.responsible || wo.assigned_to || userEmail || 'Mecânico');
+    setCompleteServiceReport(wo.reason || wo.description || '');
+    setCompletePartsReplaced('');
+    setCompletePartsCost('');
+    setCompleteLaborCost('');
+    setCompleteHourKm(mach?.current_hour_km ? String(mach.current_hour_km) : '');
+    setCompleteRegisterMaintenance(true);
+    setCompleteNotes(wo.notes || '');
+    setIsCompleteOpen(true);
+  };
+
+  const handleSubmitComplete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completeWo) return;
+
+    try {
+      setSubmitting(true);
+      const closeDate = completeCloseDate || new Date().toISOString().split('T')[0];
+      const resp = completeResponsible.trim() || userEmail || 'Mecânico';
+
+      // 1. Atualizar a O.S. como Concluída
+      await fleetService.updateWorkOrder(completeWo.id, {
+        status: 'Concluída',
+        close_date: closeDate,
+        responsible: resp,
+        notes: completeNotes ? `${completeNotes} | Relatório: ${completeServiceReport}` : completeServiceReport
+      });
+
+      // 2. Se marcado para registrar no Histórico de Manutenções
+      if (completeRegisterMaintenance && completeWo.machine_id) {
+        try {
+          const partsCostNum = parseFloat(completePartsCost.replace(',', '.')) || 0;
+          const laborCostNum = parseFloat(completeLaborCost.replace(',', '.')) || 0;
+          const hourKmNum = parseFloat(completeHourKm.replace(',', '.')) || 0;
+
+          await fleetService.addMaintenanceLog({
+            machine_id: completeWo.machine_id,
+            date: closeDate,
+            type: 'corretiva',
+            priority: completeWo.priority === 'Alta' ? 'alta' : completeWo.priority === 'Baixa' ? 'baixa' : 'media',
+            hour_km_at_service: hourKmNum,
+            service_description: `[O.S. #${completeWo.os_number || completeWo.id.slice(0, 6)}] ${completeServiceReport}`,
+            main_item: 'Serviço Mecânico Concluído',
+            parts_replaced: completePartsReplaced || undefined,
+            parts_cost: partsCostNum,
+            labor_cost: laborCostNum,
+            responsible: resp,
+            location_shop: 'oficina_interna',
+            notes: `Concluído via Ordem de Serviço #${completeWo.os_number || completeWo.id.slice(0, 6)}`
+          });
+        } catch (mErr) {
+          console.warn('Aviso: Falha ao sincronizar log de manutenção:', mErr);
+        }
+      }
+
+      setIsCompleteOpen(false);
+      setCompleteWo(null);
+      await refreshList();
+      alert('Ordem de serviço concluída com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao concluir OS:', err);
+      alert('Erro ao concluir O.S.: ' + (err?.message || err || 'Erro de conexão'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleUpdateStatus = async (id: string, nextStatus: 'Aberta' | 'Em Andamento' | 'Concluída') => {
     try {
-      await fleetService.updateWorkOrder(id, { status: nextStatus });
+      await fleetService.updateWorkOrder(id, { 
+        status: nextStatus,
+        close_date: nextStatus === 'Concluída' ? new Date().toISOString().split('T')[0] : null
+      });
       await refreshList();
     } catch (e: any) {
       console.error('Erro ao atualizar status:', e);
@@ -441,11 +546,11 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
 
                   {userRole !== 'viewer' && (
                     <button
-                      onClick={() => handleUpdateStatus(wo.id, 'Em Andamento')}
-                      className="w-full flex items-center justify-center gap-1 py-1.5 bg-slate-50 hover:bg-slate-100 text-[10px] font-semibold text-slate-700 rounded-lg border border-slate-200 cursor-pointer transition-colors"
+                      onClick={() => handleStartService(wo)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-50 hover:bg-[#1B3022] hover:text-white text-xs font-bold text-[#1B3022] rounded-xl border border-emerald-200 cursor-pointer transition-all shadow-xs active:scale-95"
                     >
-                      <PlayCircle size={12} className="text-amber-500" />
-                      Iniciar Serviço <ArrowRight size={10} />
+                      <PlayCircle size={14} className="text-amber-500" />
+                      Iniciar Serviço <ArrowRight size={12} />
                     </button>
                   )}
                 </div>
@@ -479,10 +584,10 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
               const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
 
               return (
-                <div key={wo.id} className="bg-white border border-slate-200 hover:border-[#1B3022]/30 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
+                <div key={wo.id} className="bg-white border border-amber-200 hover:border-amber-400 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-wide bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-wide bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                         OS #{wo.os_number || wo.id.substring(0, 6)}
                       </span>
                       <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
@@ -517,18 +622,18 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
                   </div>
 
                   {userRole !== 'viewer' && (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2 pt-1">
                       <button
                         onClick={() => handleUpdateStatus(wo.id, 'Aberta')}
-                        className="flex items-center justify-center gap-1 py-1.5 bg-slate-50 hover:bg-slate-100 text-[10px] font-semibold text-slate-500 hover:text-slate-800 rounded-lg border border-slate-200 cursor-pointer"
+                        className="flex items-center justify-center gap-1 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl border border-slate-200 cursor-pointer transition-colors"
                       >
-                        <ArrowLeft size={10} /> Pausar
+                        <ArrowLeft size={12} /> Pausar
                       </button>
                       <button
-                        onClick={() => handleUpdateStatus(wo.id, 'Concluída')}
-                        className="flex items-center justify-center gap-1 py-1.5 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-[10px] font-bold text-emerald-800 rounded-lg border border-emerald-100 cursor-pointer"
+                        onClick={() => handleOpenCompleteModal(wo)}
+                        className="flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
                       >
-                        <CheckCircle2 size={11} /> Concluir OS
+                        <CheckCircle2 size={13} /> Concluir OS
                       </button>
                     </div>
                   )}
@@ -548,7 +653,7 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
         <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
           <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <CheckCircle2 size={14} className="text-[#1B3022]" />
+              <CheckCircle2 size={14} className="text-emerald-600" />
               Concluídas
             </span>
             <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
@@ -561,12 +666,13 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
               const mach = machines.find(m => m.id === wo.machine_id);
               const descText = wo.description || wo.reason || '';
               const techText = wo.assigned_to || wo.responsible || 'Técnico';
+              const closeDateFormatted = wo.close_date ? wo.close_date.split('T')[0] : '';
 
               return (
-                <div key={wo.id} className="bg-white/80 border border-slate-200 rounded-xl p-4 text-xs space-y-3 opacity-75 group hover:opacity-100 transition-opacity shadow-xs">
+                <div key={wo.id} className="bg-white border border-slate-200 rounded-xl p-4 text-xs space-y-3 shadow-xs group hover:border-emerald-300 transition-all">
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wide bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
                         OS #{wo.os_number || wo.id.substring(0, 6)}
                       </span>
                       <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
@@ -592,15 +698,28 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
                   </div>
 
                   <p className="text-slate-500 leading-normal font-serif italic line-through">&ldquo;{descText}&rdquo;</p>
+                  
+                  {wo.notes && (
+                    <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-[11px] text-slate-600 font-sans">
+                      <strong className="text-slate-700">Laudo:</strong> {wo.notes}
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className="text-[10px] text-slate-400 font-mono">Concluída por: {techText}</span>
-                    <button
-                      onClick={() => handleUpdateStatus(wo.id, 'Em Andamento')}
-                      className="text-[10px] text-amber-700 hover:underline font-bold"
-                    >
-                      Reabrir
-                    </button>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-500 font-mono">Técnico: {techText}</span>
+                      {closeDateFormatted && (
+                        <span className="text-[9px] text-emerald-700 font-mono">Concluído: {closeDateFormatted}</span>
+                      )}
+                    </div>
+                    {userRole !== 'viewer' && (
+                      <button
+                        onClick={() => handleUpdateStatus(wo.id, 'Em Andamento')}
+                        className="text-xs text-amber-700 hover:text-amber-900 hover:underline font-bold cursor-pointer"
+                      >
+                        Reabrir
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -615,6 +734,166 @@ export default function WorkOrders({ selectedFarmId, userRole }: WorkOrdersProps
         </div>
 
       </div>
+
+      {/* MODAL CONCLUIR SERVIÇO (MECÂNICO) */}
+      <Modal isOpen={isCompleteOpen} onClose={() => setIsCompleteOpen(false)} title="Conclusão e Baixa de Ordem de Serviço (O.S.)">
+        {completeWo && (
+          <form onSubmit={handleSubmitComplete} className="space-y-4">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase">
+                  OS #{completeWo.os_number || completeWo.id.substring(0, 6)}
+                </span>
+                <h4 className="text-xs font-bold text-emerald-950 mt-0.5">
+                  {machines.find(m => m.id === completeWo.machine_id)?.code} - {machines.find(m => m.id === completeWo.machine_id)?.name}
+                </h4>
+              </div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded-md border border-emerald-200">
+                Prioridade: {completeWo.priority}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Data de Conclusão / Baixa *</label>
+                <input
+                  type="date"
+                  required
+                  value={completeCloseDate}
+                  onChange={(e) => setCompleteCloseDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Mecânico / Responsável Técnico *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nome do mecânico ou oficina"
+                  value={completeResponsible}
+                  onChange={(e) => setCompleteResponsible(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Horímetro / Km no Serviço</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="Ex: 1450.5"
+                  value={completeHourKm}
+                  onChange={(e) => setCompleteHourKm(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Custo Peças (R$)</label>
+                  <input
+                    type="text"
+                    placeholder="0,00"
+                    value={completePartsCost}
+                    onChange={(e) => setCompletePartsCost(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mão de Obra (R$)</label>
+                  <input
+                    type="text"
+                    placeholder="0,00"
+                    value={completeLaborCost}
+                    onChange={(e) => setCompleteLaborCost(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-hidden focus:border-[#1B3022]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Serviço Realizado / Laudo Técnico de Reparo *
+              </label>
+              <textarea
+                required
+                value={completeServiceReport}
+                onChange={(e) => setCompleteServiceReport(e.target.value)}
+                placeholder="Descreva o que foi corrigido, reparado ou ajustado..."
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] h-20"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Peças Utilizadas / Substituídas <span className="text-slate-400 font-normal">(Opcional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Filtro de óleo, correia do alternador, 4L óleo 15W40..."
+                value={completePartsReplaced}
+                onChange={(e) => setCompletePartsReplaced(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022]"
+              />
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="check-sync-maintenance"
+                checked={completeRegisterMaintenance}
+                onChange={(e) => setCompleteRegisterMaintenance(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+              />
+              <label htmlFor="check-sync-maintenance" className="text-xs text-slate-700 font-semibold cursor-pointer">
+                Lançar automaticamente no Histórico Geral de Manutenções da Máquina
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateStatus(completeWo.id, 'Concluída');
+                  setIsCompleteOpen(false);
+                }}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 cursor-pointer"
+              >
+                Conclusão Rápida (sem laudo)
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCompleteOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+                >
+                  {submitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0"></span>
+                      <span>Concluindo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Concluir e Salvar O.S.</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       {/* MODAL ADICIONAR OS */}
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Abertura de Chamado / Ordem de Serviço Manual (O.S.)">

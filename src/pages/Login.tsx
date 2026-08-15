@@ -80,23 +80,38 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         const userEmail = (data.user.email || cleanEmail).trim().toLowerCase();
         const isAdmin = userEmail === 'grupoagropecuariaboasorte@gmail.com';
         
-        // Obter role do perfil existente para não sobrescrever permissões alteradas pelo administrador
+        // Obter perfil completo existente para não sobrescrever permissões alteradas pelo administrador
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('*')
           .eq('id', data.user.id)
           .maybeSingle();
 
-        const existingRole = profile?.role as UserRole | undefined;
-        const finalRole: UserRole = isAdmin ? 'admin' : (existingRole || 'registered');
+        let finalRole: UserRole = 'registered';
+        if (isAdmin) {
+          finalRole = 'admin';
+        } else if (profile) {
+          let role = profile.role as UserRole;
+          if (profile.email && profile.email.includes('|role:')) {
+            const parts = profile.email.split('|role:');
+            if (parts[1]) role = parts[1] as UserRole;
+          }
+          finalRole = role || 'registered';
+        }
 
-        // Garantir que o perfil está salvo com o e-mail e a permissão correta
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          email: userEmail,
-          role: finalRole,
-          updated_at: new Date().toISOString()
-        });
+        // Atualizar timestamp sem sobrescrever o email com role codificado
+        if (profile) {
+          await supabase.from('profiles').update({
+            updated_at: new Date().toISOString()
+          }).eq('id', data.user.id).catch(() => {});
+        } else {
+          await supabase.from('profiles').insert({
+            id: data.user.id,
+            email: userEmail,
+            role: finalRole,
+            updated_at: new Date().toISOString()
+          }).catch(() => {});
+        }
 
         onLoginSuccess(userEmail, finalRole);
       }
