@@ -1134,11 +1134,14 @@ export const fleetService = {
   // MÁQUINAS (MACHINES)
   // =======================================================================
   async getMachines(): Promise<Machine[]> {
-    
     try {
       const { data, error } = await supabase!.from('machines').select('*').order('code', { ascending: true });
       if (error) throw error;
-      return data || [];
+      return (data || []).map((m: Machine) => ({
+        ...m,
+        initial_hour_km: Number(m.initial_hour_km) || 0,
+        current_hour_km: Number(m.current_hour_km) || Number(m.initial_hour_km) || 0
+      }));
     } catch (e) {
       console.error('Erro ao buscar máquinas no Supabase, usando local:', e);
       throw e;
@@ -1186,20 +1189,23 @@ export const fleetService = {
 
     const { data, error } = await safeUpdate('machines', id, cleanMachine);
     if (error) {
-      console.error('Erro ao atualizar máquina via safeUpdate:', error);
-      throw error;
-    }
-
-    if (!data) {
-      // Direct update fallback if safeUpdate select returned null
-      const { error: directErr } = await supabase!.from('machines').update(cleanMachine).eq('id', id);
+      console.warn('Aviso: safeUpdate falhou ao atualizar máquina, tentando update direto:', error);
+      const { data: directData, error: directErr } = await supabase!.from('machines').update(cleanMachine).eq('id', id).select().maybeSingle();
       if (directErr) {
         console.error('Erro ao atualizar máquina no Supabase:', directErr);
         throw directErr;
       }
-      const machines = await this.getMachines();
-      const updated = machines.find(m => m.id === id);
-      if (updated) return updated;
+      return directData || (cleanMachine as Machine);
+    }
+
+    if (!data) {
+      // Direct update fallback if safeUpdate select returned null
+      const { data: directData, error: directErr } = await supabase!.from('machines').update(cleanMachine).eq('id', id).select().maybeSingle();
+      if (directErr) {
+        console.error('Erro ao atualizar máquina no Supabase:', directErr);
+        throw directErr;
+      }
+      return directData || (cleanMachine as Machine);
     }
 
     return data;
@@ -1378,16 +1384,34 @@ export const fleetService = {
     const { data, error } = await safeInsert('fuel_logs', logToInsert);
     if (error) throw error;
 
-    // Vincula a máquina dinamicamente à fazenda do abastecimento e atualiza o horímetro
-    if (log.machine_id && log.farm_id) {
-      try {
-        const updateMachineObj: any = { farm_id: log.farm_id };
-        if (log.hour_km_at_fueling) {
-          updateMachineObj.current_hour_km = Number(log.hour_km_at_fueling);
+    // Atualiza a máquina (horímetro atual e fazenda vinculada) de forma explícita e direta
+    if (log.machine_id) {
+      const parsedHourKm = (log.hour_km_at_fueling !== undefined && log.hour_km_at_fueling !== null && !isNaN(Number(log.hour_km_at_fueling)))
+        ? Number(log.hour_km_at_fueling)
+        : undefined;
+      const parsedFarmId = (log.farm_id && log.farm_id !== 'ALL') ? log.farm_id : undefined;
+
+      if (parsedHourKm !== undefined || parsedFarmId !== undefined) {
+        const updateMachineObj: Partial<Machine> = {};
+        if (parsedHourKm !== undefined && parsedHourKm >= 0) {
+          updateMachineObj.current_hour_km = parsedHourKm;
         }
-        await this.updateMachine(log.machine_id, updateMachineObj);
-      } catch (e) {
-        console.warn('Não foi possível atualizar a fazenda atual da máquina:', e);
+        if (parsedFarmId) {
+          updateMachineObj.farm_id = parsedFarmId;
+        }
+        try {
+          await this.updateMachine(log.machine_id, updateMachineObj);
+        } catch (e) {
+          console.warn('Tentando fallback direto de atualização da máquina após abastecimento:', e);
+          try {
+            const fallbackObj: any = { updated_at: new Date().toISOString() };
+            if (updateMachineObj.current_hour_km !== undefined) fallbackObj.current_hour_km = updateMachineObj.current_hour_km;
+            if (updateMachineObj.farm_id !== undefined) fallbackObj.farm_id = updateMachineObj.farm_id;
+            await supabase!.from('machines').update(fallbackObj).eq('id', log.machine_id);
+          } catch (errFallback) {
+            console.error('Falha no fallback de atualização de horímetro da máquina:', errFallback);
+          }
+        }
       }
     }
 
@@ -1429,15 +1453,33 @@ export const fleetService = {
     }
 
     // Vincula a máquina dinamicamente à fazenda do abastecimento e atualiza o horímetro
-    if (data.machine_id && data.farm_id) {
-      try {
-        const updateMachineObj: any = { farm_id: data.farm_id };
-        if (data.hour_km_at_fueling) {
-          updateMachineObj.current_hour_km = Number(data.hour_km_at_fueling);
+    if (data.machine_id) {
+      const parsedHourKm = (data.hour_km_at_fueling !== undefined && data.hour_km_at_fueling !== null && !isNaN(Number(data.hour_km_at_fueling)))
+        ? Number(data.hour_km_at_fueling)
+        : undefined;
+      const parsedFarmId = (data.farm_id && data.farm_id !== 'ALL') ? data.farm_id : undefined;
+
+      if (parsedHourKm !== undefined || parsedFarmId !== undefined) {
+        const updateMachineObj: Partial<Machine> = {};
+        if (parsedHourKm !== undefined && parsedHourKm >= 0) {
+          updateMachineObj.current_hour_km = parsedHourKm;
         }
-        await this.updateMachine(data.machine_id, updateMachineObj);
-      } catch (e) {
-        console.warn('Não foi possível atualizar a fazenda atual da máquina:', e);
+        if (parsedFarmId) {
+          updateMachineObj.farm_id = parsedFarmId;
+        }
+        try {
+          await this.updateMachine(data.machine_id, updateMachineObj);
+        } catch (e) {
+          console.warn('Não foi possível atualizar a máquina na edição de abastecimento:', e);
+          try {
+            const fallbackObj: any = { updated_at: new Date().toISOString() };
+            if (updateMachineObj.current_hour_km !== undefined) fallbackObj.current_hour_km = updateMachineObj.current_hour_km;
+            if (updateMachineObj.farm_id !== undefined) fallbackObj.farm_id = updateMachineObj.farm_id;
+            await supabase!.from('machines').update(fallbackObj).eq('id', data.machine_id);
+          } catch (errFallback) {
+            console.error('Falha no fallback de edição da máquina:', errFallback);
+          }
+        }
       }
     }
     

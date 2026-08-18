@@ -594,8 +594,8 @@ WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('a
 
 -- machines
 CREATE POLICY write_machines_admin ON machines FOR ALL TO authenticated 
-USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));
+USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor', 'fuel', 'mechanic')))
+WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor', 'fuel', 'mechanic')));
 
 -- lookup tables
 CREATE POLICY write_eq_types ON equipment_types FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'control', 'editor')));

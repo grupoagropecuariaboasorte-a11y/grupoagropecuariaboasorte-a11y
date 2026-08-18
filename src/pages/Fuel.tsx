@@ -154,14 +154,22 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     }
   }, [formFarmId, formPumpStart, discrepancyInfo]);
 
+  // Helper para obter o horímetro mais recente e consolidado da máquina
+  const getMachineEffectiveHourKm = (mach: Machine) => {
+    const machLogs = fuelLogs.filter(l => l.machine_id === mach.id && l.hour_km_at_fueling !== undefined && l.hour_km_at_fueling !== null);
+    const maxFuelHour = machLogs.length > 0 ? Math.max(...machLogs.map(l => Number(l.hour_km_at_fueling) || 0)) : 0;
+    const baseHour = Number(mach.current_hour_km || mach.initial_hour_km || 0);
+    return Math.max(baseHour, maxFuelHour);
+  };
+
   // Atualizar horímetro sugerido ao selecionar a máquina
   useEffect(() => {
     if (!formMachineId) return;
     const mach = machines.find(m => m.id === formMachineId);
     if (mach) {
-      setFormHourKm(mach.current_hour_km || mach.initial_hour_km);
+      setFormHourKm(getMachineEffectiveHourKm(mach));
     }
-  }, [formMachineId, machines]);
+  }, [formMachineId, machines, fuelLogs]);
 
   // Carregar dinamicamente o preço do diesel mais recente para a fazenda selecionada
   useEffect(() => {
@@ -235,7 +243,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   // =========================================================================
   // Validações do Modal de Cadastro (ADD)
   const selectedAddMachine = machines.find(m => m.id === formMachineId);
-  const lastAddMachineHour = selectedAddMachine ? (selectedAddMachine.current_hour_km || selectedAddMachine.initial_hour_km || 0) : 0;
+  const lastAddMachineHour = selectedAddMachine ? getMachineEffectiveHourKm(selectedAddMachine) : 0;
 
   const isAddPumpMissing = formPumpStart === '' || formPumpEnd === '';
   const isAddPumpEndInvalid = formPumpStart !== '' && formPumpEnd !== '' && Number(formPumpEnd) <= Number(formPumpStart);
@@ -252,7 +260,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
   // Validações do Modal de Edição (EDIT)
   const selectedEditMachine = machines.find(m => m.id === editMachineId);
-  const lastEditMachineHour = selectedEditMachine ? (selectedEditMachine.current_hour_km || selectedEditMachine.initial_hour_km || 0) : 0;
+  const lastEditMachineHour = selectedEditMachine ? (selectedEditMachine.initial_hour_km || 0) : 0;
 
   const isEditPumpMissing = editPumpStart === '' || editPumpEnd === '';
   const isEditPumpEndInvalid = editPumpStart !== '' && editPumpEnd !== '' && Number(editPumpEnd) <= Number(editPumpStart);
@@ -272,7 +280,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       } else if (isEditPumpEndInvalid) {
         alert('Alteração não permitida: A leitura final da bomba deve ser estritamente maior que a leitura inicial!');
       } else if (isEditHourKmInvalid) {
-        alert('Alteração não permitida: O horímetro/km informado é menor que o horímetro atual da máquina!');
+        alert('Alteração não permitida: O horímetro/km informado é menor que o horímetro inicial da máquina!');
       } else if (isEditNegative) {
         alert('Alteração não permitida: Leituras de bomba e horímetro não podem ser negativas!');
       } else {
@@ -283,7 +291,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
     setIsEditSubmitting(true);
     try {
-      await fleetService.updateFuelLog(editingLogId, {
+      const updatedLog = await fleetService.updateFuelLog(editingLogId, {
         farm_id: editFarmId,
         machine_id: editMachineId,
         date: parseInputDateTimeToISO(editDate),
@@ -297,6 +305,13 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       });
       setIsEditOpen(false);
       setEditingLogId(null);
+      if (editMachineId && editHourKm !== '') {
+        setMachines(prev => prev.map(m => m.id === editMachineId ? {
+          ...m,
+          current_hour_km: Math.max(Number(m.current_hour_km || 0), Number(editHourKm)),
+          ...(editFarmId && editFarmId !== 'ALL' ? { farm_id: editFarmId } : {})
+        } : m));
+      }
       await refreshList();
     } catch (err: any) {
       alert('Erro ao atualizar abastecimento: ' + (err.message || err));
@@ -335,10 +350,10 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     const farmMachines = nonImplMachines.filter(m => m.farm_id === defaultFarm);
     if (farmMachines.length > 0) {
       setFormMachineId(farmMachines[0].id);
-      setFormHourKm(farmMachines[0].current_hour_km || farmMachines[0].initial_hour_km);
+      setFormHourKm(getMachineEffectiveHourKm(farmMachines[0]));
     } else if (nonImplMachines.length > 0) {
       setFormMachineId(nonImplMachines[0].id);
-      setFormHourKm(nonImplMachines[0].current_hour_km || nonImplMachines[0].initial_hour_km);
+      setFormHourKm(getMachineEffectiveHourKm(nonImplMachines[0]));
     } else {
       setFormMachineId('');
       setFormHourKm('');
@@ -395,6 +410,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     // Trava de submissão imediata contra duplo clique
     setIsSubmitting(true);
     try {
+      const newHourVal = Number(formHourKm);
       await fleetService.addFuelLog({
         farm_id: formFarmId,
         machine_id: formMachineId,
@@ -402,11 +418,21 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
         fuel_type: formFuelType,
         pump_reading_start: startVal,
         pump_reading_end: endVal,
-        hour_km_at_fueling: Number(formHourKm),
+        hour_km_at_fueling: newHourVal,
         supplier: formSupplier,
         responsible: formResponsible,
         notes: formNotes
       });
+
+      // Atualiza o estado local imediatamente para refletir na UI sem atraso
+      if (formMachineId && !isNaN(newHourVal)) {
+        setMachines(prev => prev.map(m => m.id === formMachineId ? {
+          ...m,
+          current_hour_km: newHourVal,
+          ...(formFarmId && formFarmId !== 'ALL' ? { farm_id: formFarmId } : {})
+        } : m));
+      }
+
       setIsAddOpen(false);
       await refreshList();
     } catch (err: any) {
