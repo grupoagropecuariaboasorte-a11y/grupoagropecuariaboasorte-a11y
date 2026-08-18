@@ -39,10 +39,12 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   const [discrepancyInfo, setDiscrepancyInfo] = useState<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog?: boolean } | null>(null);
   const [isLoadingPump, setIsLoadingPump] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addDateSynced, setAddDateSynced] = useState(false);
 
   // Edit Form States
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editDateSynced, setEditDateSynced] = useState(false);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editFarmId, setEditFarmId] = useState('');
   const [editMachineId, setEditMachineId] = useState('');
@@ -808,25 +810,37 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-500">Data / Hora</label>
+              <div className="flex items-center justify-between mb-1.5 gap-2">
+                <label className="block text-xs font-semibold text-slate-700">Data / Hora</label>
                 <button
                   type="button"
-                  onClick={() => setFormDate(formatDateTimeForInput(new Date()))}
-                  className="text-[11px] font-medium text-[#1B3022] hover:underline flex items-center gap-1 cursor-pointer"
-                  title="Atualizar para a data e hora atual do dispositivo"
+                  id="btn-auto-device-datetime-add"
+                  onClick={() => {
+                    const nowStr = formatDateTimeForInput(new Date());
+                    setFormDate(nowStr);
+                    setAddDateSynced(true);
+                    setTimeout(() => setAddDateSynced(false), 2000);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all active:scale-95 cursor-pointer shadow-2xs border ${
+                    addDateSynced
+                      ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-200'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/90'
+                  }`}
+                  title="Capturar a data e a hora atual do relógio do seu dispositivo e preencher automaticamente"
                 >
-                  <Clock size={12} />
-                  <span>Agora</span>
+                  <Clock size={12} className={addDateSynced ? 'animate-spin' : 'text-emerald-700'} />
+                  <span>{addDateSynced ? '✓ Atualizado Agora!' : 'Buscar Data/Hora Atual'}</span>
                 </button>
               </div>
-              <input
-                type="datetime-local"
-                required
-                value={formDate}
-                onChange={(e) => setFormDate(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
-              />
+              <div className="relative">
+                <input
+                  type="datetime-local"
+                  required
+                  value={formDate}
+                  onChange={(e) => setFormDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono shadow-2xs"
+                />
+              </div>
             </div>
 
             <div>
@@ -1076,25 +1090,37 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-500">Data / Hora</label>
+              <div className="flex items-center justify-between mb-1.5 gap-2">
+                <label className="block text-xs font-semibold text-slate-700">Data / Hora</label>
                 <button
                   type="button"
-                  onClick={() => setEditDate(formatDateTimeForInput(new Date()))}
-                  className="text-[11px] font-medium text-[#1B3022] hover:underline flex items-center gap-1 cursor-pointer"
-                  title="Atualizar para a data e hora atual do dispositivo"
+                  id="btn-auto-device-datetime-edit"
+                  onClick={() => {
+                    const nowStr = formatDateTimeForInput(new Date());
+                    setEditDate(nowStr);
+                    setEditDateSynced(true);
+                    setTimeout(() => setEditDateSynced(false), 2000);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all active:scale-95 cursor-pointer shadow-2xs border ${
+                    editDateSynced
+                      ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-200'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/90'
+                  }`}
+                  title="Capturar a data e a hora atual do relógio do seu dispositivo e preencher automaticamente"
                 >
-                  <Clock size={12} />
-                  <span>Agora</span>
+                  <Clock size={12} className={editDateSynced ? 'animate-spin' : 'text-emerald-700'} />
+                  <span>{editDateSynced ? '✓ Atualizado Agora!' : 'Buscar Data/Hora Atual'}</span>
                 </button>
               </div>
-              <input
-                type="datetime-local"
-                required
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono"
-              />
+              <div className="relative">
+                <input
+                  type="datetime-local"
+                  required
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono shadow-2xs"
+                />
+              </div>
             </div>
 
             <div>
