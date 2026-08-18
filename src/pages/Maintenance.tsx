@@ -6,6 +6,7 @@ import {
   Wrench, Plus, Trash2, Search, Calendar, DollarSign, 
   Settings, CheckSquare, Info, ClipboardCheck
 } from 'lucide-react';
+import { formatDateForInput } from '../lib/dateUtils';
 
 interface MaintenanceProps {
   selectedFarmId: string;
@@ -23,7 +24,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
   // Form States
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [formMachineId, setFormMachineId] = useState('');
-  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState(() => formatDateForInput(new Date()));
   const [formMainItem, setFormMainItem] = useState('Motor e Filtros');
   const [formDesc, setFormDesc] = useState('');
   const [formHourKm, setFormHourKm] = useState<number | ''>('');
@@ -94,7 +95,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
   }, [formMachineId, machines]);
 
   const handleOpenAdd = () => {
-    setFormDate(new Date().toISOString().split('T')[0]);
+    setFormDate(formatDateForInput(new Date()));
     setFormDesc('');
     setFormPartsCost('');
     setFormLaborCost('');
@@ -119,7 +120,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
 
   const handleOpenEdit = (log: MaintenanceLog) => {
     setFormMachineId(log.machine_id);
-    setFormDate(log.date.split('T')[0]);
+    setFormDate(formatDateForInput(log.date));
     setFormMainItem(log.main_item);
     setFormDesc(log.service_description);
     setFormHourKm(log.hour_km_at_service);

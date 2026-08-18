@@ -7,6 +7,7 @@ import {
   AlertTriangle, Eye, Info, Filter, Edit, Trash2, 
   ShieldX, Check, Minus, Clock, CheckCircle2, Wrench
 } from 'lucide-react';
+import { formatDateForInput } from '../lib/dateUtils';
 
 interface ChecklistProps {
   selectedFarmId: string;
@@ -184,7 +185,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
   const [formWorkType, setFormWorkType] = useState('Plantio');
   const [formOverallStatus, setFormOverallStatus] = useState<'OK' | 'Prioridade Baixa' | 'Prioridade Média' | 'Prioridade Alta (Máquina Parada)'>('OK');
   const [formFailedNotes, setFormFailedNotes] = useState('');
-  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState(() => formatDateForInput(new Date()));
 
   // Checklist do PDF
   const [pdfItems, setPdfItems] = useState<Record<string, 'SIM' | 'NÃO' | 'N/A'>>(getInitialPdfState());
@@ -263,7 +264,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     setFormFailedNotes('');
     setFormWorkType('Plantio');
     setFormOverallStatus('OK');
-    setFormDate(new Date().toISOString().split('T')[0]);
+    setFormDate(formatDateForInput(new Date()));
 
     setPdfItems(getInitialPdfState());
     setHorimetroRevisao('');

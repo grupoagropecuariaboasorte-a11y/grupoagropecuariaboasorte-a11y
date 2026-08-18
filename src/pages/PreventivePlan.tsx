@@ -7,6 +7,7 @@ import {
   Clock, ArrowRight, Wrench, ChevronRight, Info,
   Filter, Edit, Trash2, FileText, History, ShieldCheck, Check
 } from 'lucide-react';
+import { formatDateForInput } from '../lib/dateUtils';
 
 interface PreventivePlanProps {
   selectedFarmId: string;
@@ -54,7 +55,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
   // Form Perform States (Registrar Manutenção Concluída)
   const [performMachineId, setPerformMachineId] = useState('');
   const [performItem, setPerformItem] = useState('');
-  const [performDate, setPerformDate] = useState(new Date().toISOString().split('T')[0]);
+  const [performDate, setPerformDate] = useState(() => formatDateForInput(new Date()));
   const [performHourKm, setPerformHourKm] = useState<number | ''>('');
   const [performPartsCost, setPerformPartsCost] = useState<number | ''>('');
   const [performLaborCost, setPerformLaborCost] = useState<number | ''>('');
@@ -228,7 +229,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     setPlanItemId(p.plan_item_id);
     setPerformMachineId(p.machine_id);
     setPerformItem(p.maintenance_item);
-    setPerformDate(new Date().toISOString().split('T')[0]);
+    setPerformDate(formatDateForInput(new Date()));
     
     const mach = machines.find(m => m.id === p.machine_id);
     setPerformHourKm(mach ? mach.current_hour_km : '');
@@ -273,7 +274,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     setEditLogId(log.id);
     setEditLogMachineId(log.machine_id);
     setEditLogItem(log.main_item || 'Geral');
-    setEditLogDate(log.date ? log.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setEditLogDate(log.date ? formatDateForInput(log.date) : formatDateForInput(new Date()));
     setEditLogHourKm(log.hour_km_at_service ?? '');
     setEditLogPartsCost(log.parts_cost ?? '');
     setEditLogLaborCost(log.labor_cost ?? '');

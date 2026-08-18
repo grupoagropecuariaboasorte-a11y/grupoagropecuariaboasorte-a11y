@@ -7,6 +7,7 @@ import {
   ArrowRight, CheckCircle2, Clock, PlayCircle, Trash2, 
   AlertTriangle, Wrench, ArrowLeft, Filter, Edit
 } from 'lucide-react';
+import { formatDateForInput } from '../lib/dateUtils';
 
 interface WorkOrdersProps {
   selectedFarmId: string;
@@ -142,7 +143,7 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
     setEditPriority(normalizePriority(wo.priority));
     setEditStatus(normalizeStatus(wo.status));
     setEditAssignedTo(wo.responsible || wo.assigned_to || '');
-    setEditOpenDate(wo.open_date ? wo.open_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setEditOpenDate(wo.open_date ? formatDateForInput(wo.open_date) : formatDateForInput(new Date()));
     setEditNotes(wo.notes || '');
     setIsEditOpen(true);
   };
@@ -227,7 +228,7 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
   const handleOpenCompleteModal = (wo: WorkOrder) => {
     const mach = machines.find(m => m.id === wo.machine_id);
     setCompleteWo(wo);
-    setCompleteCloseDate(new Date().toISOString().split('T')[0]);
+    setCompleteCloseDate(formatDateForInput(new Date()));
     setCompleteResponsible(wo.responsible || wo.assigned_to || userEmail || 'Mecânico');
     setCompleteServiceReport(wo.reason || wo.description || '');
     setCompletePartsReplaced('');
@@ -245,7 +246,7 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
 
     try {
       setSubmitting(true);
-      const closeDate = completeCloseDate || new Date().toISOString().split('T')[0];
+      const closeDate = completeCloseDate || formatDateForInput(new Date());
       const resp = completeResponsible.trim() || userEmail || 'Mecânico';
 
       // 1. Atualizar a O.S. como Concluída

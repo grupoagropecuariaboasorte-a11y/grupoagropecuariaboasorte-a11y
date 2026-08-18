@@ -7,6 +7,7 @@ import {
   TrendingUp, ArrowDownCircle, ArrowUpCircle, Info,
   Pencil, Trash2, XCircle, AlertTriangle, FileText
 } from 'lucide-react';
+import { formatDateForInput } from '../lib/dateUtils';
 
 interface DieselStockProps {
   selectedFarmId: string;
@@ -22,7 +23,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
   // Form States (Adicionar)
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [formFarmId, setFormFarmId] = useState('');
-  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState(() => formatDateForInput(new Date()));
   const [formLiters, setFormLiters] = useState<number | ''>('');
   const [formPricePerLiter, setFormPricePerLiter] = useState<number | ''>(5.85);
   const [formSupplier, setFormSupplier] = useState('');
@@ -82,7 +83,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
   };
 
   const handleOpenAdd = () => {
-    setFormDate(new Date().toISOString().split('T')[0]);
+    setFormDate(formatDateForInput(new Date()));
     setFormLiters('');
     setFormPricePerLiter(5.85);
     setFormSupplier('');

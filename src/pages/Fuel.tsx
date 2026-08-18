@@ -4,8 +4,9 @@ import { FuelLog, Farm, Machine, LookupItem, UserRole, isImplement } from '../ty
 import Modal from '../components/Modal';
 import { 
   Fuel, Plus, Trash2, Search, Calendar, AlertTriangle, 
-  Info, Check, HelpCircle, FileText, Pencil
+  Info, Check, HelpCircle, FileText, Pencil, Clock
 } from 'lucide-react';
+import { formatDateTimeForInput, parseInputDateTimeToISO, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface FuelProps {
   selectedFarmId: string;
@@ -24,7 +25,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [formFarmId, setFormFarmId] = useState('');
   const [formMachineId, setFormMachineId] = useState('');
-  const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 16));
+  const [formDate, setFormDate] = useState(() => formatDateTimeForInput(new Date()));
   const [formFuelType, setFormFuelType] = useState('diesel_s10');
   const [formPumpStart, setFormPumpStart] = useState<number | ''>('');
   const [formPumpEnd, setFormPumpEnd] = useState<number | ''>('');
@@ -217,7 +218,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     setEditingLogId(log.id);
     setEditFarmId(log.farm_id);
     setEditMachineId(log.machine_id);
-    setEditDate(new Date(log.date).toISOString().slice(0, 16));
+    setEditDate(formatDateTimeForInput(log.date));
     setEditFuelType(log.fuel_type);
     setEditPumpStart(log.pump_reading_start);
     setEditPumpEnd(log.pump_reading_end);
@@ -285,7 +286,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       await fleetService.updateFuelLog(editingLogId, {
         farm_id: editFarmId,
         machine_id: editMachineId,
-        date: new Date(editDate).toISOString(),
+        date: parseInputDateTimeToISO(editDate),
         fuel_type: editFuelType,
         pump_reading_start: Number(editPumpStart),
         pump_reading_end: Number(editPumpEnd),
@@ -324,7 +325,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   // SUBMISSÃO DO ABASTECIMENTO COM TRAVA ANTI-DUPLICIDADE
   // =========================================================================
   const handleOpenAdd = async () => {
-    setFormDate(new Date().toISOString().slice(0, 16));
+    setFormDate(formatDateTimeForInput(new Date()));
     setFormPumpEnd('');
     setFormNotes('');
     setFormResponsible('');
@@ -397,7 +398,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       await fleetService.addFuelLog({
         farm_id: formFarmId,
         machine_id: formMachineId,
-        date: new Date(formDate).toISOString(),
+        date: parseInputDateTimeToISO(formDate),
         fuel_type: formFuelType,
         pump_reading_start: startVal,
         pump_reading_end: endVal,
@@ -781,7 +782,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Data / Hora</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500">Data / Hora</label>
+                <button
+                  type="button"
+                  onClick={() => setFormDate(formatDateTimeForInput(new Date()))}
+                  className="text-[11px] font-medium text-[#1B3022] hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Atualizar para a data e hora atual do dispositivo"
+                >
+                  <Clock size={12} />
+                  <span>Agora</span>
+                </button>
+              </div>
               <input
                 type="datetime-local"
                 required
@@ -1038,7 +1050,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Data / Hora</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500">Data / Hora</label>
+                <button
+                  type="button"
+                  onClick={() => setEditDate(formatDateTimeForInput(new Date()))}
+                  className="text-[11px] font-medium text-[#1B3022] hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Atualizar para a data e hora atual do dispositivo"
+                >
+                  <Clock size={12} />
+                  <span>Agora</span>
+                </button>
+              </div>
               <input
                 type="datetime-local"
                 required
