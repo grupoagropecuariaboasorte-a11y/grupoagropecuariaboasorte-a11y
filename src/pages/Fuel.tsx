@@ -6,7 +6,12 @@ import {
   Fuel, Plus, Trash2, Search, Calendar, AlertTriangle, 
   Info, Check, HelpCircle, FileText, Pencil, Clock
 } from 'lucide-react';
-import { formatDateTimeForInput, parseInputDateTimeToISO, formatDisplayDateTime } from '../lib/dateUtils';
+import { 
+  formatDateTimeForInput, 
+  parseInputDateTimeToISO, 
+  formatDisplayDateTime,
+  getDeviceLocalDateTimeString 
+} from '../lib/dateUtils';
 
 interface FuelProps {
   selectedFarmId: string;
@@ -342,7 +347,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   // SUBMISSÃO DO ABASTECIMENTO COM TRAVA ANTI-DUPLICIDADE
   // =========================================================================
   const handleOpenAdd = async () => {
-    setFormDate(formatDateTimeForInput(new Date()));
+    setFormDate(getDeviceLocalDateTimeString());
     setFormPumpEnd('');
     setFormNotes('');
     setFormResponsible('');
@@ -816,7 +821,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   type="button"
                   id="btn-auto-device-datetime-add"
                   onClick={() => {
-                    const nowStr = formatDateTimeForInput(new Date());
+                    const nowStr = getDeviceLocalDateTimeString();
                     setFormDate(nowStr);
                     setAddDateSynced(true);
                     setTimeout(() => setAddDateSynced(false), 2000);
@@ -1096,7 +1101,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   type="button"
                   id="btn-auto-device-datetime-edit"
                   onClick={() => {
-                    const nowStr = formatDateTimeForInput(new Date());
+                    const nowStr = getDeviceLocalDateTimeString();
                     setEditDate(nowStr);
                     setEditDateSynced(true);
                     setTimeout(() => setEditDateSynced(false), 2000);
