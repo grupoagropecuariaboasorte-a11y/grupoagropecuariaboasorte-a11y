@@ -58,6 +58,38 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
   // Histórico de Itens Removidos / Excluídos
   const [deletedLogs, setDeletedLogs] = useState<DeletedItemLog[]>([]);
   const [loadingDeletedLogs, setLoadingDeletedLogs] = useState(false);
+  const [cacheClearing, setCacheClearing] = useState(false);
+  const [cacheSuccessMsg, setCacheSuccessMsg] = useState('');
+
+  const handleForceUpdateApp = async () => {
+    setCacheClearing(true);
+    setCacheSuccessMsg('');
+    try {
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          if (reg.active) {
+            reg.active.postMessage({ type: 'CLEAR_CACHE' });
+            reg.active.postMessage({ type: 'SKIP_WAITING' });
+          }
+          await reg.update().catch(() => {});
+        }
+      }
+      setCacheSuccessMsg('Caches limpos com sucesso! Recarregando aplicação...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } catch (e: any) {
+      setCacheSuccessMsg('Atualizado! Recarregando...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    }
+  };
   const [deletedSearch, setDeletedSearch] = useState('');
   const [selectedModuleFilter, setSelectedModuleFilter] = useState('ALL');
 
@@ -686,6 +718,65 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ATUALIZAÇÃO DO APLICATIVO & SINCRONIZAÇÃO DO TABLET */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-4 mb-4 gap-4">
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <RefreshCw size={16} className="text-emerald-700" />
+              Sincronização & Atualização do Aplicativo no Tablet / Dispositivo
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Se você acabou de publicar melhorias e o tablet Android ainda exibe botões ou telas anteriores, force a limpeza do cache e atualização instantânea.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleForceUpdateApp}
+            disabled={cacheClearing}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            <RefreshCw size={14} className={cacheClearing ? 'animate-spin' : ''} />
+            {cacheClearing ? 'Limpando Cache...' : 'Forçar Atualização do App no Tablet'}
+          </button>
+        </div>
+
+        {cacheSuccessMsg && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold mb-4 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            {cacheSuccessMsg}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fuso Horário Ativo</p>
+            <p className="font-bold text-slate-800 flex items-center gap-1.5">
+              <Clock size={14} className="text-emerald-700" />
+              America/Cuiaba (UTC-4)
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1">
+              Horário oficial de Mato Grosso aplicado automaticamente a todos os lançamentos.
+            </p>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versão do App</p>
+            <p className="font-bold text-slate-800 font-mono">v1.2.5 (PWA / Android Native)</p>
+            <p className="text-[10px] text-slate-500 mt-1">
+              Compatível com Google Chrome, tablets Android e computadores de campo.
+            </p>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Dica para o Tablet Android</p>
+            <p className="text-[11px] text-slate-600 leading-snug">
+              Caso use o app no navegador Chrome do tablet, você também pode arrastar o dedo de cima para baixo na tela (Pull-to-refresh) ou tocar em <strong>&ldquo;Atualizar App&rdquo;</strong> na barra superior.
+            </p>
           </div>
         </div>
       </div>

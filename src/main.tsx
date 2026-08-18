@@ -19,10 +19,21 @@ if (typeof window !== 'undefined') {
         .register('/sw.js')
         .then((registration) => {
           console.log('[PWA] Service Worker registrado com sucesso no escopo:', registration.scope);
+          // Força verificação de atualização no servidor a cada inicialização
+          registration.update().catch(() => {});
         })
         .catch((err) => {
           console.warn('[PWA] Erro ao registrar Service Worker:', err);
         });
+
+      // Escuta mudanças de controlador para recarregar se houver nova versão
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
     });
   }
 }
