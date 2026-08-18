@@ -6,7 +6,7 @@ import {
   Wrench, Plus, Trash2, Search, Calendar, DollarSign, 
   Settings, CheckSquare, Info, ClipboardCheck
 } from 'lucide-react';
-import { formatDateForInput } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
 
 interface MaintenanceProps {
   selectedFarmId: string;
@@ -328,7 +328,7 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/50">
                       <td className="py-4 px-6 text-slate-500 font-mono">
-                        {new Date(log.date).toLocaleDateString('pt-BR')}
+                        {formatDisplayDate(log.date)}
                       </td>
                       <td className="py-4 px-6">
                         {machine ? (

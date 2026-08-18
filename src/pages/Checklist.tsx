@@ -7,7 +7,7 @@ import {
   AlertTriangle, Eye, Info, Filter, Edit, Trash2, 
   ShieldX, Check, Minus, Clock, CheckCircle2, Wrench
 } from 'lucide-react';
-import { formatDateForInput } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
 
 interface ChecklistProps {
   selectedFarmId: string;
@@ -808,7 +808,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                     </p>
                     <p className="flex justify-between">
                       <span className="text-slate-400">Data Lançamento:</span>
-                      <span className="font-mono">{new Date(log.date).toLocaleDateString('pt-BR')}</span>
+                      <span className="font-mono">{formatDisplayDate(log.date)}</span>
                     </p>
                     <p className="flex justify-between">
                       <span className="text-slate-400">Status Validade (7d):</span>
@@ -1214,7 +1214,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 </div>
                 <div>
                   <p className="text-slate-400 text-[10px]">Data de Inspeção</p>
-                  <p className="text-xs text-slate-800 font-mono font-semibold">{new Date(selectedChecklist.date).toLocaleDateString('pt-BR')}</p>
+                  <p className="text-xs text-slate-800 font-mono font-semibold">{formatDisplayDate(selectedChecklist.date)}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 text-[10px]">Operador Vistoriador</p>

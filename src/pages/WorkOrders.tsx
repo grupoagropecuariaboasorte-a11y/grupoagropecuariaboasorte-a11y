@@ -7,7 +7,7 @@ import {
   ArrowRight, CheckCircle2, Clock, PlayCircle, Trash2, 
   AlertTriangle, Wrench, ArrowLeft, Filter, Edit
 } from 'lucide-react';
-import { formatDateForInput } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
 
 interface WorkOrdersProps {
   selectedFarmId: string;
@@ -709,8 +709,8 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                     <div className="flex flex-col">
                       <span className="text-[10px] text-slate-500 font-mono">Técnico: {techText}</span>
-                      {closeDateFormatted && (
-                        <span className="text-[9px] text-emerald-700 font-mono">Concluído: {closeDateFormatted}</span>
+                      {wo.close_date && (
+                        <span className="text-[9px] text-emerald-700 font-mono">Concluído: {formatDisplayDate(wo.close_date)}</span>
                       )}
                     </div>
                     {userRole !== 'viewer' && (

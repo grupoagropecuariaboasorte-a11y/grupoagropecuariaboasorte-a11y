@@ -7,7 +7,7 @@ import {
   TrendingUp, ArrowDownCircle, ArrowUpCircle, Info,
   Pencil, Trash2, XCircle, AlertTriangle, FileText
 } from 'lucide-react';
-import { formatDateForInput } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
 
 interface DieselStockProps {
   selectedFarmId: string;
@@ -383,7 +383,7 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
                   return (
                     <tr key={h.id} className="hover:bg-slate-50">
                       <td className="py-4 px-6 text-slate-550 font-mono">
-                        {new Date(h.entry_date).toLocaleDateString('pt-BR')}
+                        {formatDisplayDate(h.entry_date)}
                       </td>
                       <td className="py-4 px-6 text-slate-800 font-bold">
                         <div>

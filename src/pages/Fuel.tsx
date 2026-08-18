@@ -618,7 +618,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   return (
                     <tr key={log.id} className="hover:bg-slate-50 text-xs text-slate-700 transition-colors">
                       <td className="py-3 px-3 text-slate-550 font-mono">
-                        {new Date(log.date).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                        {formatDisplayDateTime(log.date)}
                       </td>
                       <td className="py-3 px-3">
                         {machine ? (
@@ -752,7 +752,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   return (
                     <tr key={log.id} className="bg-slate-50/40 text-slate-500 hover:bg-slate-50 transition-colors">
                       <td className="py-4 px-6 font-mono line-through decoration-rose-300">
-                        {new Date(log.date).toLocaleDateString('pt-BR')} {new Date(log.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatDisplayDateTime(log.date)}
                       </td>
                       <td className="py-4 px-6">
                         <div className="font-bold line-through decoration-rose-300">{machine?.name || 'N/A'}</div>

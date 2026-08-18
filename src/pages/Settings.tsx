@@ -10,6 +10,7 @@ import {
   Download, Upload, HardDrive, FileJson, CheckCircle2, Check,
   Users, User, History, Search, Filter, Clock, Key, Lock, Eye, EyeOff
 } from 'lucide-react';
+import { formatDisplayDateTime } from '../lib/dateUtils';
 
 interface SettingsProps {
   userRole: UserRole;
@@ -785,7 +786,7 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
               <tbody className="divide-y divide-slate-200 text-xs text-slate-700">
                 {filteredDeletedLogs.map((log) => {
                   const formattedDate = log.deleted_at
-                    ? new Date(log.deleted_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                    ? formatDisplayDateTime(log.deleted_at)
                     : 'N/A';
 
                   let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';

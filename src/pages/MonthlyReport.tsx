@@ -5,6 +5,7 @@ import {
   FileText, Printer, Calendar, Database, Tractor, Fuel, 
   Wrench, CheckSquare, TrendingUp, Sparkles, Eye 
 } from 'lucide-react';
+import { formatDisplayDateTime } from '../lib/dateUtils';
 
 interface MonthlyReportProps {
   selectedFarmId: string;
@@ -210,8 +211,8 @@ export default function MonthlyReport({ selectedFarmId }: MonthlyReportProps) {
             </p>
           </div>
           <div className="text-right text-[10px] text-slate-400 font-mono print:text-slate-500">
-            <p>Gerado em: {new Date().toLocaleString('pt-BR')}</p>
-            <p className="mt-0.5">Sistema Digital FrotaAgro v1.0</p>
+            <p>Gerado em: {formatDisplayDateTime(new Date().toISOString())}</p>
+            <p className="mt-0.5">Sistema Digital FrotaAgro v1.0 (Fuso Cuiabá/MT)</p>
           </div>
         </div>
 

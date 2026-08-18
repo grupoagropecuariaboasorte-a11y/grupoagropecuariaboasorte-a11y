@@ -7,7 +7,7 @@ import {
   Clock, ArrowRight, Wrench, ChevronRight, Info,
   Filter, Edit, Trash2, FileText, History, ShieldCheck, Check
 } from 'lucide-react';
-import { formatDateForInput } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
 
 interface PreventivePlanProps {
   selectedFarmId: string;
@@ -616,7 +616,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                         <div>
                           <p className="text-slate-400 leading-normal">Última Data</p>
                           <p className="text-slate-700 font-bold">
-                            {p.last_performed_date && p.last_performed_date !== '1970-01-01' ? new Date(p.last_performed_date).toLocaleDateString('pt-BR') : 'Nunca'}
+                            {p.last_performed_date && p.last_performed_date !== '1970-01-01' ? formatDisplayDate(p.last_performed_date) : 'Nunca'}
                           </p>
                         </div>
                         <div>
@@ -745,7 +745,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                     return (
                       <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-slate-800">
-                          {log.date ? new Date(log.date).toLocaleDateString('pt-BR') : '-'}
+                          {log.date ? formatDisplayDate(log.date) : '-'}
                         </td>
                         <td className="py-3 px-4 font-semibold text-slate-800">
                           <span className="font-mono text-slate-400 text-[10px] block">{mach?.code}</span>
@@ -782,7 +782,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                                 <Edit size={14} />
                               </button>
                               <button
-                                onClick={() => setDeleteTarget({ type: 'log', id: log.id, title: `Lançamento de ${log.main_item} em ${new Date(log.date).toLocaleDateString('pt-BR')}` })}
+                                onClick={() => setDeleteTarget({ type: 'log', id: log.id, title: `Lançamento de ${log.main_item} em ${formatDisplayDate(log.date)}` })}
                                 title="Excluir Lançamento"
                                 className="p-1 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 cursor-pointer transition-colors"
                               >

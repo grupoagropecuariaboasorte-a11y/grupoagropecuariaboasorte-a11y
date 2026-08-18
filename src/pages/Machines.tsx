@@ -7,6 +7,7 @@ import {
   CheckSquare, Calendar, Sliders, ChevronRight, BarChart, Settings
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { formatDisplayDate } from '../lib/dateUtils';
 
 interface MachinesProps {
   selectedFarmId: string;
@@ -635,7 +636,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                       <div>
                         <p className="text-slate-500 font-medium">Data de Aquisição</p>
                         <p className="text-slate-800 font-bold mt-0.5">
-                          {selectedMachine.acquisition_date ? new Date(selectedMachine.acquisition_date).toLocaleDateString('pt-BR') : 'Não informada'}
+                          {selectedMachine.acquisition_date ? formatDisplayDate(selectedMachine.acquisition_date) : 'Não informada'}
                         </p>
                       </div>
                       <div>
@@ -700,7 +701,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           </span>
                         </div>
                         <p className="text-slate-500">
-                          {new Date(log.date).toLocaleDateString('pt-BR')} • {log.responsible || 'Responsável'}
+                          {formatDisplayDate(log.date)} • {log.responsible || 'Responsável'}
                         </p>
                         <p className="text-[10px] text-slate-500 font-mono">
                           Horímetro: {log.hour_km_at_fueling.toLocaleString('pt-BR')} (+{log.hours_km_since_last}h) • {log.consumption_rate ? `${log.consumption_rate} L/h` : 'Consumo N/A'}
@@ -737,7 +738,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                       </div>
                       <p className="text-slate-600">{log.service_description}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
-                        <span>Data: {new Date(log.date).toLocaleDateString('pt-BR')}</span>
+                        <span>Data: {formatDisplayDate(log.date)}</span>
                         <span>Horímetro: {log.hour_km_at_service.toLocaleString('pt-BR')} h/km</span>
                         <span>Responsável: {log.responsible}</span>
                         <span>Peças: {log.parts_replaced || 'Nenhuma'}</span>
@@ -779,13 +780,13 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           </div>
                           <div>
                             <p className="text-slate-400">Última Realização</p>
-                            <p className="text-slate-700 font-bold">{p.last_performed_date && p.last_performed_date !== '1970-01-01' ? new Date(p.last_performed_date).toLocaleDateString('pt-BR') : 'Nunca'}</p>
+                            <p className="text-slate-700 font-bold">{p.last_performed_date && p.last_performed_date !== '1970-01-01' ? formatDisplayDate(p.last_performed_date) : 'Nunca'}</p>
                           </div>
                           {p.next_due_date && (
                             <div>
                               <p className="text-slate-400">Próxima Vencimento</p>
                               <p className={p.days_remaining < 0 ? 'text-red-600 font-bold' : 'text-slate-700 font-bold'}>
-                                {new Date(p.next_due_date).toLocaleDateString('pt-BR')} ({p.days_remaining}d restantes)
+                                {formatDisplayDate(p.next_due_date)} ({p.days_remaining}d restantes)
                               </p>
                             </div>
                           )}
@@ -832,7 +833,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 font-mono">
-                          Data: {new Date(c.date).toLocaleDateString('pt-BR')} • Horímetro: {c.hour_km.toLocaleString('pt-BR')} h/km • Atividade: {c.work_type || 'Geral'}
+                          Data: {formatDisplayDate(c.date)} • Horímetro: {c.hour_km.toLocaleString('pt-BR')} h/km • Atividade: {c.work_type || 'Geral'}
                         </p>
                         {c.failed_items_notes && (
                           <div className="p-2.5 bg-white border border-slate-100 rounded-lg text-[11px] text-slate-500 leading-normal">
