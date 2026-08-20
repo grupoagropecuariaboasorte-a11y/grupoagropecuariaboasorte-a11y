@@ -95,11 +95,10 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
         const initialFarm = selectedFarmId === 'ALL' ? (fList[0]?.id || '') : selectedFarmId;
         setFormFarmId(initialFarm);
-        const onlyMachs = mList.filter(m => !isImplement(m));
-        const farmMachs = onlyMachs.filter(m => m.farm_id === initialFarm);
-        if (farmMachs.length > 0) {
-          setFormMachineId(farmMachs[0].id);
-        } else if (onlyMachs.length > 0) {
+        const onlyMachs = mList
+          .filter(m => !isImplement(m))
+          .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+        if (onlyMachs.length > 0) {
           setFormMachineId(onlyMachs[0].id);
         }
       } catch (err) {
@@ -353,14 +352,15 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     setFormResponsible('');
     const defaultFarm = selectedFarmId === 'ALL' ? (farms[0]?.id || '') : selectedFarmId;
     setFormFarmId(defaultFarm);
-    const nonImplMachines = machines.filter(m => !isImplement(m));
-    const farmMachines = nonImplMachines.filter(m => m.farm_id === defaultFarm);
-    if (farmMachines.length > 0) {
-      setFormMachineId(farmMachines[0].id);
-      setFormHourKm(getMachineEffectiveHourKm(farmMachines[0]));
-    } else if (nonImplMachines.length > 0) {
-      setFormMachineId(nonImplMachines[0].id);
-      setFormHourKm(getMachineEffectiveHourKm(nonImplMachines[0]));
+    const nonImplMachines = machines
+      .filter(m => !isImplement(m))
+      .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+    
+    if (nonImplMachines.length > 0) {
+      const existing = nonImplMachines.find(m => m.id === formMachineId);
+      const chosen = existing || nonImplMachines[0];
+      setFormMachineId(chosen.id);
+      setFormHourKm(getMachineEffectiveHourKm(chosen));
     } else {
       setFormMachineId('');
       setFormHourKm('');
@@ -566,6 +566,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           {machines
             .filter(m => !isImplement(m))
             .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+            .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }))
             .map(m => (
               <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
             ))
@@ -793,14 +794,6 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 onChange={async (e) => {
                   const selected = e.target.value;
                   setFormFarmId(selected);
-                  const farmMachines = machines.filter(m => !isImplement(m) && m.farm_id === selected);
-                  if (farmMachines.length > 0) {
-                    setFormMachineId(farmMachines[0].id);
-                    setFormHourKm(farmMachines[0].current_hour_km || farmMachines[0].initial_hour_km);
-                  } else {
-                    setFormMachineId('');
-                    setFormHourKm('');
-                  }
                   setFormPumpEnd('');
                   if (selected) {
                     await loadPumpSequenceForFarm(selected);
@@ -857,7 +850,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
               >
                 {machines
                   .filter(m => !isImplement(m))
-                  .filter(m => !formFarmId || m.farm_id === formFarmId)
+                  .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }))
                   .map((m) => {
                   const mFarm = farms.find(f => f.id === m.farm_id)?.name;
                   return (
@@ -1137,6 +1130,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
               >
                 {machines
                   .filter(m => !isImplement(m))
+                  .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }))
                   .map((m) => {
                   const mFarm = farms.find(f => f.id === m.farm_id)?.name;
                   return (
