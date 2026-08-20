@@ -595,12 +595,12 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                   className={`border rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 shadow-xs relative ${styles.border}`}
                 >
                   <div>
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3.5 mb-3.5">
-                      <div>
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3.5 mb-3.5">
+                      <div className="min-w-0 flex-1">
                         <span className="font-mono text-[10px] font-bold text-slate-400">{mach?.code}</span>
-                        <h4 className="text-xs font-bold text-slate-800 mt-0.5 truncate max-w-[160px]">{mach?.name}</h4>
+                        <h4 className="text-xs font-bold text-slate-800 mt-0.5 leading-snug break-words">{mach?.name}</h4>
                       </div>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold border rounded-md uppercase tracking-wider ${styles.badge}`}>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold border rounded-md uppercase tracking-wider shrink-0 mt-0.5 ${styles.badge}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${styles.indicator}`} />
                         {p.status}
                       </span>
