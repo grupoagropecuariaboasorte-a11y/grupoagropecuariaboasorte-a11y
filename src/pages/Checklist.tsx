@@ -521,8 +521,9 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
               type="button"
               onClick={() => handleSetCategoryAll(itemsList, 'SIM')}
               className="text-[10px] font-bold px-2.5 py-1 bg-emerald-700 text-white hover:bg-emerald-800 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+              title="Marcar todos como Conforme"
             >
-              <Check size={12} /> Marcar Todos SIM
+              <Check size={13} className="stroke-[3]" /> Marcar Todos
             </button>
             <button
               type="button"
@@ -553,29 +554,32 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                   <button
                     type="button"
                     onClick={() => handleSetPdfItem(item, 'SIM')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                    title="Conforme / Positivo"
+                    className={`w-8 h-7 flex items-center justify-center rounded-lg text-xs font-bold cursor-pointer transition-all ${
                       currentVal === 'SIM'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
                     }`}
                   >
-                    SIM
+                    <Check size={16} className="stroke-[3]" />
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSetPdfItem(item, 'NÃO')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                    title="Não Conforme / Apontando para baixo"
+                    className={`w-8 h-7 flex items-center justify-center rounded-lg text-xs font-bold cursor-pointer transition-all ${
                       currentVal === 'NÃO'
                         ? 'bg-rose-600 text-white shadow-xs'
                         : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
                     }`}
                   >
-                    NÃO
+                    <Check size={16} className="stroke-[3] rotate-180" />
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSetPdfItem(item, 'N/A')}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                    title="Não se aplica"
+                    className={`px-2 h-7 flex items-center justify-center rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
                       currentVal === 'N/A'
                         ? 'bg-slate-600 text-white shadow-xs'
                         : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
@@ -1181,14 +1185,20 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
               return (
                 <div key={item} className="flex justify-between items-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
                   <span className="text-slate-700 font-medium pr-2">{item}</span>
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 flex items-center justify-center ${
                     val === 'SIM' || val === 'OK'
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                       : val === 'NÃO'
                       ? 'bg-rose-100 text-rose-800 border border-rose-200'
                       : 'bg-slate-200 text-slate-700'
                   }`}>
-                    {val}
+                    {val === 'SIM' || val === 'OK' ? (
+                      <Check size={14} className="stroke-[3]" />
+                    ) : val === 'NÃO' ? (
+                      <Check size={14} className="stroke-[3] rotate-180" />
+                    ) : (
+                      'N/A'
+                    )}
                   </span>
                 </div>
               );
