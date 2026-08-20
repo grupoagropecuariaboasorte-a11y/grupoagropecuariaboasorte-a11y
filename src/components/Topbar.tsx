@@ -1,4 +1,4 @@
-import { Calendar, Filter, User, RefreshCw } from 'lucide-react';
+import { Calendar, Filter, User, RefreshCw, Menu } from 'lucide-react';
 import { Farm } from '../types';
 import { useState } from 'react';
 
@@ -10,6 +10,8 @@ interface TopbarProps {
   selectedPeriod: string;
   onChangePeriod: (period: string) => void;
   userEmail: string;
+  onToggleMenu?: () => void;
+  isMenuOpen?: boolean;
 }
 
 export default function Topbar({ 
@@ -19,7 +21,9 @@ export default function Topbar({
   onChangeFarm, 
   selectedPeriod, 
   onChangePeriod,
-  userEmail
+  userEmail,
+  onToggleMenu,
+  isMenuOpen
 }: TopbarProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -43,24 +47,36 @@ export default function Topbar({
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-between no-print shadow-xs">
-      {/* Page Title */}
-      <div>
-        <h2 className="text-base font-bold text-slate-800 tracking-tight">{title}</h2>
+    <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 px-3 sm:px-6 md:px-8 flex items-center justify-between no-print shadow-xs gap-2">
+      {/* Botão de Menu para Tablet/Mobile & Título da Página */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Botão Abrir Abas no Tablet / Smartphone */}
+        <button
+          type="button"
+          onClick={onToggleMenu}
+          className="xl:hidden flex items-center gap-1.5 px-3 py-1.5 bg-[#1B3022] hover:bg-[#122218] text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer shrink-0"
+          title="Abrir menu de abas e módulos"
+          aria-label="Abrir menu"
+        >
+          <Menu size={16} />
+          <span className="text-[11px]">Menu</span>
+        </button>
+
+        <h2 className="text-sm sm:text-base font-bold text-slate-800 tracking-tight truncate">{title}</h2>
       </div>
 
       {/* Global Controls & Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Farm Filter */}
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
-          <Filter size={14} className="text-slate-500 shrink-0" />
-          <span className="text-xs text-slate-500 hidden sm:inline font-medium">Fazenda:</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-xs">
+          <Filter size={13} className="text-slate-500 shrink-0" />
+          <span className="text-xs text-slate-500 hidden md:inline font-medium">Fazenda:</span>
           <select
             value={selectedFarmId}
             onChange={(e) => onChangeFarm(e.target.value)}
-            className="bg-transparent text-xs text-slate-700 focus:outline-hidden font-semibold cursor-pointer pr-1 border-none"
+            className="bg-transparent text-[11px] sm:text-xs text-slate-700 focus:outline-hidden font-semibold cursor-pointer pr-1 border-none max-w-[110px] sm:max-w-[160px] truncate"
           >
-            <option value="ALL">Todas as Fazendas</option>
+            <option value="ALL">Todas Fazendas</option>
             {farms.map(f => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
@@ -68,13 +84,13 @@ export default function Topbar({
         </div>
 
         {/* Period Filter */}
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
-          <Calendar size={14} className="text-slate-500 shrink-0" />
-          <span className="text-xs text-slate-500 hidden sm:inline font-medium">Período:</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-xs">
+          <Calendar size={13} className="text-slate-500 shrink-0" />
+          <span className="text-xs text-slate-500 hidden md:inline font-medium">Período:</span>
           <select
             value={selectedPeriod}
             onChange={(e) => onChangePeriod(e.target.value)}
-            className="bg-transparent text-xs text-slate-700 focus:outline-hidden font-semibold cursor-pointer pr-1 border-none"
+            className="bg-transparent text-[11px] sm:text-xs text-slate-700 focus:outline-hidden font-semibold cursor-pointer pr-1 border-none"
           >
             <option value="ALL">Qualquer Período</option>
             <option value="30_DAYS">Últimos 30 Dias</option>
@@ -95,9 +111,9 @@ export default function Topbar({
         </button>
 
         {/* User indicator */}
-        <div className="flex items-center gap-2 bg-[#1B3022]/10 border border-[#1B3022]/20 rounded-xl px-3 py-1.5 shadow-xs">
-          <User size={14} className="text-[#1B3022]" />
-          <span className="text-xs text-[#1B3022] font-semibold truncate max-w-[120px] hidden md:inline">
+        <div className="hidden sm:flex items-center gap-2 bg-[#1B3022]/10 border border-[#1B3022]/20 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-xs">
+          <User size={13} className="text-[#1B3022]" />
+          <span className="text-xs text-[#1B3022] font-semibold truncate max-w-[100px] sm:max-w-[120px] hidden md:inline">
             {userEmail.split('@')[0]}
           </span>
         </div>

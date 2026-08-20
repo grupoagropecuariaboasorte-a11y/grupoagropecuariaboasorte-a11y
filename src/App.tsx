@@ -124,6 +124,12 @@ function AppContent() {
   useTablet12Inch(); // Ativa detecção automática de tablets 12.8" (11" a 13.5") e aplica classes CSS touch-optimized
   const location = useLocation();
   const [farms, setFarms] = useState<Farm[]>([]);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Fecha o menu automaticamente quando a rota mudar
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   // Estados de Sessão
   const [userEmail, setUserEmail] = useState<string>(() => localStorage.getItem('agro_user_email') || '');
@@ -299,12 +305,18 @@ function AppContent() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans select-none">
-      {/* Sidebar de Navegação - Esconder na Impressão */}
-      <Sidebar userEmail={userEmail} userRole={userRole} onLogout={handleLogout} />
+    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans select-none relative">
+      {/* Sidebar de Navegação - Esconder na Impressão e com modo drawer em Tablet/Mobile */}
+      <Sidebar 
+        userEmail={userEmail} 
+        userRole={userRole} 
+        onLogout={handleLogout}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+      />
 
       {/* Container Principal */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         
         {/* Topbar com filtros Globais - Esconder na Impressão */}
         <Topbar
@@ -315,10 +327,12 @@ function AppContent() {
           selectedPeriod={selectedPeriod}
           onChangePeriod={setSelectedPeriod}
           userEmail={userEmail}
+          onToggleMenu={() => setIsMobileMenuOpen(prev => !prev)}
+          isMenuOpen={isMobileMenuOpen}
         />
 
-        {/* Corpo da Página / Scroll Área */}
-        <main className="flex-1 overflow-y-auto px-8 py-6 print:p-0 print:overflow-visible">
+        {/* Corpo da Página / Scroll Área - Máxima visualização em Tablet e Mobile */}
+        <main className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 print:p-0 print:overflow-visible">
           <Routes>
             <Route 
               path="/" 
