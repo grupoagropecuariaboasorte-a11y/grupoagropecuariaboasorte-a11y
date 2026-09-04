@@ -18,6 +18,7 @@ import ChecklistPage from './pages/Checklist';
 import WorkOrders from './pages/WorkOrders';
 import CostRanking from './pages/CostRanking';
 import MonthlyReport from './pages/MonthlyReport';
+import MachineReport from './pages/MachineReport';
 import SettingsPage from './pages/Settings';
 
 // Importar Componentes Compartilhados
@@ -39,6 +40,7 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/ordens-servico',
     '/ranking-custos',
     '/relatorio-mensal',
+    '/relatorio-maquinas',
     '/configuracoes'
   ],
   control: [
@@ -52,7 +54,8 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/checklist',
     '/ordens-servico',
     '/ranking-custos',
-    '/relatorio-mensal'
+    '/relatorio-mensal',
+    '/relatorio-maquinas'
   ],
   fuel: [
     '/combustivel',
@@ -75,7 +78,8 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/checklist',
     '/ordens-servico',
     '/ranking-custos',
-    '/relatorio-mensal'
+    '/relatorio-mensal',
+    '/relatorio-maquinas'
   ],
   viewer: [
     '/',
@@ -88,7 +92,8 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/checklist',
     '/ordens-servico',
     '/ranking-custos',
-    '/relatorio-mensal'
+    '/relatorio-mensal',
+    '/relatorio-maquinas'
   ],
   registered: []
 };
@@ -299,6 +304,7 @@ function AppContent() {
       case '/ordens-servico': return 'Quadro de Ordens de Serviço';
       case '/ranking-custos': return 'Ranking de Custos Acumulados';
       case '/relatorio-mensal': return 'Relatório Mensal de Fechamento';
+      case '/relatorio-maquinas': return 'Relatório Individual de Máquinas e Veículos';
       case '/configuracoes': return 'Administração e Configurações';
       default: return 'Frota Agro';
     }
@@ -419,6 +425,14 @@ function AppContent() {
               element={
                 <ProtectedRoute path="/relatorio-mensal" userRole={userRole}>
                   <MonthlyReport selectedFarmId={selectedFarmId} />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/relatorio-maquinas" 
+              element={
+                <ProtectedRoute path="/relatorio-maquinas" userRole={userRole}>
+                  <MachineReport selectedFarmId={selectedFarmId} userRole={userRole} userEmail={userEmail} />
                 </ProtectedRoute>
               } 
             />

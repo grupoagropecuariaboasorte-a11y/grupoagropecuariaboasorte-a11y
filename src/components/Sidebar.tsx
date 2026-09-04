@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Tractor, Layers, Fuel, Database, Wrench, 
   CalendarDays, CheckSquare, TrendingUp, ClipboardList, 
-  FileText, Settings, LogOut, Info, X
+  FileText, FileSpreadsheet, Settings, LogOut, Info, X
 } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabaseClient';
 import AppLogo from './AppLogo';
@@ -64,6 +64,7 @@ export default function Sidebar({ userRole, userEmail, onLogout, isOpen = false,
     { path: '/ordens-servico', label: 'Ordens de Serviço', icon: ClipboardList, roles: ['admin', 'control', 'mechanic', 'editor', 'viewer'] },
     { path: '/ranking-custos', label: 'Ranking de Custos', icon: TrendingUp, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/relatorio-mensal', label: 'Relatório Mensal', icon: FileText, roles: ['admin', 'control', 'editor', 'viewer'] },
+    { path: '/relatorio-maquinas', label: 'Relatório de Máquinas', icon: FileSpreadsheet, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
   ];
 
