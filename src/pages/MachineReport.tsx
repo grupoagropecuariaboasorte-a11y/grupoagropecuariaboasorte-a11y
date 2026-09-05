@@ -37,6 +37,52 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMachineId, setSelectedMachineId] = useState<string>('');
 
+  // Seleção de seções ativas para o Relatório/PDF (1 a 7)
+  const [selectedSections, setSelectedSections] = useState<Record<number, boolean>>({
+    1: true,
+    2: true,
+    3: true,
+    4: true,
+    5: true,
+    6: true,
+    7: true
+  });
+
+  const toggleSection = (sectionNum: number) => {
+    setSelectedSections(prev => ({
+      ...prev,
+      [sectionNum]: !prev[sectionNum]
+    }));
+  };
+
+  const selectAllSections = () => {
+    setSelectedSections({
+      1: true,
+      2: true,
+      3: true,
+      4: true,
+      5: true,
+      6: true,
+      7: true
+    });
+  };
+
+  const deselectAllSections = () => {
+    setSelectedSections({
+      1: false,
+      2: false,
+      3: false,
+      4: false,
+      5: false,
+      6: false,
+      7: false
+    });
+  };
+
+  const selectedSectionsCount = useMemo(() => {
+    return Object.values(selectedSections).filter(Boolean).length;
+  }, [selectedSections]);
+
   // Sincronizar filtro global de fazenda
   useEffect(() => {
     setLocalFarmId(selectedFarmId);
@@ -231,12 +277,13 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
   // Ação de Impressão / Salvar PDF
   const handlePrint = () => {
+    if (!selectedMachine || selectedSectionsCount === 0) return;
     window.print();
   };
 
   // Ação de Exportar CSV (Excel formatado para padrão brasileiro com delimitador ';' e BOM UTF-8)
   const handleExportCsv = () => {
-    if (!selectedMachine || !machineData) return;
+    if (!selectedMachine || !machineData || selectedSectionsCount === 0) return;
 
     const escapeCsv = (val: any) => {
       if (val === null || val === undefined) return '""';
@@ -254,150 +301,165 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // Título Geral
     rows.push(`"GRUPO AGROPECUÁRIA BOA SORTE - RELATÓRIO INDIVIDUAL DE ATIVO (DOSSIÊ TÉCNICO)"`);
     rows.push(`"Data de Emissão";${escapeCsv(formatDisplayDateTime(new Date().toISOString()))};"Emitido por";${escapeCsv(userEmail || 'Administração')}`);
+    rows.push(`"Seções Selecionadas";"${selectedSectionsCount} de 7"`);
     rows.push('');
 
     // SEÇÃO 1: FICHA CADASTRAL
-    rows.push(`"--- 1. IDENTIFICAÇÃO CADASTRAL E DADOS TÉCNICOS ---"`);
-    rows.push(`"Código";"Nome da Máquina";"Tipo";"Marca";"Modelo";"Ano";"Chassi / Série";"Fazenda Alocada";"Status Operacional";"Motorista / Operador";"Data de Aquisição";"Horímetro Inicial";"Horímetro Atual";"Horas Trabalhadas Acumuladas"`);
-    rows.push([
-      escapeCsv(selectedMachine.code),
-      escapeCsv(selectedMachine.name),
-      escapeCsv(selectedMachine.type),
-      escapeCsv(selectedMachine.brand),
-      escapeCsv(selectedMachine.model),
-      escapeCsv(selectedMachine.year),
-      escapeCsv(selectedMachine.serial_number || 'N/A'),
-      escapeCsv(machineFarm?.name || 'N/A'),
-      escapeCsv(selectedMachine.status),
-      escapeCsv(selectedMachine.driver_name || 'Não vinculado'),
-      escapeCsv(formatDisplayDate(selectedMachine.acquisition_date)),
-      escapeCsv(formatNumberBr(selectedMachine.initial_hour_km, 1)),
-      escapeCsv(formatNumberBr(machineData.currentEffectiveHour, 1)),
-      escapeCsv(formatNumberBr(machineData.hoursWorked, 1))
-    ].join(';'));
-    rows.push('');
+    if (selectedSections[1]) {
+      rows.push(`"--- 1. IDENTIFICAÇÃO CADASTRAL E DADOS TÉCNICOS ---"`);
+      rows.push(`"Código";"Nome da Máquina";"Tipo";"Marca";"Modelo";"Ano";"Chassi / Série";"Fazenda Alocada";"Status Operacional";"Motorista / Operador";"Data de Aquisição";"Horímetro Inicial";"Horímetro Atual";"Horas Trabalhadas Acumuladas"`);
+      rows.push([
+        escapeCsv(selectedMachine.code),
+        escapeCsv(selectedMachine.name),
+        escapeCsv(selectedMachine.type),
+        escapeCsv(selectedMachine.brand),
+        escapeCsv(selectedMachine.model),
+        escapeCsv(selectedMachine.year),
+        escapeCsv(selectedMachine.serial_number || 'N/A'),
+        escapeCsv(machineFarm?.name || 'N/A'),
+        escapeCsv(selectedMachine.status),
+        escapeCsv(selectedMachine.driver_name || 'Não vinculado'),
+        escapeCsv(formatDisplayDate(selectedMachine.acquisition_date)),
+        escapeCsv(formatNumberBr(selectedMachine.initial_hour_km, 1)),
+        escapeCsv(formatNumberBr(machineData.currentEffectiveHour, 1)),
+        escapeCsv(formatNumberBr(machineData.hoursWorked, 1))
+      ].join(';'));
+      rows.push('');
+    }
 
     // SEÇÃO 2: INDICADORES CONSOLIDADOS E CUSTOS
-    rows.push(`"--- 2. INDICADORES CONSOLIDADOS E RESUMO FINANCEIRO ---"`);
-    rows.push(`"Indicador";"Valor"`);
-    rows.push(`"Total Abastecido (Litros)";"${formatNumberBr(machineData.totalLiters, 1)} L"`);
-    rows.push(`"Total Gasto em Combustível (R$)";"R$ ${formatNumberBr(machineData.totalFuelCost, 2)}"`);
-    rows.push(`"Média de Consumo (L/h ou L/km)";"${formatNumberBr(machineData.avgConsumption, 2)}"`);
-    rows.push(`"Total Gasto em Peças (R$)";"R$ ${formatNumberBr(machineData.totalPartsCost, 2)}"`);
-    rows.push(`"Total Gasto em Mão de Obra (R$)";"R$ ${formatNumberBr(machineData.totalLaborCost, 2)}"`);
-    rows.push(`"Total Gasto em Manutenções (R$)";"R$ ${formatNumberBr(machineData.totalMaintenanceCost, 2)}"`);
-    rows.push(`"Custo Operacional Total Acumulado (R$)";"R$ ${formatNumberBr(machineData.totalOperationalCost, 2)}"`);
-    rows.push(`"Custo por Hora Trabalhada (R$/h)";"R$ ${formatNumberBr(machineData.costPerHourWorked, 2)}"`);
-    rows.push(`"Total de Abastecimentos Registrados";"${machineData.fLogs.length}"`);
-    rows.push(`"Total de Manutenções Registradas";"${machineData.mLogs.length}"`);
-    rows.push(`"Total de Vistorias Checklist Registradas";"${machineData.chkLogs.length}"`);
-    rows.push(`"Total de Ordens de Serviço (O.S.)";"${machineData.wOrders.length}"`);
-    rows.push('');
+    if (selectedSections[2]) {
+      rows.push(`"--- 2. INDICADORES CONSOLIDADOS E RESUMO FINANCEIRO ---"`);
+      rows.push(`"Indicador";"Valor"`);
+      rows.push(`"Total Abastecido (Litros)";"${formatNumberBr(machineData.totalLiters, 1)} L"`);
+      rows.push(`"Total Gasto em Combustível (R$)";"R$ ${formatNumberBr(machineData.totalFuelCost, 2)}"`);
+      rows.push(`"Média de Consumo (L/h ou L/km)";"${formatNumberBr(machineData.avgConsumption, 2)}"`);
+      rows.push(`"Total Gasto em Peças (R$)";"R$ ${formatNumberBr(machineData.totalPartsCost, 2)}"`);
+      rows.push(`"Total Gasto em Mão de Obra (R$)";"R$ ${formatNumberBr(machineData.totalLaborCost, 2)}"`);
+      rows.push(`"Total Gasto em Manutenções (R$)";"R$ ${formatNumberBr(machineData.totalMaintenanceCost, 2)}"`);
+      rows.push(`"Custo Operacional Total Acumulado (R$)";"R$ ${formatNumberBr(machineData.totalOperationalCost, 2)}"`);
+      rows.push(`"Custo por Hora Trabalhada (R$/h)";"R$ ${formatNumberBr(machineData.costPerHourWorked, 2)}"`);
+      rows.push(`"Total de Abastecimentos Registrados";"${machineData.fLogs.length}"`);
+      rows.push(`"Total de Manutenções Registradas";"${machineData.mLogs.length}"`);
+      rows.push(`"Total de Vistorias Checklist Registradas";"${machineData.chkLogs.length}"`);
+      rows.push(`"Total de Ordens de Serviço (O.S.)";"${machineData.wOrders.length}"`);
+      rows.push('');
+    }
 
     // SEÇÃO 3: CRONOGRAMA DO PLANO PREVENTIVO
-    rows.push(`"--- 3. PLANO PREVENTIVO E PRÓXIMAS REVISÕES ---"`);
-    rows.push(`"Item de Manutenção";"Intervalo Horas/KM";"Intervalo Dias";"Última Realização (Data)";"Última Realização (Horímetro)";"Horímetro Atual";"Horímetro Próxima Revisão";"Saldo Horas Restantes";"Data Próxima Revisão";"Saldo Dias Restantes";"Status da Revisão"`);
-    if (machineData.prevItems.length > 0) {
-      machineData.prevItems.forEach(item => {
-        const nextHour = (item.last_performed_hour_km || 0) + (item.interval_hour_km || 0);
-        rows.push([
-          escapeCsv(item.maintenance_item),
-          escapeCsv(item.interval_hour_km ? `${item.interval_hour_km} h/km` : '-'),
-          escapeCsv(item.interval_days ? `${item.interval_days} dias` : '-'),
-          escapeCsv(formatDisplayDate(item.last_performed_date)),
-          escapeCsv(item.last_performed_hour_km ? formatNumberBr(item.last_performed_hour_km, 1) : '-'),
-          escapeCsv(formatNumberBr(machineData.currentEffectiveHour, 1)),
-          escapeCsv(item.interval_hour_km ? formatNumberBr(nextHour, 1) : '-'),
-          escapeCsv(item.hour_km_remaining !== undefined ? formatNumberBr(item.hour_km_remaining, 1) : '-'),
-          escapeCsv(formatDisplayDate(item.next_due_date)),
-          escapeCsv(item.days_remaining !== undefined ? `${item.days_remaining} dias` : '-'),
-          escapeCsv(item.status)
-        ].join(';'));
-      });
-    } else {
-      rows.push(`"Nenhum item do plano preventivo configurado para esta máquina"`);
+    if (selectedSections[3]) {
+      rows.push(`"--- 3. PLANO PREVENTIVO E PRÓXIMAS REVISÕES ---"`);
+      rows.push(`"Item de Manutenção";"Intervalo Horas/KM";"Intervalo Dias";"Última Realização (Data)";"Última Realização (Horímetro)";"Horímetro Atual";"Horímetro Próxima Revisão";"Saldo Horas Restantes";"Data Próxima Revisão";"Saldo Dias Restantes";"Status da Revisão"`);
+      if (machineData.prevItems.length > 0) {
+        machineData.prevItems.forEach(item => {
+          const nextHour = (item.last_performed_hour_km || 0) + (item.interval_hour_km || 0);
+          rows.push([
+            escapeCsv(item.maintenance_item),
+            escapeCsv(item.interval_hour_km ? `${item.interval_hour_km} h/km` : '-'),
+            escapeCsv(item.interval_days ? `${item.interval_days} dias` : '-'),
+            escapeCsv(formatDisplayDate(item.last_performed_date)),
+            escapeCsv(item.last_performed_hour_km ? formatNumberBr(item.last_performed_hour_km, 1) : '-'),
+            escapeCsv(formatNumberBr(machineData.currentEffectiveHour, 1)),
+            escapeCsv(item.interval_hour_km ? formatNumberBr(nextHour, 1) : '-'),
+            escapeCsv(item.hour_km_remaining !== undefined ? formatNumberBr(item.hour_km_remaining, 1) : '-'),
+            escapeCsv(formatDisplayDate(item.next_due_date)),
+            escapeCsv(item.days_remaining !== undefined ? `${item.days_remaining} dias` : '-'),
+            escapeCsv(item.status)
+          ].join(';'));
+        });
+      } else {
+        rows.push(`"Nenhum item do plano preventivo configurado para esta máquina"`);
+      }
+      rows.push('');
     }
-    rows.push('');
 
     // SEÇÃO 4: ORDENS DE SERVIÇO
-    rows.push(`"--- 4. ORDENS DE SERVIÇO (O.S.) ---"`);
-    rows.push(`"Número O.S.";"Data Abertura";"Motivo / Descrição";"Prioridade";"Status";"Data Fechamento";"Responsável"`);
-    if (machineData.wOrders.length > 0) {
-      machineData.wOrders.forEach(wo => {
-        rows.push([
-          escapeCsv(wo.os_number ? `OS-${wo.os_number}` : wo.id.substring(0, 8)),
-          escapeCsv(formatDisplayDate(wo.open_date)),
-          escapeCsv(wo.reason || wo.description || '-'),
-          escapeCsv(wo.priority),
-          escapeCsv(wo.status),
-          escapeCsv(formatDisplayDate(wo.close_date)),
-          escapeCsv(wo.assigned_to || wo.responsible || '-')
-        ].join(';'));
-      });
-    } else {
-      rows.push(`"Nenhuma ordem de serviço registrada para este equipamento"`);
+    if (selectedSections[4]) {
+      rows.push(`"--- 4. ORDENS DE SERVIÇO (O.S.) ---"`);
+      rows.push(`"Número O.S.";"Data Abertura";"Motivo / Descrição";"Prioridade";"Status";"Data Fechamento";"Responsável"`);
+      if (machineData.wOrders.length > 0) {
+        machineData.wOrders.forEach(wo => {
+          rows.push([
+            escapeCsv(wo.os_number ? `OS-${wo.os_number}` : wo.id.substring(0, 8)),
+            escapeCsv(formatDisplayDate(wo.open_date)),
+            escapeCsv(wo.reason || wo.description || '-'),
+            escapeCsv(wo.priority),
+            escapeCsv(wo.status),
+            escapeCsv(formatDisplayDate(wo.close_date)),
+            escapeCsv(wo.assigned_to || wo.responsible || '-')
+          ].join(';'));
+        });
+      } else {
+        rows.push(`"Nenhuma ordem de serviço registrada para este equipamento"`);
+      }
+      rows.push('');
     }
-    rows.push('');
 
     // SEÇÃO 5: HISTÓRICO DE MANUTENÇÕES
-    rows.push(`"--- 5. HISTÓRICO DE MANUTENÇÕES E OFICINAS ---"`);
-    rows.push(`"Data";"Horímetro/KM";"Tipo";"Descrição do Serviço";"Peças Substituídas";"Custo Peças (R$)";"Custo Mão de Obra (R$)";"Custo Total (R$)";"Mecânico / Oficina"`);
-    if (machineData.mLogs.length > 0) {
-      machineData.mLogs.forEach(m => {
-        rows.push([
-          escapeCsv(formatDisplayDate(m.date)),
-          escapeCsv(formatNumberBr(m.hour_km_at_service, 1)),
-          escapeCsv(m.type),
-          escapeCsv(m.service_description),
-          escapeCsv(m.parts_replaced || '-'),
-          escapeCsv(formatNumberBr(m.parts_cost, 2)),
-          escapeCsv(formatNumberBr(m.labor_cost, 2)),
-          escapeCsv(formatNumberBr(m.total_cost, 2)),
-          escapeCsv(m.responsible || m.location_shop || '-')
-        ].join(';'));
-      });
-    } else {
-      rows.push(`"Nenhuma manutenção registrada para este equipamento"`);
+    if (selectedSections[5]) {
+      rows.push(`"--- 5. HISTÓRICO DE MANUTENÇÕES E OFICINAS ---"`);
+      rows.push(`"Data";"Horímetro/KM";"Tipo";"Descrição do Serviço";"Peças Substituídas";"Custo Peças (R$)";"Custo Mão de Obra (R$)";"Custo Total (R$)";"Mecânico / Oficina"`);
+      if (machineData.mLogs.length > 0) {
+        machineData.mLogs.forEach(m => {
+          rows.push([
+            escapeCsv(formatDisplayDate(m.date)),
+            escapeCsv(formatNumberBr(m.hour_km_at_service, 1)),
+            escapeCsv(m.type),
+            escapeCsv(m.service_description),
+            escapeCsv(m.parts_replaced || '-'),
+            escapeCsv(formatNumberBr(m.parts_cost, 2)),
+            escapeCsv(formatNumberBr(m.labor_cost, 2)),
+            escapeCsv(formatNumberBr(m.total_cost, 2)),
+            escapeCsv(m.responsible || m.location_shop || '-')
+          ].join(';'));
+        });
+      } else {
+        rows.push(`"Nenhuma manutenção registrada para este equipamento"`);
+      }
+      rows.push('');
     }
-    rows.push('');
 
     // SEÇÃO 6: HISTÓRICO DE ABASTECIMENTOS
-    rows.push(`"--- 6. HISTÓRICO DE ABASTECIMENTOS DE COMBUSTÍVEL ---"`);
-    rows.push(`"Data";"Horímetro/KM";"Tipo Combustível";"Litros Fornecidos";"Preço por Litro (R$)";"Valor Total (R$)";"Consumo Calculado";"Posto / Fornecedor";"Responsável"`);
-    if (machineData.fLogs.length > 0) {
-      machineData.fLogs.forEach(f => {
-        rows.push([
-          escapeCsv(formatDisplayDateTime(f.date)),
-          escapeCsv(formatNumberBr(f.hour_km_at_fueling, 1)),
-          escapeCsv(f.fuel_type || 'Diesel'),
-          escapeCsv(formatNumberBr(f.liters_supplied, 1)),
-          escapeCsv(formatNumberBr(f.price_per_liter, 2)),
-          escapeCsv(formatNumberBr(f.total_value, 2)),
-          escapeCsv(f.consumption_rate ? formatNumberBr(f.consumption_rate, 2) : '-'),
-          escapeCsv(f.supplier || '-'),
-          escapeCsv(f.responsible || '-')
-        ].join(';'));
-      });
-    } else {
-      rows.push(`"Nenhum abastecimento registrado para este equipamento"`);
+    if (selectedSections[6]) {
+      rows.push(`"--- 6. HISTÓRICO DE ABASTECIMENTOS DE COMBUSTÍVEL ---"`);
+      rows.push(`"Data";"Horímetro/KM";"Tipo Combustível";"Litros Fornecidos";"Preço por Litro (R$)";"Valor Total (R$)";"Consumo Calculado";"Posto / Fornecedor";"Responsável"`);
+      if (machineData.fLogs.length > 0) {
+        machineData.fLogs.forEach(f => {
+          rows.push([
+            escapeCsv(formatDisplayDateTime(f.date)),
+            escapeCsv(formatNumberBr(f.hour_km_at_fueling, 1)),
+            escapeCsv(f.fuel_type || 'Diesel'),
+            escapeCsv(formatNumberBr(f.liters_supplied, 1)),
+            escapeCsv(formatNumberBr(f.price_per_liter, 2)),
+            escapeCsv(formatNumberBr(f.total_value, 2)),
+            escapeCsv(f.consumption_rate ? formatNumberBr(f.consumption_rate, 2) : '-'),
+            escapeCsv(f.supplier || '-'),
+            escapeCsv(f.responsible || '-')
+          ].join(';'));
+        });
+      } else {
+        rows.push(`"Nenhum abastecimento registrado para este equipamento"`);
+      }
+      rows.push('');
     }
-    rows.push('');
 
     // SEÇÃO 7: HISTÓRICO DE CHECKLISTS
-    rows.push(`"--- 7. HISTÓRICO DE CHECKLISTS E VISTORIAS 7 DIAS ---"`);
-    rows.push(`"Data da Vistoria";"Horímetro/KM";"Operador / Inspetor";"Status Geral";"Observações / Itens Reprovados"`);
-    if (machineData.chkLogs.length > 0) {
-      machineData.chkLogs.forEach(c => {
-        rows.push([
-          escapeCsv(formatDisplayDateTime(c.date)),
-          escapeCsv(formatNumberBr(c.hour_km, 1)),
-          escapeCsv(c.operator_name),
-          escapeCsv(c.overall_status),
-          escapeCsv(c.failed_items_notes || '-')
-        ].join(';'));
-      });
-    } else {
-      rows.push(`"Nenhuma vistoria checklist registrada para este equipamento"`);
+    if (selectedSections[7]) {
+      rows.push(`"--- 7. HISTÓRICO DE CHECKLISTS E VISTORIAS 7 DIAS ---"`);
+      rows.push(`"Data da Vistoria";"Horímetro/KM";"Operador / Inspetor";"Status Geral";"Observações / Itens Reprovados"`);
+      if (machineData.chkLogs.length > 0) {
+        machineData.chkLogs.forEach(c => {
+          rows.push([
+            escapeCsv(formatDisplayDateTime(c.date)),
+            escapeCsv(formatNumberBr(c.hour_km, 1)),
+            escapeCsv(c.operator_name),
+            escapeCsv(c.overall_status),
+            escapeCsv(c.failed_items_notes || '-')
+          ].join(';'));
+        });
+      } else {
+        rows.push(`"Nenhuma vistoria checklist registrada para este equipamento"`);
+      }
     }
 
     // Gerar e baixar arquivo CSV com BOM para garantir caracteres acentuados no Excel
@@ -443,22 +505,22 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={handleExportCsv}
-              disabled={!selectedMachine}
-              className="flex items-center gap-2 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
-              title="Baixar planilha completa compatível com Microsoft Excel"
+              disabled={!selectedMachine || selectedSectionsCount === 0}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+              title={selectedSectionsCount === 0 ? 'Selecione ao menos uma seção abaixo para exportar' : 'Baixar planilha completa compatível com Microsoft Excel'}
             >
               <Download size={15} />
-              <span>Exportar CSV (Excel)</span>
+              <span>Exportar CSV ({selectedSectionsCount}/7)</span>
             </button>
 
             <button
               onClick={handlePrint}
-              disabled={!selectedMachine}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#1B3022] hover:opacity-90 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
-              title="Imprimir ou Salvar em formato PDF"
+              disabled={!selectedMachine || selectedSectionsCount === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1B3022] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+              title={selectedSectionsCount === 0 ? 'Selecione ao menos uma seção abaixo para gerar o PDF' : 'Imprimir ou Salvar em formato PDF'}
             >
               <Printer size={15} />
-              <span>Salvar em PDF / Imprimir</span>
+              <span>Salvar em PDF / Imprimir ({selectedSectionsCount}/7)</span>
             </button>
           </div>
         </div>
@@ -625,510 +687,846 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
             </div>
           </div>
 
-          {/* SEÇÃO 1: DADOS CADASTRAIS E TÉCNICOS (GRID COMPACTA) */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 print:bg-white print:border-slate-300">
-            <h3 className="text-[10px] uppercase font-bold text-slate-700 tracking-wider mb-3 flex items-center gap-1.5 border-b border-slate-200 pb-1.5 print:text-black print:border-slate-300">
-              <Info size={12} className="text-[#1B3022]" />
-              1. Ficha Cadastral e Especificações do Fabricante
-            </h3>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-2 text-xs">
+          {/* BARRA DE CONTROLE RÁPIDO DAS SEÇÕES PARA O LAUDO (PRINT:HIDDEN) */}
+          <div className="print:hidden bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={16} className="text-[#1B3022] shrink-0" />
               <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Código</span>
-                <span className="font-mono font-bold text-[#1B3022] print:text-black">{selectedMachine.code}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Tipo de Ativo</span>
-                <span className="font-semibold text-slate-800 print:text-black capitalize">{selectedMachine.type}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Marca / Fabricante</span>
-                <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.brand || '-'}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Modelo</span>
-                <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.model || '-'}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Ano Fabricação</span>
-                <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.year || '-'}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Chassi / N° de Série</span>
-                <span className="font-mono font-semibold text-slate-800 print:text-black text-[11px] truncate block" title={selectedMachine.serial_number}>
-                  {selectedMachine.serial_number || 'Não informado'}
+                <span className="text-xs font-bold text-slate-800 block">
+                  Caixas de seleção de parágrafos do relatório (1 a 7):
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Marque ou desmarque para incluir ou retirar do PDF/impressão
                 </span>
               </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Data de Aquisição</span>
-                <span className="font-semibold text-slate-800 print:text-black">{formatDisplayDate(selectedMachine.acquisition_date)}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horímetro / KM Inicial</span>
-                <span className="font-mono font-bold text-slate-700 print:text-black">{Number(selectedMachine.initial_hour_km || 0).toLocaleString('pt-BR')} h/km</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horímetro / KM Atual</span>
-                <span className="font-mono font-bold text-[#1B3022] print:text-black">{machineData.currentEffectiveHour.toLocaleString('pt-BR')} h/km</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horas Trabalhadas</span>
-                <span className="font-mono font-bold text-emerald-800 print:text-black">+{machineData.hoursWorked.toLocaleString('pt-BR')} h/km</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Fazenda Atual</span>
-                <span className="font-semibold text-slate-800 print:text-black">{machineFarm?.name || '-'}</span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Motorista / Responsável</span>
-                <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.driver_name || 'Não vinculado'}</span>
-              </div>
+              <span className="text-[11px] font-mono font-bold bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full border border-amber-200 ml-1 shrink-0">
+                {selectedSectionsCount} de 7 ativas
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={selectAllSections}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-emerald-50 cursor-pointer transition-colors"
+              >
+                Marcar Todas
+              </button>
+              <button
+                type="button"
+                onClick={deselectAllSections}
+                className="text-xs font-bold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-slate-100 cursor-pointer transition-colors"
+              >
+                Desmarcar Todas
+              </button>
             </div>
           </div>
+
+          {/* AVISO SE NENHUMA SEÇÃO SELECIONADA */}
+          {selectedSectionsCount === 0 && (
+            <div className="p-8 text-center bg-amber-50/70 border-2 border-dashed border-amber-300 rounded-xl">
+              <AlertTriangle size={32} className="mx-auto text-amber-600 mb-2" />
+              <p className="text-sm font-bold text-slate-800">Nenhum parágrafo/seção selecionado para o relatório</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Marque uma ou mais caixinhas de diálogo (1 a 7) abaixo para autorizar o conteúdo a ser exibido e impresso no PDF.
+              </p>
+              <button
+                type="button"
+                onClick={selectAllSections}
+                className="mt-3 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs"
+              >
+                Marcar Todas as 7 Seções
+              </button>
+            </div>
+          )}
+
+          {/* SEÇÃO 1: DADOS CADASTRAIS E TÉCNICOS (GRID COMPACTA) */}
+          {selectedSections[1] ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 print:bg-white print:border-slate-300">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3 print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[1]}
+                      onChange={() => toggleSection(1)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-700 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <Info size={12} className="text-[#1B3022]" />
+                    1. Ficha Cadastral e Especificações do Fabricante
+                  </h3>
+                </div>
+                <span className="text-[9.5px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 print:hidden font-bold">
+                  Ativo no Laudo
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-2 text-xs">
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Código</span>
+                  <span className="font-mono font-bold text-[#1B3022] print:text-black">{selectedMachine.code}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Tipo de Ativo</span>
+                  <span className="font-semibold text-slate-800 print:text-black capitalize">{selectedMachine.type}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Marca / Fabricante</span>
+                  <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.brand || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Modelo</span>
+                  <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.model || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Ano Fabricação</span>
+                  <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.year || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Chassi / N° de Série</span>
+                  <span className="font-mono font-semibold text-slate-800 print:text-black text-[11px] truncate block" title={selectedMachine.serial_number}>
+                    {selectedMachine.serial_number || 'Não informado'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Data de Aquisição</span>
+                  <span className="font-semibold text-slate-800 print:text-black">{formatDisplayDate(selectedMachine.acquisition_date)}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horímetro / KM Inicial</span>
+                  <span className="font-mono font-bold text-slate-700 print:text-black">{Number(selectedMachine.initial_hour_km || 0).toLocaleString('pt-BR')} h/km</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horímetro / KM Atual</span>
+                  <span className="font-mono font-bold text-[#1B3022] print:text-black">{machineData.currentEffectiveHour.toLocaleString('pt-BR')} h/km</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horas Trabalhadas</span>
+                  <span className="font-mono font-bold text-emerald-800 print:text-black">+{machineData.hoursWorked.toLocaleString('pt-BR')} h/km</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Fazenda Atual</span>
+                  <span className="font-semibold text-slate-800 print:text-black">{machineFarm?.name || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Motorista / Responsável</span>
+                  <span className="font-semibold text-slate-800 print:text-black">{selectedMachine.driver_name || 'Não vinculado'}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(1)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    1. Ficha Cadastral e Especificações do Fabricante
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(1)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
 
           {/* SEÇÃO 2: INDICADORES EXECUTIVOS DE CUSTO E OPERAÇÃO (CARDS COMPACTOS) */}
-          <div>
-            <h3 className="text-[10px] uppercase font-bold text-slate-700 tracking-wider mb-2.5 flex items-center gap-1.5 print:text-black">
-              <Sparkles size={12} className="text-amber-600" />
-              2. Resumo Consolidado de Custos e Desempenho Operacional
-            </h3>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 print:grid-cols-6 print:gap-2">
-              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl print:bg-white print:border-slate-300">
-                <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Combustível Total</span>
-                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block print:text-black">
-                  {machineData.totalLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                  {machineData.fLogs.length} abastecimento(s)
-                </span>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl print:bg-white print:border-slate-300">
-                <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Custo Combustível</span>
-                <span className="text-sm font-bold font-mono text-[#1B3022] mt-0.5 block print:text-black">
-                  R$ {machineData.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                  Média: {machineData.avgConsumption ? machineData.avgConsumption.toFixed(2) : '0.00'} L/h
+          {selectedSections[2] ? (
+            <div className="bg-slate-50/60 border border-slate-200 p-4 rounded-xl print:bg-white print:border-none print:p-0">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-2.5 print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[2]}
+                      onChange={() => toggleSection(2)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-700 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <Sparkles size={12} className="text-amber-600" />
+                    2. Resumo Consolidado de Custos e Desempenho Operacional
+                  </h3>
+                </div>
+                <span className="text-[9.5px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 print:hidden font-bold">
+                  Ativo no Laudo
                 </span>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl print:bg-white print:border-slate-300">
-                <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Peças em Oficina</span>
-                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block print:text-black">
-                  R$ {machineData.totalPartsCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                  Reposições e peças
-                </span>
-              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 print:grid-cols-6 print:gap-2">
+                <div className="bg-white border border-slate-200 p-2.5 rounded-xl print:border-slate-300">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Combustível Total</span>
+                  <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block print:text-black">
+                    {machineData.totalLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                    {machineData.fLogs.length} abastecimento(s)
+                  </span>
+                </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl print:bg-white print:border-slate-300">
-                <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Mão de Obra Oficina</span>
-                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block print:text-black">
-                  R$ {machineData.totalLaborCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                  Serviços mecânicos
-                </span>
-              </div>
+                <div className="bg-white border border-slate-200 p-2.5 rounded-xl print:border-slate-300">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Custo Combustível</span>
+                  <span className="text-sm font-bold font-mono text-[#1B3022] mt-0.5 block print:text-black">
+                    R$ {machineData.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                    Média: {machineData.avgConsumption ? machineData.avgConsumption.toFixed(2) : '0.00'} L/h
+                  </span>
+                </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl print:bg-white print:border-slate-300">
-                <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Custo Total Oficina</span>
-                <span className="text-sm font-bold font-mono text-amber-800 mt-0.5 block print:text-black">
-                  R$ {machineData.totalMaintenanceCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                  {machineData.mLogs.length} serviço(s)
-                </span>
-              </div>
+                <div className="bg-white border border-slate-200 p-2.5 rounded-xl print:border-slate-300">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Peças em Oficina</span>
+                  <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block print:text-black">
+                    R$ {machineData.totalPartsCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                    Reposições e peças
+                  </span>
+                </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl print:bg-white print:border-slate-300">
-                <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Custo Consolidado</span>
-                <span className="text-sm font-bold font-mono text-red-700 mt-0.5 block print:text-black">
-                  R$ {machineData.totalOperationalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                  R$ {machineData.costPerHourWorked.toFixed(2)} / hora
-                </span>
+                <div className="bg-white border border-slate-200 p-2.5 rounded-xl print:border-slate-300">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Mão de Obra Oficina</span>
+                  <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block print:text-black">
+                    R$ {machineData.totalLaborCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                    Serviços mecânicos
+                  </span>
+                </div>
+
+                <div className="bg-white border border-slate-200 p-2.5 rounded-xl print:border-slate-300">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Custo Total Oficina</span>
+                  <span className="text-sm font-bold font-mono text-amber-800 mt-0.5 block print:text-black">
+                    R$ {machineData.totalMaintenanceCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                    {machineData.mLogs.length} serviço(s)
+                  </span>
+                </div>
+
+                <div className="bg-white border border-slate-200 p-2.5 rounded-xl print:border-slate-300">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block print:text-slate-600">Custo Consolidado</span>
+                  <span className="text-sm font-bold font-mono text-red-700 mt-0.5 block print:text-black">
+                    R$ {machineData.totalOperationalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                    R$ {machineData.costPerHourWorked.toFixed(2)} / hora
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(2)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    2. Resumo Consolidado de Custos e Desempenho Operacional
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(2)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
 
           {/* SEÇÃO 3: PLANO PREVENTIVO E REVISÕES (ITEM MAIS DESTACADO PELO USUÁRIO) */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
-              <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
-                <Calendar size={13} className="text-[#1B3022]" />
-                3. Cronograma do Plano Preventivo e Vencimento de Revisões
-              </h3>
-              <span className="text-[10px] text-slate-500 font-mono print:text-black">
-                Horímetro Base de Referência: <strong>{machineData.currentEffectiveHour.toLocaleString('pt-BR')} h/km</strong>
-              </span>
-            </div>
+          {selectedSections[3] ? (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:bg-white print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[3]}
+                      onChange={() => toggleSection(3)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <Calendar size={13} className="text-[#1B3022]" />
+                    3. Cronograma do Plano Preventivo e Vencimento de Revisões
+                  </h3>
+                </div>
+                <span className="text-[10px] text-slate-500 font-mono print:text-black">
+                  Horímetro Base de Referência: <strong>{machineData.currentEffectiveHour.toLocaleString('pt-BR')} h/km</strong>
+                </span>
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                    <th className="py-2 px-3">Item de Manutenção</th>
-                    <th className="py-2 px-2 text-center">Intervalo</th>
-                    <th className="py-2 px-2 text-right">Última Realização</th>
-                    <th className="py-2 px-2 text-right">Próxima Revisão</th>
-                    <th className="py-2 px-2 text-right">Saldo Restante</th>
-                    <th className="py-2 px-3 text-center">Status / Situação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
-                  {machineData.prevItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-4 px-3 text-center italic text-slate-400 print:text-slate-600">
-                        Nenhum item do plano preventivo configurado para este equipamento no sistema.
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
+                      <th className="py-2 px-3">Item de Manutenção</th>
+                      <th className="py-2 px-2 text-center">Intervalo</th>
+                      <th className="py-2 px-2 text-right">Última Realização</th>
+                      <th className="py-2 px-2 text-right">Próxima Revisão</th>
+                      <th className="py-2 px-2 text-right">Saldo Restante</th>
+                      <th className="py-2 px-3 text-center">Status / Situação</th>
                     </tr>
-                  ) : (
-                    machineData.prevItems.map((item, idx) => {
-                      const nextHourKm = (item.last_performed_hour_km || 0) + (item.interval_hour_km || 0);
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
+                    {machineData.prevItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-4 px-3 text-center italic text-slate-400 print:text-slate-600">
+                          Nenhum item do plano preventivo configurado para este equipamento no sistema.
+                        </td>
+                      </tr>
+                    ) : (
+                      machineData.prevItems.map((item, idx) => {
+                        const nextHourKm = (item.last_performed_hour_km || 0) + (item.interval_hour_km || 0);
 
-                      let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
-                      let statusText = item.status;
-                      if (item.status === 'OK') {
-                        badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
-                      } else if (item.status === 'PRÓXIMA') {
-                        badgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
-                      } else if (item.status === 'VENCIDA') {
-                        badgeClass = 'bg-red-100 text-red-800 border-red-200';
-                      }
+                        let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                        let statusText = item.status;
+                        if (item.status === 'OK') {
+                          badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                        } else if (item.status === 'PRÓXIMA') {
+                          badgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+                        } else if (item.status === 'VENCIDA') {
+                          badgeClass = 'bg-red-100 text-red-800 border-red-200';
+                        }
 
-                      return (
-                        <tr key={item.plan_item_id || idx} className="hover:bg-slate-50 print:bg-white">
-                          <td className="py-2 px-3 font-semibold text-slate-800 print:text-black">
-                            {item.maintenance_item}
-                          </td>
-                          <td className="py-2 px-2 text-center font-mono text-[10.5px] text-slate-600 print:text-black">
-                            {item.interval_hour_km ? `${item.interval_hour_km} h` : ''} 
-                            {item.interval_hour_km && item.interval_days ? ' / ' : ''}
-                            {item.interval_days ? `${item.interval_days} d` : ''}
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-700 print:text-black">
-                            {item.last_performed_hour_km ? `${item.last_performed_hour_km.toLocaleString('pt-BR')} h` : '-'}
-                            <span className="text-[9px] text-slate-400 block">
-                              {formatDisplayDate(item.last_performed_date)}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-800 print:text-black">
-                            {item.interval_hour_km ? `${nextHourKm.toLocaleString('pt-BR')} h` : '-'}
-                            <span className="text-[9px] text-slate-400 block font-normal">
-                              {formatDisplayDate(item.next_due_date)}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold">
-                            <span className={item.hour_km_remaining < 0 ? 'text-red-600' : item.hour_km_remaining <= 50 ? 'text-amber-600' : 'text-emerald-700 print:text-black'}>
-                              {item.hour_km_remaining !== undefined ? `${item.hour_km_remaining > 0 ? '+' : ''}${item.hour_km_remaining.toLocaleString('pt-BR')} h` : '-'}
-                            </span>
-                            <span className={`text-[9px] block font-normal ${item.days_remaining < 0 ? 'text-red-500' : 'text-slate-400'}`}>
-                              {item.days_remaining !== undefined ? `${item.days_remaining > 0 ? '+' : ''}${item.days_remaining} d` : ''}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${badgeClass} print:border-black`}>
-                              {statusText}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                        return (
+                          <tr key={item.plan_item_id || idx} className="hover:bg-slate-50 print:bg-white">
+                            <td className="py-2 px-3 font-semibold text-slate-800 print:text-black">
+                              {item.maintenance_item}
+                            </td>
+                            <td className="py-2 px-2 text-center font-mono text-[10.5px] text-slate-600 print:text-black">
+                              {item.interval_hour_km ? `${item.interval_hour_km} h` : ''} 
+                              {item.interval_hour_km && item.interval_days ? ' / ' : ''}
+                              {item.interval_days ? `${item.interval_days} d` : ''}
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-700 print:text-black">
+                              {item.last_performed_hour_km ? `${item.last_performed_hour_km.toLocaleString('pt-BR')} h` : '-'}
+                              <span className="text-[9px] text-slate-400 block">
+                                {formatDisplayDate(item.last_performed_date)}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-800 print:text-black">
+                              {item.interval_hour_km ? `${nextHourKm.toLocaleString('pt-BR')} h` : '-'}
+                              <span className="text-[9px] text-slate-400 block font-normal">
+                                {formatDisplayDate(item.next_due_date)}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold">
+                              <span className={item.hour_km_remaining < 0 ? 'text-red-600' : item.hour_km_remaining <= 50 ? 'text-amber-600' : 'text-emerald-700 print:text-black'}>
+                                {item.hour_km_remaining !== undefined ? `${item.hour_km_remaining > 0 ? '+' : ''}${item.hour_km_remaining.toLocaleString('pt-BR')} h` : '-'}
+                              </span>
+                              <span className={`text-[9px] block font-normal ${item.days_remaining < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                {item.days_remaining !== undefined ? `${item.days_remaining > 0 ? '+' : ''}${item.days_remaining} d` : ''}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${badgeClass} print:border-black`}>
+                                {statusText}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(3)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    3. Cronograma do Plano Preventivo e Vencimento de Revisões
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(3)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
 
           {/* SEÇÃO 4: ORDENS DE SERVIÇO (O.S.) */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
-              <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
-                <ClipboardList size={13} className="text-[#1B3022]" />
-                4. Histórico de Ordens de Serviço (O.S.) ({machineData.wOrders.length})
-              </h3>
-            </div>
+          {selectedSections[4] ? (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[4]}
+                      onChange={() => toggleSection(4)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <ClipboardList size={13} className="text-[#1B3022]" />
+                    4. Histórico de Ordens de Serviço (O.S.) ({machineData.wOrders.length})
+                  </h3>
+                </div>
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                    <th className="py-2 px-3">O.S. N°</th>
-                    <th className="py-2 px-2">Abertura</th>
-                    <th className="py-2 px-3">Motivo / Descrição do Problema</th>
-                    <th className="py-2 px-2 text-center">Prioridade</th>
-                    <th className="py-2 px-2 text-center">Status</th>
-                    <th className="py-2 px-2">Conclusão</th>
-                    <th className="py-2 px-3">Responsável</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
-                  {machineData.wOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
-                        Nenhuma ordem de serviço registrada para este equipamento.
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
+                      <th className="py-2 px-3">O.S. N°</th>
+                      <th className="py-2 px-2">Abertura</th>
+                      <th className="py-2 px-3">Motivo / Descrição do Problema</th>
+                      <th className="py-2 px-2 text-center">Prioridade</th>
+                      <th className="py-2 px-2 text-center">Status</th>
+                      <th className="py-2 px-2">Conclusão</th>
+                      <th className="py-2 px-3">Responsável</th>
                     </tr>
-                  ) : (
-                    machineData.wOrders.map((wo) => {
-                      const statusColor = wo.status === 'Concluída'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : wo.status === 'Em Andamento'
-                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                        : 'bg-blue-50 text-blue-800 border-blue-200';
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
+                    {machineData.wOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
+                          Nenhuma ordem de serviço registrada para este equipamento.
+                        </td>
+                      </tr>
+                    ) : (
+                      machineData.wOrders.map((wo) => {
+                        const statusColor = wo.status === 'Concluída'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : wo.status === 'Em Andamento'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-blue-50 text-blue-800 border-blue-200';
 
-                      return (
-                        <tr key={wo.id} className="hover:bg-slate-50 print:bg-white">
-                          <td className="py-2 px-3 font-mono font-bold text-[#1B3022] print:text-black">
-                            {wo.os_number ? `OS-${wo.os_number}` : wo.id.substring(0, 8)}
-                          </td>
-                          <td className="py-2 px-2 text-slate-700 print:text-black font-mono text-[10.5px]">
-                            {formatDisplayDate(wo.open_date)}
-                          </td>
-                          <td className="py-2 px-3 text-slate-800 print:text-black">
-                            {wo.reason || wo.description || '-'}
-                          </td>
-                          <td className="py-2 px-2 text-center">
-                            <span className="text-[9.5px] font-bold text-slate-600 print:text-black uppercase">
-                              {wo.priority}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-center">
-                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${statusColor} print:border-black`}>
-                              {wo.status}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-slate-600 print:text-black font-mono text-[10.5px]">
-                            {wo.close_date ? formatDisplayDate(wo.close_date) : '-'}
-                          </td>
-                          <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
-                            {wo.assigned_to || wo.responsible || '-'}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                        return (
+                          <tr key={wo.id} className="hover:bg-slate-50 print:bg-white">
+                            <td className="py-2 px-3 font-mono font-bold text-[#1B3022] print:text-black">
+                              {wo.os_number ? `OS-${wo.os_number}` : wo.id.substring(0, 8)}
+                            </td>
+                            <td className="py-2 px-2 text-slate-700 print:text-black font-mono text-[10.5px]">
+                              {formatDisplayDate(wo.open_date)}
+                            </td>
+                            <td className="py-2 px-3 text-slate-800 print:text-black">
+                              {wo.reason || wo.description || '-'}
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <span className="text-[9.5px] font-bold text-slate-600 print:text-black uppercase">
+                                {wo.priority}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${statusColor} print:border-black`}>
+                                {wo.status}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-slate-600 print:text-black font-mono text-[10.5px]">
+                              {wo.close_date ? formatDisplayDate(wo.close_date) : '-'}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
+                              {wo.assigned_to || wo.responsible || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(4)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    4. Histórico de Ordens de Serviço (O.S.)
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(4)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
 
           {/* SEÇÃO 5: HISTÓRICO DE MANUTENÇÕES (OFICINAS) */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
-              <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
-                <Wrench size={13} className="text-[#1B3022]" />
-                5. Histórico de Serviços de Oficina e Manutenções ({machineData.mLogs.length})
-              </h3>
-              <span className="text-[10px] text-slate-500 font-mono print:text-black">
-                Total Oficina: <strong>R$ {machineData.totalMaintenanceCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
-              </span>
-            </div>
+          {selectedSections[5] ? (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:bg-white print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[5]}
+                      onChange={() => toggleSection(5)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <Wrench size={13} className="text-[#1B3022]" />
+                    5. Histórico de Serviços de Oficina e Manutenções ({machineData.mLogs.length})
+                  </h3>
+                </div>
+                <span className="text-[10px] text-slate-500 font-mono print:text-black">
+                  Total Oficina: <strong>R$ {machineData.totalMaintenanceCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                </span>
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                    <th className="py-2 px-3">Data</th>
-                    <th className="py-2 px-2 text-right">Horímetro</th>
-                    <th className="py-2 px-2">Tipo</th>
-                    <th className="py-2 px-3">Serviço Executado</th>
-                    <th className="py-2 px-3">Peças Substituídas</th>
-                    <th className="py-2 px-2 text-right">Custo Peças</th>
-                    <th className="py-2 px-2 text-right">Mão de Obra</th>
-                    <th className="py-2 px-2 text-right">Total (R$)</th>
-                    <th className="py-2 px-3">Responsável</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
-                  {machineData.mLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
-                        Nenhum registro de manutenção encontrado para esta máquina.
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
+                      <th className="py-2 px-3">Data</th>
+                      <th className="py-2 px-2 text-right">Horímetro</th>
+                      <th className="py-2 px-2">Tipo</th>
+                      <th className="py-2 px-3">Serviço Executado</th>
+                      <th className="py-2 px-3">Peças Substituídas</th>
+                      <th className="py-2 px-2 text-right">Custo Peças</th>
+                      <th className="py-2 px-2 text-right">Mão de Obra</th>
+                      <th className="py-2 px-2 text-right">Total (R$)</th>
+                      <th className="py-2 px-3">Responsável</th>
                     </tr>
-                  ) : (
-                    machineData.mLogs.map((m) => (
-                      <tr key={m.id} className="hover:bg-slate-50 print:bg-white">
-                        <td className="py-2 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap">
-                          {formatDisplayDate(m.date)}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
-                          {m.hour_km_at_service ? `${m.hour_km_at_service.toLocaleString('pt-BR')} h` : '-'}
-                        </td>
-                        <td className="py-2 px-2">
-                          <span className="text-[9.5px] font-bold uppercase text-slate-600 print:text-black">
-                            {m.type}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-slate-800 print:text-black">
-                          {m.service_description}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
-                          {m.parts_replaced || '-'}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-600 print:text-black whitespace-nowrap">
-                          R$ {Number(m.parts_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-600 print:text-black whitespace-nowrap">
-                          R$ {Number(m.labor_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-900 print:text-black whitespace-nowrap">
-                          R$ {Number(m.total_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
-                          {m.responsible || m.location_shop || '-'}
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
+                    {machineData.mLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
+                          Nenhum registro de manutenção encontrado para esta máquina.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* SEÇÃO 6: HISTÓRICO DE ABASTECIMENTOS */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
-              <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
-                <Fuel size={13} className="text-[#1B3022]" />
-                6. Histórico de Abastecimentos de Combustível ({machineData.fLogs.length})
-              </h3>
-              <span className="text-[10px] text-slate-500 font-mono print:text-black">
-                Total Diesel: <strong>{machineData.totalLiters.toLocaleString('pt-BR')} L</strong> (R$ {machineData.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                    <th className="py-2 px-3">Data / Hora</th>
-                    <th className="py-2 px-2 text-right">Horímetro/KM</th>
-                    <th className="py-2 px-2">Combustível</th>
-                    <th className="py-2 px-2 text-right">Litros</th>
-                    <th className="py-2 px-2 text-right">Preço/L</th>
-                    <th className="py-2 px-2 text-right">Valor Total (R$)</th>
-                    <th className="py-2 px-2 text-center">Consumo Médio</th>
-                    <th className="py-2 px-3">Fornecedor / Posto</th>
-                    <th className="py-2 px-3">Responsável</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
-                  {machineData.fLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
-                        Nenhum abastecimento registrado para este equipamento.
-                      </td>
-                    </tr>
-                  ) : (
-                    machineData.fLogs.map((f) => (
-                      <tr key={f.id} className="hover:bg-slate-50 print:bg-white">
-                        <td className="py-2 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap">
-                          {formatDisplayDateTime(f.date)}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
-                          {f.hour_km_at_fueling ? `${f.hour_km_at_fueling.toLocaleString('pt-BR')} h` : '-'}
-                        </td>
-                        <td className="py-2 px-2 text-slate-700 print:text-black text-[10.5px]">
-                          {f.fuel_type || 'Diesel'}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-800 print:text-black whitespace-nowrap">
-                          {Number(f.liters_supplied || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-600 print:text-black whitespace-nowrap">
-                          R$ {Number(f.price_per_liter || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-[#1B3022] print:text-black whitespace-nowrap">
-                          R$ {Number(f.total_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-2 text-center font-mono text-[10.5px] text-slate-600 print:text-black">
-                          {f.consumption_rate ? `${Number(f.consumption_rate).toFixed(2)} L/h` : '-'}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
-                          {f.supplier || '-'}
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
-                          {f.responsible || '-'}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* SEÇÃO 7: HISTÓRICO DE CHECKLISTS (VISTORIAS 7 DIAS) */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
-              <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
-                <CheckSquare size={13} className="text-[#1B3022]" />
-                7. Histórico de Vistorias e Checklists Operacionais ({machineData.chkLogs.length})
-              </h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                    <th className="py-2 px-3">Data / Hora</th>
-                    <th className="py-2 px-2 text-right">Horímetro</th>
-                    <th className="py-2 px-3">Operador / Inspetor</th>
-                    <th className="py-2 px-2 text-center">Status Geral</th>
-                    <th className="py-2 px-4">Observações e Itens Reprovados</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
-                  {machineData.chkLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
-                        Nenhuma vistoria ou checklist registrado para este equipamento.
-                      </td>
-                    </tr>
-                  ) : (
-                    machineData.chkLogs.map((c) => {
-                      let chkColor = 'bg-slate-100 text-slate-700 border-slate-200';
-                      if (c.overall_status === 'OK') {
-                        chkColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-                      } else if (c.overall_status === 'Necessita Atenção' || c.overall_status === 'Prioridade Média' || c.overall_status === 'Prioridade Baixa') {
-                        chkColor = 'bg-amber-50 text-amber-800 border-amber-200';
-                      } else {
-                        chkColor = 'bg-red-50 text-red-800 border-red-200';
-                      }
-
-                      return (
-                        <tr key={c.id} className="hover:bg-slate-50 print:bg-white">
+                    ) : (
+                      machineData.mLogs.map((m) => (
+                        <tr key={m.id} className="hover:bg-slate-50 print:bg-white">
                           <td className="py-2 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap">
-                            {formatDisplayDateTime(c.date)}
+                            {formatDisplayDate(m.date)}
                           </td>
                           <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
-                            {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
+                            {m.hour_km_at_service ? `${m.hour_km_at_service.toLocaleString('pt-BR')} h` : '-'}
                           </td>
-                          <td className="py-2 px-3 text-slate-800 print:text-black font-medium">
-                            {c.operator_name || '-'}
-                          </td>
-                          <td className="py-2 px-2 text-center">
-                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${chkColor} print:border-black`}>
-                              {c.overall_status}
+                          <td className="py-2 px-2">
+                            <span className="text-[9.5px] font-bold uppercase text-slate-600 print:text-black">
+                              {m.type}
                             </span>
                           </td>
-                          <td className="py-2 px-4 text-slate-700 print:text-black text-[10.5px]">
-                            {c.failed_items_notes || <span className="text-slate-400 italic font-normal">Nenhuma não conformidade apontada</span>}
+                          <td className="py-2 px-3 text-slate-800 print:text-black">
+                            {m.service_description}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
+                            {m.parts_replaced || '-'}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-600 print:text-black whitespace-nowrap">
+                            R$ {Number(m.parts_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-600 print:text-black whitespace-nowrap">
+                            R$ {Number(m.labor_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-900 print:text-black whitespace-nowrap">
+                            R$ {Number(m.total_cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
+                            {m.responsible || m.location_shop || '-'}
                           </td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(5)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    5. Histórico de Serviços de Oficina e Manutenções
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(5)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
+
+          {/* SEÇÃO 6: HISTÓRICO DE ABASTECIMENTOS */}
+          {selectedSections[6] ? (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:bg-white print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[6]}
+                      onChange={() => toggleSection(6)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <Fuel size={13} className="text-[#1B3022]" />
+                    6. Histórico de Abastecimentos de Combustível ({machineData.fLogs.length})
+                  </h3>
+                </div>
+                <span className="text-[10px] text-slate-500 font-mono print:text-black">
+                  Total Diesel: <strong>{machineData.totalLiters.toLocaleString('pt-BR')} L</strong> (R$ {machineData.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
+                      <th className="py-2 px-3">Data / Hora</th>
+                      <th className="py-2 px-2 text-right">Horímetro/KM</th>
+                      <th className="py-2 px-2">Combustível</th>
+                      <th className="py-2 px-2 text-right">Litros</th>
+                      <th className="py-2 px-2 text-right">Preço/L</th>
+                      <th className="py-2 px-2 text-right">Valor Total (R$)</th>
+                      <th className="py-2 px-2 text-center">Consumo Médio</th>
+                      <th className="py-2 px-3">Fornecedor / Posto</th>
+                      <th className="py-2 px-3">Responsável</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
+                    {machineData.fLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
+                          Nenhum abastecimento registrado para este equipamento.
+                        </td>
+                      </tr>
+                    ) : (
+                      machineData.fLogs.map((f) => (
+                        <tr key={f.id} className="hover:bg-slate-50 print:bg-white">
+                          <td className="py-2 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap">
+                            {formatDisplayDateTime(f.date)}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
+                            {f.hour_km_at_fueling ? `${f.hour_km_at_fueling.toLocaleString('pt-BR')} h` : '-'}
+                          </td>
+                          <td className="py-2 px-2 text-slate-700 print:text-black text-[10.5px]">
+                            {f.fuel_type || 'Diesel'}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-800 print:text-black whitespace-nowrap">
+                            {Number(f.liters_supplied || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} L
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-600 print:text-black whitespace-nowrap">
+                            R$ {Number(f.price_per_liter || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-[#1B3022] print:text-black whitespace-nowrap">
+                            R$ {Number(f.total_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-2 text-center font-mono text-[10.5px] text-slate-600 print:text-black">
+                            {f.consumption_rate ? `${Number(f.consumption_rate).toFixed(2)} L/h` : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
+                            {f.supplier || '-'}
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
+                            {f.responsible || '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(6)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    6. Histórico de Abastecimentos de Combustível
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(6)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
+
+          {/* SEÇÃO 7: HISTÓRICO DE CHECKLISTS (VISTORIAS 7 DIAS) */}
+          {selectedSections[7] ? (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
+                    <input
+                      type="checkbox"
+                      checked={selectedSections[7]}
+                      onChange={() => toggleSection(7)}
+                      className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
+                  </label>
+                  <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
+                    <CheckSquare size={13} className="text-[#1B3022]" />
+                    7. Histórico de Vistorias e Checklists Operacionais ({machineData.chkLogs.length})
+                  </h3>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
+                      <th className="py-2 px-3">Data / Hora</th>
+                      <th className="py-2 px-2 text-right">Horímetro</th>
+                      <th className="py-2 px-3">Operador / Inspetor</th>
+                      <th className="py-2 px-2 text-center">Status Geral</th>
+                      <th className="py-2 px-4">Observações e Itens Reprovados</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
+                    {machineData.chkLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
+                          Nenhuma vistoria ou checklist registrado para este equipamento.
+                        </td>
+                      </tr>
+                    ) : (
+                      machineData.chkLogs.map((c) => {
+                        let chkColor = 'bg-slate-100 text-slate-700 border-slate-200';
+                        if (c.overall_status === 'OK') {
+                          chkColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                        } else if (c.overall_status === 'Necessita Atenção' || c.overall_status === 'Prioridade Média' || c.overall_status === 'Prioridade Baixa') {
+                          chkColor = 'bg-amber-50 text-amber-800 border-amber-200';
+                        } else {
+                          chkColor = 'bg-red-50 text-red-800 border-red-200';
+                        }
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50 print:bg-white">
+                            <td className="py-2 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap">
+                              {formatDisplayDateTime(c.date)}
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
+                              {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
+                            </td>
+                            <td className="py-2 px-3 text-slate-800 print:text-black font-medium">
+                              {c.operator_name || '-'}
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${chkColor} print:border-black`}>
+                                {c.overall_status}
+                              </span>
+                            </td>
+                            <td className="py-2 px-4 text-slate-700 print:text-black text-[10.5px]">
+                              {c.failed_items_notes || <span className="text-slate-400 italic font-normal">Nenhuma não conformidade apontada</span>}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="print:hidden border border-dashed border-slate-300 bg-slate-50/70 rounded-xl p-3 flex items-center justify-between transition-all">
+              <div className="flex items-center gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => toggleSection(7)}
+                    className="w-4 h-4 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    7. Histórico de Vistorias e Checklists Operacionais
+                  </span>
+                </label>
+                <span className="text-[9.5px] font-medium text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                  Desmarcado (Não sairá no PDF)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(7)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer hover:underline"
+              >
+                + Marcar para o PDF
+              </button>
+            </div>
+          )}
 
           {/* CAMPO DE ASSINATURA E TERMO TÉCNICO (VISÍVEL NO PRINT) */}
           <div className="hidden print:block border-t border-slate-400 mt-10 pt-6 text-black">
