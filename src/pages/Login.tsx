@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isDemoMode, isSchemaMissing } from '../lib/supabaseClient';
-import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
+import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X, Eye, EyeOff, ExternalLink, TrendingUp } from 'lucide-react';
 import SupabaseSetupAssistant from '../components/SupabaseSetupAssistant';
 import { fleetService } from '../lib/fleetService';
 import AppLogo from '../components/AppLogo';
@@ -648,6 +648,20 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         </div>
         </div>
       </div>
+
+      {/* Botão Fazer Cotação - canto inferior direito extremo */}
+      <a
+        id="btn-fazer-cotacao-login"
+        href="https://agrocotacao.vercel.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-50 inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-xs sm:text-sm tracking-wider uppercase rounded-xl shadow-xl shadow-emerald-950/80 border border-emerald-400/50 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group"
+        title="Fazer Cotação - Abre em nova aba"
+      >
+        <TrendingUp size={16} className="text-emerald-100 group-hover:scale-110 transition-transform shrink-0" />
+        <span>FAZER COTAÇÃO</span>
+        <ExternalLink size={14} className="text-emerald-200/90 shrink-0 ml-0.5" />
+      </a>
     </div>
   );
 }
