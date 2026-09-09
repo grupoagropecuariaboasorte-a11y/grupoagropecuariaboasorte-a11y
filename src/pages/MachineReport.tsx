@@ -8,10 +8,123 @@ import {
   FileSpreadsheet, Printer, Search, Tractor, Calendar, 
   Wrench, Fuel, CheckSquare, ClipboardList, AlertTriangle, 
   CheckCircle2, Clock, Download, ArrowLeft, ShieldAlert,
-  Info, Sparkles, Filter, ChevronRight
+  Info, Sparkles, Filter, ChevronRight, Check, ChevronDown, 
+  Eye, ShieldCheck, ShieldX, X
 } from 'lucide-react';
 import { formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 import AppLogo from '../components/AppLogo';
+import Modal from '../components/Modal';
+import { 
+  COMPONENT_ITEMS, FLUID_LEVEL_ITEMS, REVISION_ITEMS, 
+  COMPLEMENTARY_ITEMS, getValidityStatus 
+} from './Checklist';
+
+export interface ParsedInspectionInfo {
+  isJson: boolean;
+  rawText?: string;
+  evalStatus?: string;
+  operatorNotes?: string;
+  complementaryNotes?: string;
+  revisionNotes?: string;
+  horimetroRevisao?: string;
+  horimetroProximo?: string;
+  failedItems: { name: string; val: string }[];
+  conformItems: { name: string; val: string }[];
+  naItems: { name: string; val: string }[];
+  allItems: { name: string; val: string }[];
+  totalAudited: number;
+}
+
+export function parseInspectionDetails(notesStr?: string, details?: any): ParsedInspectionInfo {
+  let parsed: any = null;
+  if (notesStr) {
+    try {
+      parsed = JSON.parse(notesStr);
+    } catch {
+      // String regular
+    }
+  }
+
+  const itemData: Record<string, string> = (parsed && typeof parsed === 'object' && parsed.pdfItems)
+    ? parsed.pdfItems
+    : (details && typeof details === 'object' ? details : {});
+
+  const hasItems = Object.keys(itemData).length > 0;
+  const isJson = !!parsed || hasItems;
+
+  const allItems: { name: string; val: string }[] = [];
+  const failedItems: { name: string; val: string }[] = [];
+  const conformItems: { name: string; val: string }[] = [];
+  const naItems: { name: string; val: string }[] = [];
+
+  if (hasItems) {
+    // Manter a ordem canônica dos itens caso existam nas listas padrão do sistema
+    const canonicalOrder = [
+      ...COMPONENT_ITEMS,
+      ...FLUID_LEVEL_ITEMS,
+      ...REVISION_ITEMS,
+      ...COMPLEMENTARY_ITEMS
+    ];
+
+    const addedKeys = new Set<string>();
+
+    canonicalOrder.forEach(item => {
+      if (itemData[item] !== undefined) {
+        const rawVal = itemData[item];
+        const val = String(rawVal).trim().toUpperCase();
+        const entry = { name: item, val: rawVal };
+        allItems.push(entry);
+        addedKeys.add(item);
+        if (val === 'NÃO' || val === 'NAO' || val === 'REPROVADO' || val === 'FALSE') {
+          failedItems.push(entry);
+        } else if (val === 'SIM' || val === 'OK' || val === 'TRUE' || val === 'CONFORME') {
+          conformItems.push(entry);
+        } else {
+          naItems.push(entry);
+        }
+      }
+    });
+
+    // Itens que não constavam na lista canônica padrão
+    Object.entries(itemData).forEach(([name, rawVal]) => {
+      if (!addedKeys.has(name)) {
+        const val = String(rawVal).trim().toUpperCase();
+        const entry = { name, val: rawVal as string };
+        allItems.push(entry);
+        if (val === 'NÃO' || val === 'NAO' || val === 'REPROVADO' || val === 'FALSE') {
+          failedItems.push(entry);
+        } else if (val === 'SIM' || val === 'OK' || val === 'TRUE' || val === 'CONFORME') {
+          conformItems.push(entry);
+        } else {
+          naItems.push(entry);
+        }
+      }
+    });
+  }
+
+  const operatorNotes = parsed?.notes || (!isJson && notesStr ? notesStr : '');
+  const complementaryNotes = parsed?.informacoesComplementares || '';
+  const revisionNotes = parsed?.obsProximaRevisao || '';
+  const horimetroRevisao = parsed?.horimetroRevisao || '';
+  const horimetroProximo = parsed?.horimetroProximo || '';
+  const evalStatus = parsed?.evalStatus || '';
+
+  return {
+    isJson,
+    rawText: !isJson ? notesStr : undefined,
+    evalStatus,
+    operatorNotes,
+    complementaryNotes,
+    revisionNotes,
+    horimetroRevisao,
+    horimetroProximo,
+    failedItems,
+    conformItems,
+    naItems,
+    allItems,
+    totalAudited: allItems.length
+  };
+}
 
 interface MachineReportProps {
   selectedFarmId: string;
@@ -36,6 +149,19 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMachineId, setSelectedMachineId] = useState<string>('');
+
+  // Estados para itens de Checklist e Vistorias (Item 7)
+  const [expandedChecklists, setExpandedChecklists] = useState<Record<string, boolean>>({});
+  const [expandAllChecklists, setExpandAllChecklists] = useState(false);
+  const [selectedChecklistForModal, setSelectedChecklistForModal] = useState<Checklist30d | null>(null);
+  const [modalViewTab, setModalViewTab] = useState<'componentes' | 'niveis' | 'revisoes' | 'complementares'>('componentes');
+
+  const toggleChecklistExpand = (id: string) => {
+    setExpandedChecklists(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   // Seleção de seções ativas para o Relatório/PDF (1 a 7)
   const [selectedSections, setSelectedSections] = useState<Record<number, boolean>>({
@@ -449,12 +575,33 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
       rows.push(`"Data da Vistoria";"Horímetro/KM";"Operador / Inspetor";"Status Geral";"Observações / Itens Reprovados"`);
       if (machineData.chkLogs.length > 0) {
         machineData.chkLogs.forEach(c => {
+          const info = parseInspectionDetails(c.failed_items_notes, c.details);
+          const notesParts: string[] = [];
+          if (info.failedItems.length > 0) {
+            notesParts.push(`ITENS REPROVADOS (${info.failedItems.length}): ` + info.failedItems.map(i => `${i.name} [NÃO]`).join(', '));
+          } else if (info.totalAudited > 0) {
+            notesParts.push(`Todos os ${info.totalAudited} itens auditados conformes (OK)`);
+          }
+          if (info.operatorNotes) {
+            notesParts.push(`Obs: ${info.operatorNotes}`);
+          }
+          if (info.complementaryNotes) {
+            notesParts.push(`Complementar: ${info.complementaryNotes}`);
+          }
+          if (info.revisionNotes) {
+            notesParts.push(`Próxima Revisão: ${info.revisionNotes}`);
+          }
+          if (info.rawText && notesParts.length === 0) {
+            notesParts.push(info.rawText);
+          }
+          const formattedNotes = notesParts.join(' | ') || '-';
+
           rows.push([
             escapeCsv(formatDisplayDateTime(c.date)),
             escapeCsv(formatNumberBr(c.hour_km, 1)),
             escapeCsv(c.operator_name),
             escapeCsv(c.overall_status),
-            escapeCsv(c.failed_items_notes || '-')
+            escapeCsv(formattedNotes)
           ].join(';'));
         });
       } else {
@@ -1426,7 +1573,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
           {/* SEÇÃO 7: HISTÓRICO DE CHECKLISTS (VISTORIAS 7 DIAS) */}
           {selectedSections[7] ? (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between print:bg-white print:border-slate-300">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:bg-white print:border-slate-300">
                 <div className="flex items-center gap-2.5">
                   <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
                     <input
@@ -1442,17 +1589,31 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                     7. Histórico de Vistorias e Checklists Operacionais ({machineData.chkLogs.length})
                   </h3>
                 </div>
+
+                {machineData.chkLogs.length > 0 && (
+                  <div className="flex items-center gap-2 print:hidden">
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-600 cursor-pointer bg-white px-2 py-1 rounded border border-slate-200 hover:border-slate-300 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={expandAllChecklists}
+                        onChange={(e) => setExpandAllChecklists(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
+                      />
+                      <span>Expandir todos os itens do checklist</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                      <th className="py-2 px-3">Data / Hora</th>
-                      <th className="py-2 px-2 text-right">Horímetro</th>
-                      <th className="py-2 px-3">Operador / Inspetor</th>
-                      <th className="py-2 px-2 text-center">Status Geral</th>
-                      <th className="py-2 px-4">Observações e Itens Reprovados</th>
+                      <th className="py-2 px-3 whitespace-nowrap w-28">Data / Hora</th>
+                      <th className="py-2 px-2 text-right whitespace-nowrap w-24">Horímetro</th>
+                      <th className="py-2 px-3 whitespace-nowrap w-36">Operador / Inspetor</th>
+                      <th className="py-2 px-2 text-center whitespace-nowrap w-28">Status Geral</th>
+                      <th className="py-2 px-4 min-w-[320px]">Observações e Itens Reprovados</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
@@ -1475,22 +1636,204 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
                         return (
                           <tr key={c.id} className="hover:bg-slate-50 print:bg-white">
-                            <td className="py-2 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap">
+                            <td className="py-2.5 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap align-top">
                               {formatDisplayDateTime(c.date)}
                             </td>
-                            <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
+                            <td className="py-2.5 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap align-top">
                               {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
                             </td>
-                            <td className="py-2 px-3 text-slate-800 print:text-black font-medium">
+                            <td className="py-2.5 px-3 text-slate-800 print:text-black font-medium align-top">
                               {c.operator_name || '-'}
                             </td>
-                            <td className="py-2 px-2 text-center">
+                            <td className="py-2.5 px-2 text-center align-top">
                               <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${chkColor} print:border-black`}>
                                 {c.overall_status}
                               </span>
                             </td>
-                            <td className="py-2 px-4 text-slate-700 print:text-black text-[10.5px]">
-                              {c.failed_items_notes || <span className="text-slate-400 italic font-normal">Nenhuma não conformidade apontada</span>}
+                            <td className="py-2.5 px-4 text-slate-700 print:text-black text-[10.5px] align-top">
+                              {(() => {
+                                const info = parseInspectionDetails(c.failed_items_notes, c.details);
+                                const isExpanded = expandAllChecklists || !!expandedChecklists[c.id];
+
+                                const hasAnyData = info.failedItems.length > 0 || 
+                                  info.operatorNotes || 
+                                  info.complementaryNotes || 
+                                  info.revisionNotes || 
+                                  info.allItems.length > 0 ||
+                                  info.rawText;
+
+                                if (!hasAnyData) {
+                                  return (
+                                    <span className="text-slate-400 italic font-normal">
+                                      Nenhuma observação ou não conformidade apontada
+                                    </span>
+                                  );
+                                }
+
+                                return (
+                                  <div className="space-y-2 py-0.5">
+                                    {/* 1. ITENS REPROVADOS (NÃO CONFORMES) - ORDENADOS UM ABAIXO DO OUTRO */}
+                                    {info.failedItems.length > 0 ? (
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-800 uppercase tracking-wide bg-rose-50/80 border border-rose-200/80 px-2.5 py-1 rounded-md">
+                                          <span className="flex items-center gap-1.5">
+                                            <AlertTriangle size={12} className="text-rose-600 shrink-0" />
+                                            Itens Reprovados / Não Conformes ({info.failedItems.length}):
+                                          </span>
+                                          <span className="font-mono text-[9px] bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded border border-rose-300">
+                                            Ação Requerida
+                                          </span>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          {info.failedItems.map((item) => (
+                                            <div
+                                              key={item.name}
+                                              className="flex items-center justify-between py-1.5 px-2.5 bg-rose-50/90 border border-rose-200 rounded-md text-[11px] shadow-2xs"
+                                            >
+                                              <span className="font-semibold text-rose-950 pr-2 leading-tight">
+                                                {item.name}
+                                              </span>
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 shrink-0">
+                                                <Check size={12} className="stroke-[3] rotate-180" />
+                                                NÃO
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : info.totalAudited > 0 ? (
+                                      <div className="flex items-center gap-2 text-emerald-800 font-semibold text-[11px] bg-emerald-50/80 border border-emerald-200 px-2.5 py-1.5 rounded-md">
+                                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                                        <span>Todos os itens inspecionados em conformidade ({info.totalAudited} itens auditados OK)</span>
+                                      </div>
+                                    ) : null}
+
+                                    {/* 2. RELATO DO OPERADOR / OBSERVAÇÕES */}
+                                    {info.operatorNotes && (
+                                      <div className="bg-slate-50 border border-slate-200 rounded-md p-2 text-[11px] text-slate-700">
+                                        <span className="font-bold text-slate-800 text-[10px] block uppercase tracking-wider mb-0.5">
+                                          Relato do Operador / Observação:
+                                        </span>
+                                        <p className="italic text-slate-700 font-serif leading-relaxed">
+                                          &ldquo;{info.operatorNotes}&rdquo;
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* 3. INFORMAÇÕES COMPLEMENTARES E PRÓXIMA REVISÃO */}
+                                    {info.complementaryNotes && (
+                                      <div className="bg-slate-50 border border-slate-200 rounded-md p-2 text-[10.5px] text-slate-700">
+                                        <span className="font-bold text-slate-800 text-[9.5px] block uppercase tracking-wider mb-0.5">
+                                          Informações Complementares:
+                                        </span>
+                                        <p className="text-slate-600">{info.complementaryNotes}</p>
+                                      </div>
+                                    )}
+
+                                    {(info.revisionNotes || info.horimetroRevisao || info.horimetroProximo) && (
+                                      <div className="bg-emerald-50/70 border border-emerald-200 rounded-md p-2 text-[10.5px] text-emerald-950">
+                                        <div className="flex flex-wrap items-center justify-between gap-1 font-mono text-[10px] text-emerald-800 font-semibold mb-0.5">
+                                          {info.horimetroRevisao && <span>Revisão: {info.horimetroRevisao}h</span>}
+                                          {info.horimetroProximo && <span>Próxima: {info.horimetroProximo}h</span>}
+                                        </div>
+                                        {info.revisionNotes && <p className="text-emerald-900">{info.revisionNotes}</p>}
+                                      </div>
+                                    )}
+
+                                    {/* 4. TEXTO BRUTO (SE NÃO FOR JSON) */}
+                                    {info.rawText && !info.operatorNotes && (
+                                      <div className="text-slate-700 text-[11px] italic bg-slate-50 border border-slate-200 rounded p-2">
+                                        {info.rawText}
+                                      </div>
+                                    )}
+
+                                    {/* 5. AÇÕES: VER CHECKLIST COMPLETO OU LAUDO OFICIAL */}
+                                    {info.allItems.length > 0 && (
+                                      <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleChecklistExpand(c.id)}
+                                          className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md cursor-pointer transition-all print:hidden"
+                                        >
+                                          <ChevronRight 
+                                            size={13} 
+                                            className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} 
+                                          />
+                                          <span>
+                                            {isExpanded 
+                                              ? 'Ocultar listagem completa' 
+                                              : `Ver todos os ${info.allItems.length} itens do checklist (${info.conformItems.length} SIM / ${info.failedItems.length} NÃO)`
+                                            }
+                                          </span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedChecklistForModal(c)}
+                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-1 rounded-md cursor-pointer transition-colors print:hidden"
+                                          title="Abrir laudo técnico completo em tela cheia"
+                                        >
+                                          <Eye size={12} />
+                                          <span>Laudo Oficial</span>
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {/* 6. LISTAGEM COMPLETA DOS ITENS UM ABAIXO DO OUTRO */}
+                                    {info.allItems.length > 0 && isExpanded && (
+                                      <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                                        <div className="px-2.5 py-1.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[9.5px] font-bold text-slate-700 uppercase tracking-wider">
+                                          <span>Item Inspecionado / Referência</span>
+                                          <span>Situação (SIM / NÃO / N/A)</span>
+                                        </div>
+
+                                        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-1 space-y-0.5">
+                                          {info.allItems.map((item) => {
+                                            const isOk = item.val === 'SIM' || item.val === 'OK' || item.val === 'TRUE';
+                                            const isFailed = item.val === 'NÃO' || item.val === 'NAO' || item.val === 'REPROVADO';
+                                            return (
+                                              <div
+                                                key={item.name}
+                                                className={`flex items-center justify-between py-1 px-2 rounded text-[10.5px] transition-colors ${
+                                                  isFailed ? 'bg-rose-50/90 border border-rose-200/80 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                                                }`}
+                                              >
+                                                <span className={`pr-2 ${isFailed ? 'text-rose-950 font-bold' : 'text-slate-800'}`}>
+                                                  {item.name}
+                                                </span>
+                                                <span
+                                                  className={`px-2 py-0.5 rounded text-[9px] font-extrabold shrink-0 flex items-center gap-1 ${
+                                                    isOk
+                                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                      : isFailed
+                                                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                                      : 'bg-slate-200 text-slate-700'
+                                                  }`}
+                                                >
+                                                  {isOk ? (
+                                                    <>
+                                                      <Check size={11} className="stroke-[3]" />
+                                                      <span>SIM</span>
+                                                    </>
+                                                  ) : isFailed ? (
+                                                    <>
+                                                      <Check size={11} className="stroke-[3] rotate-180" />
+                                                      <span>NÃO</span>
+                                                    </>
+                                                  ) : (
+                                                    <span>{item.val || 'N/A'}</span>
+                                                  )}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -1549,6 +1892,214 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
         </div>
       )}
+
+      {/* MODAL DE LAUDO TÉCNICO OFICIAL DO CHECKLIST */}
+      {selectedChecklistForModal && (() => {
+        const parsed = parseInspectionDetails(selectedChecklistForModal.failed_items_notes, selectedChecklistForModal.details);
+        const itemData: Record<string, string> = (selectedChecklistForModal.details) || (parsed.allItems.reduce((acc, cur) => {
+          acc[cur.name] = cur.val;
+          return acc;
+        }, {} as Record<string, string>));
+
+        const val = getValidityStatus(selectedChecklistForModal.date);
+        const st = selectedChecklistForModal.overall_status || 'OK';
+
+        const renderModalViewGrid = (itemsList: string[]) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {itemsList.map(item => {
+              const valItem = itemData[item] || 'SIM';
+              const isOk = valItem === 'SIM' || valItem === 'OK' || valItem === 'TRUE';
+              const isFailed = valItem === 'NÃO' || valItem === 'NAO' || valItem === 'REPROVADO';
+              return (
+                <div key={item} className="flex justify-between items-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
+                  <span className="text-slate-700 font-medium pr-2">{item}</span>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 flex items-center justify-center ${
+                    isOk
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : isFailed
+                      ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {isOk ? (
+                      <Check size={14} className="stroke-[3]" />
+                    ) : isFailed ? (
+                      <Check size={14} className="stroke-[3] rotate-180" />
+                    ) : (
+                      'N/A'
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+
+        return (
+          <Modal
+            isOpen={!!selectedChecklistForModal}
+            onClose={() => setSelectedChecklistForModal(null)}
+            title="Laudo Técnico Oficial de Vistoria"
+          >
+            <div className="space-y-4">
+              {/* CABEÇALHO DO LAUDO */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Equipamento</span>
+                  <strong className="text-slate-800 text-sm">{selectedMachine?.name || 'Equipamento'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Data da Inspeção</span>
+                  <strong className="text-slate-800">{formatDisplayDateTime(selectedChecklistForModal.date)}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Horímetro / KM</span>
+                  <strong className="text-slate-800 font-mono">
+                    {selectedChecklistForModal.hour_km ? `${selectedChecklistForModal.hour_km.toLocaleString('pt-BR')} h` : '-'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Operador / Inspetor</span>
+                  <strong className="text-slate-800">{selectedChecklistForModal.operator_name || '-'}</strong>
+                </div>
+              </div>
+
+              {/* STATUS E VALIDADE */}
+              <div className="space-y-2">
+                <div className={`flex items-center justify-between p-3 rounded-xl border ${val.status === 'OK' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                  <div className="flex items-center gap-2">
+                    {val.status === 'OK' ? <CheckCircle2 size={18} className="text-emerald-600" /> : <Clock size={18} className="text-rose-600" />}
+                    <span className="font-bold text-xs">
+                      Status Validade 7 Dias: <span className="uppercase">{val.status}</span>
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono">
+                    {val.days === 0 ? 'Lançamento efetuado hoje' : `Lançado há ${val.days} dia(s)`}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                  {st === 'OK' ? (
+                    <>
+                      <ShieldCheck size={24} className="text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-emerald-700 uppercase text-xs">OK - Equipamento Liberado</p>
+                        <p className="text-[10px] text-slate-500">Componentes de segurança e operacionais sem risco grave de pane.</p>
+                      </div>
+                    </>
+                  ) : st === 'Prioridade Alta (Máquina Parada)' || st.toLowerCase().includes('alta') ? (
+                    <>
+                      <ShieldX size={24} className="text-rose-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-rose-700 uppercase text-xs">Prioridade Alta (Máquina Parada)</p>
+                        <p className="text-[10px] text-slate-500">Avaria crítica detectada. Equipamento bloqueado para operação.</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle size={24} className="text-amber-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-amber-700 uppercase text-xs">{st} - Atenção Requerida</p>
+                        <p className="text-[10px] text-slate-500">Inconformidades operacionais que exigem agendamento de reparo.</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* SEÇÕES DE EXIBIÇÃO DE ITENS AUDITADOS */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="flex border-b border-slate-200 bg-slate-100 text-xs font-bold overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setModalViewTab('componentes')}
+                    className={`py-2 px-3 border-b-2 cursor-pointer transition-all ${modalViewTab === 'componentes' ? 'border-[#1B3022] text-[#1B3022] bg-white' : 'border-transparent text-slate-500'}`}
+                  >
+                    Componentes ({COMPONENT_ITEMS.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalViewTab('niveis')}
+                    className={`py-2 px-3 border-b-2 cursor-pointer transition-all ${modalViewTab === 'niveis' ? 'border-[#1B3022] text-[#1B3022] bg-white' : 'border-transparent text-slate-500'}`}
+                  >
+                    Níveis ({FLUID_LEVEL_ITEMS.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalViewTab('revisoes')}
+                    className={`py-2 px-3 border-b-2 cursor-pointer transition-all ${modalViewTab === 'revisoes' ? 'border-[#1B3022] text-[#1B3022] bg-white' : 'border-transparent text-slate-500'}`}
+                  >
+                    Revisões ({REVISION_ITEMS.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalViewTab('complementares')}
+                    className={`py-2 px-3 border-b-2 cursor-pointer transition-all ${modalViewTab === 'complementares' ? 'border-[#1B3022] text-[#1B3022] bg-white' : 'border-transparent text-slate-500'}`}
+                  >
+                    Obs. Complementares ({COMPLEMENTARY_ITEMS.length})
+                  </button>
+                </div>
+
+                <div className="p-3 bg-white max-h-[300px] overflow-y-auto">
+                  {modalViewTab === 'componentes' && renderModalViewGrid(COMPONENT_ITEMS)}
+                  {modalViewTab === 'niveis' && renderModalViewGrid(FLUID_LEVEL_ITEMS)}
+                  {modalViewTab === 'revisoes' && (
+                    <div className="space-y-3">
+                      {(parsed.horimetroRevisao || parsed.horimetroProximo) && (
+                        <div className="grid grid-cols-2 gap-2 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg font-mono text-xs">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">Horímetro Revisão:</span>
+                            <strong className="text-emerald-900">{parsed.horimetroRevisao || 'N/A'}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">Próxima Revisão:</span>
+                            <strong className="text-emerald-900">{parsed.horimetroProximo || 'N/A'}</strong>
+                          </div>
+                        </div>
+                      )}
+                      {renderModalViewGrid(REVISION_ITEMS)}
+                      {parsed.revisionNotes && (
+                        <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                          <strong>Obs. Próxima Revisão:</strong> {parsed.revisionNotes}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {modalViewTab === 'complementares' && (
+                    <div className="space-y-3">
+                      {renderModalViewGrid(COMPLEMENTARY_ITEMS)}
+                      {parsed.complementaryNotes && (
+                        <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                          <strong>Informações Complementares:</strong> {parsed.complementaryNotes}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* OBSERVAÇÕES FINAIS */}
+              {parsed.operatorNotes && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                  <strong className="text-slate-700">Relatos do Operador / Observações:</strong>
+                  <p className="mt-1 text-slate-600 italic">
+                    &ldquo;{parsed.operatorNotes}&rdquo;
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedChecklistForModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs cursor-pointer transition-colors"
+                >
+                  Fechar Laudo
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
