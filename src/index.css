@@ -33,6 +33,10 @@ body {
 
 /* Print Styles for Technical Reports and Dossiers */
 @media print {
+  @page {
+    margin: 8mm;
+    size: A4 portrait;
+  }
   html, body, #root {
     height: auto !important;
     min-height: 100% !important;

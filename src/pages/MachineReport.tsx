@@ -815,37 +815,37 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
       {/* ÁREA DO RELATÓRIO / DOSSIÊ TÉCNICO COMPLETO */}
       {selectedMachine && machineData && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs relative text-slate-800 print:p-2 print:border-none print:shadow-none print:text-black space-y-6">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xs relative text-slate-800 print:p-0 print:border-none print:shadow-none print:text-black space-y-6 print:space-y-2">
 
           {/* CABEÇALHO OFICIAL DO LAUDO (PRINT / TELA) */}
-          <div className="border-b-2 border-[#1B3022] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:border-black print:pb-2">
+          <div className="border-b-2 border-[#1B3022] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:border-black print:pb-1.5 print:mb-1">
             <div className="flex items-center gap-3">
               <AppLogo 
-                className="w-12 h-12 rounded-full border border-amber-400/50 object-cover shadow-sm shrink-0" 
+                className="w-12 h-12 rounded-full border border-amber-400/50 object-cover shadow-sm shrink-0 print:w-10 print:h-10" 
                 alt="Logo Agropecuária Boa Sorte" 
               />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-bold tracking-wider text-amber-800 uppercase bg-amber-100/80 px-2 py-0.5 rounded print:border print:border-black">
+                  <span className="text-[10px] font-mono font-bold tracking-wider text-amber-800 uppercase bg-amber-100/80 px-2 py-0.5 rounded print:border print:border-black print:text-[9px] print:py-0 print:px-1.5">
                     GRUPO AGROPECUÁRIA BOA SORTE
                   </span>
-                  <span className="text-[10px] text-slate-500 font-mono print:text-black">
+                  <span className="text-[10px] print:text-[9px] text-slate-500 font-mono print:text-black">
                     • DOSSIÊ TÉCNICO DO ATIVO
                   </span>
                 </div>
-                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1 print:text-black uppercase">
+                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1 print:text-black uppercase print:text-base print:mt-0.5">
                   {selectedMachine.code} • {selectedMachine.name}
                 </h1>
-                <p className="text-xs text-slate-600 print:text-black">
+                <p className="text-xs text-slate-600 print:text-black print:text-[10px]">
                   Fazenda: <strong>{machineFarm?.name || 'Não informada'}</strong> {machineFarm?.location ? `(${machineFarm.location})` : ''} • Operador Titular: <strong>{selectedMachine.driver_name || 'Não vinculado'}</strong>
                 </p>
               </div>
             </div>
 
-            <div className="text-left sm:text-right text-[10px] text-slate-500 font-mono print:text-black shrink-0">
+            <div className="text-left sm:text-right text-[10px] print:text-[9px] text-slate-500 font-mono print:text-black shrink-0">
               <p className="font-bold">EMISSÃO: {formatDisplayDateTime(new Date().toISOString())}</p>
               <p className="text-slate-400 print:text-slate-600">Sistema Digital de Frotas • Fuso Cuiabá/MT</p>
-              <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200 print:border-black">
+              <div className="mt-1.5 print:mt-0.5 inline-flex items-center gap-1.5 px-2 py-0.5 print:py-0 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200 print:border-black">
                 <span>STATUS:</span>
                 <span className="uppercase">{selectedMachine.status}</span>
               </div>
@@ -1590,8 +1590,8 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
           {/* SEÇÃO 7: HISTÓRICO DE CHECKLISTS (VISTORIAS 7 DIAS) */}
           {selectedSections[7] ? (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:bg-white print:border-slate-300">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden print:border-slate-300 print:rounded-none">
+              <div className="p-3 print:py-1.5 print:px-2 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:bg-white print:border-slate-300 print:break-inside-avoid">
                 <div className="flex items-center gap-2.5">
                   <label className="flex items-center gap-1.5 cursor-pointer select-none print:hidden bg-white border border-slate-300 hover:border-emerald-600 px-2 py-0.5 rounded-md shadow-2xs transition-colors" title="Desmarque para não incluir esta seção no PDF">
                     <input
@@ -1602,7 +1602,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                     />
                     <span className="text-[10px] font-bold text-slate-700">Incluir no PDF</span>
                   </label>
-                  <h3 className="text-[10px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
+                  <h3 className="text-[10px] print:text-[9.5px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5 print:text-black">
                     <CheckSquare size={13} className="text-[#1B3022]" />
                     7. Histórico de Vistorias e Checklists Operacionais ({machineData.chkLogs.length})
                   </h3>
@@ -1627,7 +1627,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
               </div>
 
               {/* CORPO DA SEÇÃO 7: LISTAGEM DE VISTORIAS E RELAÇÃO COMPLETA CENTRALIZADA */}
-              <div className="p-3 space-y-4 print:p-0 print:space-y-4">
+              <div className="p-3 space-y-4 print:p-0 print:space-y-2">
                 {machineData.chkLogs.length === 0 ? (
                   <div className="py-6 text-center italic text-slate-400 print:text-slate-600 text-xs">
                     Nenhuma vistoria ou checklist registrado para este equipamento.
@@ -1649,42 +1649,42 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                     return (
                       <div 
                         key={c.id} 
-                        className="border border-slate-200 print:border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs print:shadow-none print:break-inside-avoid-page"
+                        className="border border-slate-200 print:border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs print:shadow-none print:rounded-none"
                       >
                         {/* 1. LINHA SUPERIOR ÚNICA: DATA/HORA, HORÍMETRO, OPERADOR E STATUS GERAL (100% DA LARGURA) */}
-                        <div className="bg-slate-50 print:bg-slate-100 border-b border-slate-200 print:border-slate-300 px-3 py-2 flex flex-wrap items-center justify-between gap-y-1.5 gap-x-4">
+                        <div className="bg-slate-50 print:bg-slate-100 border-b border-slate-200 print:border-slate-300 px-3 py-2 print:py-1 print:px-2 flex flex-wrap items-center justify-between gap-y-1 gap-x-3 print:break-inside-avoid">
                           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Data / Hora:</span>
-                              <span className="font-mono font-bold text-slate-900 print:text-black text-[11px]">
+                              <span className="font-mono font-bold text-slate-900 print:text-black text-[11px] print:text-[10px]">
                                 {formatDisplayDateTime(c.date)}
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Horímetro:</span>
-                              <span className="font-mono font-bold text-slate-900 print:text-black text-[11px]">
+                              <span className="font-mono font-bold text-slate-900 print:text-black text-[11px] print:text-[10px]">
                                 {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Operador / Inspetor:</span>
-                              <span className="font-bold text-slate-900 print:text-black uppercase text-[11px]">
+                              <span className="font-bold text-slate-900 print:text-black uppercase text-[11px] print:text-[10px]">
                                 {c.operator_name || '-'}
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Status Geral:</span>
-                              <span className={`inline-flex px-2 py-0.5 rounded text-[9.5px] font-extrabold border uppercase ${chkColor} print:border-black`}>
+                              <span className={`inline-flex px-2 py-0.5 print:py-0 print:px-1.5 rounded text-[9.5px] print:text-[8.5px] font-extrabold border uppercase ${chkColor} print:border-black`}>
                                 {c.overall_status}
                               </span>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[9.5px] font-bold text-emerald-800 bg-emerald-50 print:bg-white px-2 py-0.5 rounded border border-emerald-200 print:border-emerald-700">
+                            <span className="font-mono text-[9.5px] print:text-[8.5px] font-bold text-emerald-800 bg-emerald-50 print:bg-white px-2 py-0.5 print:py-0 rounded border border-emerald-200 print:border-emerald-700">
                               {info.conformItems.length} OK ({Math.round((info.conformItems.length / (info.allItems.length || 1)) * 100)}% Conformidade)
                             </span>
 
@@ -1712,28 +1712,28 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                         </div>
 
                         {/* 2. CORPO DA VISTORIA: ITENS REPROVADOS, OBSERVAÇÕES E RELAÇÃO COMPLETA CENTRALIZADA (100% DA LARGURA) */}
-                        <div className="p-3 space-y-2.5 print:p-2.5 print:space-y-2">
+                        <div className="p-3 space-y-2.5 print:p-1.5 print:space-y-1.5">
                           {/* 2.1. ALERTAS DE ITENS REPROVADOS (SE HOUVER) */}
                           {info.failedItems.length > 0 && (
-                            <div className="border border-rose-200 bg-rose-50/90 rounded-lg p-2.5 print:bg-rose-50 print:border-rose-400">
-                              <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-900 uppercase tracking-wider mb-1.5">
+                            <div className="border border-rose-200 bg-rose-50/90 rounded-lg p-2.5 print:p-1.5 print:bg-rose-50 print:border-rose-400 print:break-inside-avoid">
+                              <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-900 uppercase tracking-wider mb-1.5 print:mb-1">
                                 <span className="flex items-center gap-1.5">
-                                  <AlertTriangle size={13} className="text-rose-600 shrink-0" />
+                                  <AlertTriangle size={13} className="text-rose-600 shrink-0 print:w-3 print:h-3" />
                                   Itens Reprovados / Não Conformes ({info.failedItems.length}):
                                 </span>
-                                <span className="font-mono text-[9px] bg-rose-200/80 text-rose-900 px-1.5 py-0.5 rounded border border-rose-300">
+                                <span className="font-mono text-[9px] print:text-[8px] bg-rose-200/80 text-rose-900 px-1.5 py-0.5 rounded border border-rose-300">
                                   Ação Requerida
                                 </span>
                               </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5 print:gap-1">
                                 {info.failedItems.map((item, idx) => (
                                   <div
                                     key={`${item.name}-${idx}`}
-                                    className="flex items-center justify-between py-1 px-2 bg-white border border-rose-200 rounded text-[10.5px] print:text-[9px]"
+                                    className="flex items-center justify-between py-1 px-2 print:py-0.5 print:px-1.5 bg-white border border-rose-200 rounded text-[10.5px] print:text-[8px]"
                                   >
-                                    <span className="font-bold text-rose-950 pr-1.5 leading-tight">{item.name}</span>
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8.5px] font-black bg-rose-100 text-rose-800 border border-rose-300 shrink-0">
-                                      <Check size={10} className="stroke-[3] rotate-180" />
+                                    <span className="font-bold text-rose-950 pr-1.5 leading-tight truncate">{item.name}</span>
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 print:px-1 print:py-0 rounded text-[8.5px] print:text-[7px] font-black bg-rose-100 text-rose-800 border border-rose-300 shrink-0">
+                                      <Check size={10} className="stroke-[3] rotate-180 print:w-2.5 print:h-2.5" />
                                       NÃO
                                     </span>
                                   </div>
@@ -1744,8 +1744,8 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
                           {/* 2.2. RELATO DO OPERADOR / OBSERVAÇÕES */}
                           {info.operatorNotes && (
-                            <div className="bg-slate-50 print:bg-white border border-slate-200 print:border-slate-300 rounded-lg p-2.5 text-[11px]">
-                              <span className="font-bold text-slate-700 print:text-black text-[9.5px] block uppercase tracking-wider mb-0.5">
+                            <div className="bg-slate-50 print:bg-white border border-slate-200 print:border-slate-300 rounded-lg p-2.5 print:p-1.5 text-[11px] print:text-[9px] print:break-inside-avoid">
+                              <span className="font-bold text-slate-700 print:text-black text-[9.5px] print:text-[8px] block uppercase tracking-wider mb-0.5">
                                 Relato do Operador / Observação:
                               </span>
                               <p className="italic text-slate-800 print:text-black font-serif leading-relaxed">
@@ -1756,8 +1756,8 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
                           {/* 2.3. REVISÃO E COMPLEMENTARES */}
                           {(info.revisionNotes || info.horimetroRevisao || info.horimetroProximo || info.complementaryNotes) && (
-                            <div className="bg-emerald-50/60 print:bg-white border border-emerald-200 print:border-slate-300 rounded-lg p-2 text-[10.5px]">
-                              <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[9.5px] text-emerald-900 font-semibold mb-0.5">
+                            <div className="bg-emerald-50/60 print:bg-white border border-emerald-200 print:border-slate-300 rounded-lg p-2 print:p-1.5 text-[10.5px] print:text-[8.5px] print:break-inside-avoid">
+                              <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[9.5px] print:text-[8px] text-emerald-900 font-semibold mb-0.5">
                                 {info.horimetroRevisao && <span>Revisão Realizada: {info.horimetroRevisao}h</span>}
                                 {info.horimetroProximo && <span>Próxima Revisão: {info.horimetroProximo}h</span>}
                               </div>
@@ -1772,32 +1772,32 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                               isExpanded ? 'block' : 'hidden print:block'
                             }`}>
                               {/* Cabeçalho da Relação */}
-                              <div className="px-3 py-1.5 bg-slate-100 print:bg-slate-100 border-b border-slate-200 print:border-slate-300 flex items-center justify-between text-[9.5px] font-bold text-slate-700 uppercase tracking-wider print:text-black">
+                              <div className="px-3 py-1.5 print:py-1 print:px-2 bg-slate-100 print:bg-slate-100 border-b border-slate-200 print:border-slate-300 flex items-center justify-between text-[9.5px] print:text-[8px] font-bold text-slate-700 uppercase tracking-wider print:text-black print:break-inside-avoid">
                                 <span className="flex items-center gap-2">
                                   <span>Relação Completa dos Itens Inspecionados ({info.allItems.length})</span>
-                                  <span className="font-mono text-[8.5px] text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded print:border-emerald-600 print:text-emerald-900">
+                                  <span className="font-mono text-[8.5px] print:text-[7.5px] text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded print:border-emerald-600 print:text-emerald-900">
                                     {info.conformItems.length} CONFORME (SIM)
                                   </span>
                                   {info.failedItems.length > 0 && (
-                                    <span className="font-mono text-[8.5px] text-rose-800 bg-rose-100 border border-rose-300 px-1.5 py-0.2 rounded print:border-rose-600 print:text-rose-900">
+                                    <span className="font-mono text-[8.5px] print:text-[7.5px] text-rose-800 bg-rose-100 border border-rose-300 px-1.5 py-0.2 rounded print:border-rose-600 print:text-rose-900">
                                       {info.failedItems.length} NÃO CONFORME (NÃO)
                                     </span>
                                   )}
                                 </span>
-                                <span className="font-mono text-[9px] text-slate-600 print:text-black font-semibold">
+                                <span className="font-mono text-[9px] print:text-[8px] text-slate-600 print:text-black font-semibold">
                                   Conformidade: {Math.round((info.conformItems.length / info.allItems.length) * 100)}%
                                 </span>
                               </div>
 
                               {/* Grade Centralizada em 3 Colunas na Folha Inteira de Ponta a Ponta */}
-                              <div className="p-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5">
+                              <div className="p-2 print:p-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5 print:gap-1">
                                 {info.allItems.map((item, idx) => {
                                   const isOk = item.val === 'SIM' || item.val === 'OK' || item.val === 'TRUE';
                                   const isFailed = item.val === 'NÃO' || item.val === 'NAO' || item.val === 'REPROVADO';
                                   return (
                                     <div
                                       key={`${item.name}-${idx}`}
-                                      className={`flex items-center justify-between py-1 px-2 rounded text-[10px] print:text-[8.5px] print:py-0.5 print:px-1.5 border print:break-inside-avoid ${
+                                      className={`flex items-center justify-between py-1 px-2 print:py-0.5 print:px-1.5 rounded text-[10px] print:text-[8px] border print:break-inside-avoid ${
                                         isFailed
                                           ? 'bg-rose-50 border-rose-200 text-rose-950 font-semibold print:border-rose-400 print:bg-rose-50'
                                           : isOk
@@ -1805,11 +1805,11 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                                           : 'bg-slate-50 border-slate-200 text-slate-700 print:bg-white'
                                       }`}
                                     >
-                                      <span className={`pr-1.5 leading-tight ${isFailed ? 'text-rose-950 font-bold print:text-rose-900' : 'text-slate-800 print:text-black'}`}>
+                                      <span className={`pr-1.5 leading-tight truncate ${isFailed ? 'text-rose-950 font-bold print:text-rose-900' : 'text-slate-800 print:text-black'}`}>
                                         {item.name}
                                       </span>
                                       <span
-                                        className={`px-1.5 py-0.5 rounded text-[8.5px] print:text-[8px] font-black shrink-0 flex items-center gap-0.5 ${
+                                        className={`px-1.5 py-0.5 print:px-1 print:py-0 rounded text-[8.5px] print:text-[7px] font-black shrink-0 flex items-center gap-0.5 ${
                                           isOk
                                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 print:border-emerald-600 print:text-emerald-900'
                                             : isFailed
@@ -1819,12 +1819,12 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                                       >
                                         {isOk ? (
                                           <>
-                                            <Check size={10} className="stroke-[3]" />
+                                            <Check size={10} className="stroke-[3] print:w-2.5 print:h-2.5" />
                                             <span>SIM</span>
                                           </>
                                         ) : isFailed ? (
                                           <>
-                                            <Check size={10} className="stroke-[3] rotate-180" />
+                                            <Check size={10} className="stroke-[3] rotate-180 print:w-2.5 print:h-2.5" />
                                             <span>NÃO</span>
                                           </>
                                         ) : (
@@ -1873,20 +1873,20 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
           )}
 
           {/* CAMPO DE ASSINATURA E TERMO TÉCNICO (VISÍVEL NO PRINT) */}
-          <div className="hidden print:block border-t border-slate-400 mt-10 pt-6 text-black">
-            <div className="grid grid-cols-2 gap-10">
+          <div className="hidden print:block border-t border-slate-400 mt-10 pt-6 text-black print:mt-3 print:pt-2 print:break-inside-avoid">
+            <div className="grid grid-cols-2 gap-10 print:gap-4">
               <div className="text-center">
-                <div className="border-t border-black w-52 mx-auto mt-6" />
-                <p className="text-[10px] font-bold uppercase mt-1">Encarregado de Manutenção / Oficina</p>
-                <p className="text-[9px] text-slate-600 mt-0.5">Responsável pela inspeção técnica do ativo</p>
+                <div className="border-t border-black w-48 mx-auto mt-4 print:mt-2" />
+                <p className="text-[10px] print:text-[8px] font-bold uppercase mt-1">Encarregado de Manutenção / Oficina</p>
+                <p className="text-[9px] print:text-[7px] text-slate-600 mt-0.5">Responsável pela inspeção técnica do ativo</p>
               </div>
               <div className="text-center">
-                <div className="border-t border-black w-52 mx-auto mt-6" />
-                <p className="text-[10px] font-bold uppercase mt-1">Gerente de Operações / Frota</p>
-                <p className="text-[9px] text-slate-600 mt-0.5">Homologação e conferência de registros</p>
+                <div className="border-t border-black w-48 mx-auto mt-4 print:mt-2" />
+                <p className="text-[10px] print:text-[8px] font-bold uppercase mt-1">Gerente de Operações / Frota</p>
+                <p className="text-[9px] print:text-[7px] text-slate-600 mt-0.5">Homologação e conferência de registros</p>
               </div>
             </div>
-            <div className="text-center text-[8px] text-slate-500 font-mono mt-6">
+            <div className="text-center text-[8px] print:text-[7px] text-slate-500 font-mono mt-4 print:mt-1.5">
               Dossiê emitido via Plataforma Agropecuária Boa Sorte • Página Oficial de Conferência Operacional
             </div>
           </div>
