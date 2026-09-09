@@ -1625,260 +1625,222 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                 )}
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
-                      <th className="py-2 px-3 whitespace-nowrap w-28">Data / Hora</th>
-                      <th className="py-2 px-2 text-right whitespace-nowrap w-24">Horímetro</th>
-                      <th className="py-2 px-3 whitespace-nowrap w-36">Operador / Inspetor</th>
-                      <th className="py-2 px-2 text-center whitespace-nowrap w-28">Status Geral</th>
-                      <th className="py-2 px-4 min-w-[320px]">Observações e Itens Inspecionados</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
-                    {machineData.chkLogs.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-3 px-3 text-center italic text-slate-400 print:text-slate-600">
-                          Nenhuma vistoria ou checklist registrado para este equipamento.
-                        </td>
-                      </tr>
-                    ) : (
-                      machineData.chkLogs.map((c) => {
-                        let chkColor = 'bg-slate-100 text-slate-700 border-slate-200';
-                        if (c.overall_status === 'OK') {
-                          chkColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-                        } else if (c.overall_status === 'Necessita Atenção' || c.overall_status === 'Prioridade Média' || c.overall_status === 'Prioridade Baixa') {
-                          chkColor = 'bg-amber-50 text-amber-800 border-amber-200';
-                        } else {
-                          chkColor = 'bg-red-50 text-red-800 border-red-200';
-                        }
+              {/* CORPO DA SEÇÃO 7: LISTAGEM DE VISTORIAS E RELAÇÃO COMPLETA CENTRALIZADA */}
+              <div className="p-3 space-y-4 print:p-0 print:space-y-4">
+                {machineData.chkLogs.length === 0 ? (
+                  <div className="py-6 text-center italic text-slate-400 print:text-slate-600 text-xs">
+                    Nenhuma vistoria ou checklist registrado para este equipamento.
+                  </div>
+                ) : (
+                  machineData.chkLogs.map((c) => {
+                    let chkColor = 'bg-slate-100 text-slate-700 border-slate-200';
+                    if (c.overall_status === 'OK') {
+                      chkColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                    } else if (c.overall_status === 'Necessita Atenção' || c.overall_status === 'Prioridade Média' || c.overall_status === 'Prioridade Baixa') {
+                      chkColor = 'bg-amber-50 text-amber-800 border-amber-200';
+                    } else {
+                      chkColor = 'bg-red-50 text-red-800 border-red-200';
+                    }
 
-                        return (
-                          <tr key={c.id} className="hover:bg-slate-50 print:bg-white print:break-inside-avoid">
-                            <td className="py-2.5 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap align-top">
-                              {formatDisplayDateTime(c.date)}
-                            </td>
-                            <td className="py-2.5 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap align-top">
-                              {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-800 print:text-black font-medium align-top">
-                              {c.operator_name || '-'}
-                            </td>
-                            <td className="py-2.5 px-2 text-center align-top">
-                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase ${chkColor} print:border-black`}>
+                    const info = parseInspectionDetails(c.failed_items_notes, c.details);
+                    const isExpanded = expandAllChecklists || !!expandedChecklists[c.id];
+
+                    return (
+                      <div 
+                        key={c.id} 
+                        className="border border-slate-200 print:border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs print:shadow-none print:break-inside-avoid-page"
+                      >
+                        {/* 1. LINHA SUPERIOR ÚNICA: DATA/HORA, HORÍMETRO, OPERADOR E STATUS GERAL (100% DA LARGURA) */}
+                        <div className="bg-slate-50 print:bg-slate-100 border-b border-slate-200 print:border-slate-300 px-3 py-2 flex flex-wrap items-center justify-between gap-y-1.5 gap-x-4">
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Data / Hora:</span>
+                              <span className="font-mono font-bold text-slate-900 print:text-black text-[11px]">
+                                {formatDisplayDateTime(c.date)}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Horímetro:</span>
+                              <span className="font-mono font-bold text-slate-900 print:text-black text-[11px]">
+                                {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Operador / Inspetor:</span>
+                              <span className="font-bold text-slate-900 print:text-black uppercase text-[11px]">
+                                {c.operator_name || '-'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Status Geral:</span>
+                              <span className={`inline-flex px-2 py-0.5 rounded text-[9.5px] font-extrabold border uppercase ${chkColor} print:border-black`}>
                                 {c.overall_status}
                               </span>
-                            </td>
-                            <td className="py-2.5 px-4 text-slate-700 print:text-black text-[10.5px] align-top">
-                              {(() => {
-                                const info = parseInspectionDetails(c.failed_items_notes, c.details);
-                                const isExpanded = expandAllChecklists || !!expandedChecklists[c.id];
+                            </div>
+                          </div>
 
-                                const hasAnyData = info.failedItems.length > 0 || 
-                                  info.operatorNotes || 
-                                  info.complementaryNotes || 
-                                  info.revisionNotes || 
-                                  info.allItems.length > 0 ||
-                                  info.rawText;
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[9.5px] font-bold text-emerald-800 bg-emerald-50 print:bg-white px-2 py-0.5 rounded border border-emerald-200 print:border-emerald-700">
+                              {info.conformItems.length} OK ({Math.round((info.conformItems.length / (info.allItems.length || 1)) * 100)}% Conformidade)
+                            </span>
 
-                                if (!hasAnyData) {
-                                  return (
-                                    <span className="text-slate-400 italic font-normal">
-                                      Nenhuma observação ou não conformidade apontada
+                            {/* Botões de Ação na Tela (Ocultos na Impressão) */}
+                            <div className="flex items-center gap-1 print:hidden">
+                              <button
+                                type="button"
+                                onClick={() => toggleChecklistExpand(c.id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded cursor-pointer transition-all"
+                              >
+                                <ChevronRight size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                                <span>{isExpanded ? 'Recolher na tela' : 'Expandir na tela'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedChecklistForModal(c)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded cursor-pointer transition-colors"
+                                title="Abrir laudo técnico completo"
+                              >
+                                <Eye size={12} />
+                                <span>Laudo Oficial</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. CORPO DA VISTORIA: ITENS REPROVADOS, OBSERVAÇÕES E RELAÇÃO COMPLETA CENTRALIZADA (100% DA LARGURA) */}
+                        <div className="p-3 space-y-2.5 print:p-2.5 print:space-y-2">
+                          {/* 2.1. ALERTAS DE ITENS REPROVADOS (SE HOUVER) */}
+                          {info.failedItems.length > 0 && (
+                            <div className="border border-rose-200 bg-rose-50/90 rounded-lg p-2.5 print:bg-rose-50 print:border-rose-400">
+                              <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-900 uppercase tracking-wider mb-1.5">
+                                <span className="flex items-center gap-1.5">
+                                  <AlertTriangle size={13} className="text-rose-600 shrink-0" />
+                                  Itens Reprovados / Não Conformes ({info.failedItems.length}):
+                                </span>
+                                <span className="font-mono text-[9px] bg-rose-200/80 text-rose-900 px-1.5 py-0.5 rounded border border-rose-300">
+                                  Ação Requerida
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5">
+                                {info.failedItems.map((item) => (
+                                  <div
+                                    key={item.name}
+                                    className="flex items-center justify-between py-1 px-2 bg-white border border-rose-200 rounded text-[10.5px] print:text-[9px]"
+                                  >
+                                    <span className="font-bold text-rose-950 pr-1.5 leading-tight">{item.name}</span>
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8.5px] font-black bg-rose-100 text-rose-800 border border-rose-300 shrink-0">
+                                      <Check size={10} className="stroke-[3] rotate-180" />
+                                      NÃO
                                     </span>
-                                  );
-                                }
-
-                                return (
-                                  <div className="space-y-2 py-0.5">
-                                    {/* 1. ITENS REPROVADOS (NÃO CONFORMES) - ORDENADOS UM ABAIXO DO OUTRO */}
-                                    {info.failedItems.length > 0 ? (
-                                      <div className="space-y-1.5">
-                                        <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-800 uppercase tracking-wide bg-rose-50/80 border border-rose-200/80 px-2.5 py-1 rounded-md">
-                                          <span className="flex items-center gap-1.5">
-                                            <AlertTriangle size={12} className="text-rose-600 shrink-0" />
-                                            Itens Reprovados / Não Conformes ({info.failedItems.length}):
-                                          </span>
-                                          <span className="font-mono text-[9px] bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded border border-rose-300">
-                                            Ação Requerida
-                                          </span>
-                                        </div>
-
-                                        <div className="space-y-1">
-                                          {info.failedItems.map((item) => (
-                                            <div
-                                              key={item.name}
-                                              className="flex items-center justify-between py-1.5 px-2.5 bg-rose-50/90 border border-rose-200 rounded-md text-[11px] shadow-2xs"
-                                            >
-                                              <span className="font-semibold text-rose-950 pr-2 leading-tight">
-                                                {item.name}
-                                              </span>
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 shrink-0">
-                                                <Check size={12} className="stroke-[3] rotate-180" />
-                                                NÃO
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : info.totalAudited > 0 ? (
-                                      <div className="flex items-center gap-2 text-emerald-800 font-semibold text-[11px] bg-emerald-50/80 border border-emerald-200 px-2.5 py-1.5 rounded-md">
-                                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                                        <span>Todos os itens inspecionados em conformidade ({info.totalAudited} itens auditados OK)</span>
-                                      </div>
-                                    ) : null}
-
-                                    {/* 2. RELATO DO OPERADOR / OBSERVAÇÕES */}
-                                    {info.operatorNotes && (
-                                      <div className="bg-slate-50 border border-slate-200 rounded-md p-2 text-[11px] text-slate-700">
-                                        <span className="font-bold text-slate-800 text-[10px] block uppercase tracking-wider mb-0.5">
-                                          Relato do Operador / Observação:
-                                        </span>
-                                        <p className="italic text-slate-700 font-serif leading-relaxed">
-                                          &ldquo;{info.operatorNotes}&rdquo;
-                                        </p>
-                                      </div>
-                                    )}
-
-                                    {/* 3. INFORMAÇÕES COMPLEMENTARES E PRÓXIMA REVISÃO */}
-                                    {info.complementaryNotes && (
-                                      <div className="bg-slate-50 border border-slate-200 rounded-md p-2 text-[10.5px] text-slate-700">
-                                        <span className="font-bold text-slate-800 text-[9.5px] block uppercase tracking-wider mb-0.5">
-                                          Informações Complementares:
-                                        </span>
-                                        <p className="text-slate-600">{info.complementaryNotes}</p>
-                                      </div>
-                                    )}
-
-                                    {(info.revisionNotes || info.horimetroRevisao || info.horimetroProximo) && (
-                                      <div className="bg-emerald-50/70 border border-emerald-200 rounded-md p-2 text-[10.5px] text-emerald-950">
-                                        <div className="flex flex-wrap items-center justify-between gap-1 font-mono text-[10px] text-emerald-800 font-semibold mb-0.5">
-                                          {info.horimetroRevisao && <span>Revisão: {info.horimetroRevisao}h</span>}
-                                          {info.horimetroProximo && <span>Próxima: {info.horimetroProximo}h</span>}
-                                        </div>
-                                        {info.revisionNotes && <p className="text-emerald-900">{info.revisionNotes}</p>}
-                                      </div>
-                                    )}
-
-                                    {/* 4. TEXTO BRUTO (SE NÃO FOR JSON) */}
-                                    {info.rawText && !info.operatorNotes && (
-                                      <div className="text-slate-700 text-[11px] italic bg-slate-50 border border-slate-200 rounded p-2">
-                                        {info.rawText}
-                                      </div>
-                                    )}
-
-                                    {/* 5. AÇÕES: VER CHECKLIST COMPLETO OU LAUDO OFICIAL */}
-                                    {info.allItems.length > 0 && (
-                                      <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 print:hidden">
-                                        <button
-                                          type="button"
-                                          onClick={() => toggleChecklistExpand(c.id)}
-                                          className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md cursor-pointer transition-all"
-                                        >
-                                          <ChevronRight 
-                                            size={13} 
-                                            className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} 
-                                          />
-                                          <span>
-                                            {isExpanded 
-                                              ? 'Ocultar listagem na tela' 
-                                              : `Ver todos os ${info.allItems.length} itens do checklist (${info.conformItems.length} SIM / ${info.failedItems.length} NÃO)`
-                                            }
-                                          </span>
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => setSelectedChecklistForModal(c)}
-                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-1 rounded-md cursor-pointer transition-colors"
-                                          title="Abrir laudo técnico completo em tela cheia"
-                                        >
-                                          <Eye size={12} />
-                                          <span>Laudo Oficial</span>
-                                        </button>
-                                      </div>
-                                    )}
-
-                                    {/* 6. LISTAGEM COMPLETA DOS ITENS INSPECIONADOS (SEMPRE EXIBIDA NO PDF/IMPRESSÃO E EXPANSÍVEL NA TELA) */}
-                                    {info.allItems.length > 0 && (
-                                      <div className={`mt-2 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs ${
-                                        isExpanded ? 'block' : 'hidden print:block'
-                                      } print:border-slate-300 print:shadow-none print:mt-1.5 print:break-inside-avoid`}>
-                                        <div className="px-2.5 py-1.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[9.5px] font-bold text-slate-700 uppercase tracking-wider print:bg-slate-100 print:text-black print:border-slate-300">
-                                          <span className="flex items-center gap-1.5">
-                                            <span>Relação Completa dos Itens Inspecionados ({info.allItems.length})</span>
-                                            <span className="font-mono text-[8.5px] text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-1 rounded print:border-emerald-600 print:text-emerald-900">
-                                              {info.conformItems.length} OK
-                                            </span>
-                                            {info.failedItems.length > 0 && (
-                                              <span className="font-mono text-[8.5px] text-rose-800 bg-rose-100/80 border border-rose-200 px-1 rounded print:border-rose-600 print:text-rose-900">
-                                                {info.failedItems.length} Reprovado(s)
-                                              </span>
-                                            )}
-                                          </span>
-                                          <span className="font-mono text-[9px] text-slate-500 print:text-black font-semibold">
-                                            Conformidade: {Math.round((info.conformItems.length / info.allItems.length) * 100)}%
-                                          </span>
-                                        </div>
-
-                                        <div className="max-h-64 overflow-y-auto print:max-h-none print:overflow-visible p-1.5 print:p-1.5 grid grid-cols-1 md:grid-cols-2 gap-1 print:grid-cols-2 print:gap-1">
-                                          {info.allItems.map((item) => {
-                                            const isOk = item.val === 'SIM' || item.val === 'OK' || item.val === 'TRUE';
-                                            const isFailed = item.val === 'NÃO' || item.val === 'NAO' || item.val === 'REPROVADO';
-                                            return (
-                                              <div
-                                                key={item.name}
-                                                className={`flex items-center justify-between py-1 px-2 rounded text-[10.5px] transition-colors print:text-[9px] print:py-0.5 print:px-1.5 border print:break-inside-avoid ${
-                                                  isFailed 
-                                                    ? 'bg-rose-50 border-rose-200 text-rose-950 font-semibold print:border-rose-400 print:bg-rose-50' 
-                                                    : isOk
-                                                    ? 'bg-slate-50/60 hover:bg-slate-100/70 border-slate-200/80 text-slate-800 print:bg-white print:border-slate-200'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-700 print:bg-white'
-                                                }`}
-                                              >
-                                                <span className={`pr-1.5 text-[10px] print:text-[9px] leading-tight ${isFailed ? 'text-rose-950 font-bold print:text-rose-900' : 'text-slate-800 print:text-black'}`}>
-                                                  {item.name}
-                                                </span>
-                                                <span
-                                                  className={`px-1.5 py-0.5 rounded text-[8.5px] print:text-[8px] font-extrabold shrink-0 flex items-center gap-0.5 ${
-                                                    isOk
-                                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 print:border-emerald-600 print:text-emerald-900'
-                                                      : isFailed
-                                                      ? 'bg-rose-100 text-rose-800 border border-rose-300 print:border-rose-600 print:text-rose-900'
-                                                      : 'bg-slate-200 text-slate-700'
-                                                  }`}
-                                                >
-                                                  {isOk ? (
-                                                    <>
-                                                      <Check size={10} className="stroke-[3]" />
-                                                      <span>SIM</span>
-                                                    </>
-                                                  ) : isFailed ? (
-                                                    <>
-                                                      <Check size={10} className="stroke-[3] rotate-180" />
-                                                      <span>NÃO</span>
-                                                    </>
-                                                  ) : (
-                                                    <span>{item.val || 'N/A'}</span>
-                                                  )}
-                                                </span>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
                                   </div>
-                                );
-                              })()}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 2.2. RELATO DO OPERADOR / OBSERVAÇÕES */}
+                          {info.operatorNotes && (
+                            <div className="bg-slate-50 print:bg-white border border-slate-200 print:border-slate-300 rounded-lg p-2.5 text-[11px]">
+                              <span className="font-bold text-slate-700 print:text-black text-[9.5px] block uppercase tracking-wider mb-0.5">
+                                Relato do Operador / Observação:
+                              </span>
+                              <p className="italic text-slate-800 print:text-black font-serif leading-relaxed">
+                                &ldquo;{info.operatorNotes}&rdquo;
+                              </p>
+                            </div>
+                          )}
+
+                          {/* 2.3. REVISÃO E COMPLEMENTARES */}
+                          {(info.revisionNotes || info.horimetroRevisao || info.horimetroProximo || info.complementaryNotes) && (
+                            <div className="bg-emerald-50/60 print:bg-white border border-emerald-200 print:border-slate-300 rounded-lg p-2 text-[10.5px]">
+                              <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[9.5px] text-emerald-900 font-semibold mb-0.5">
+                                {info.horimetroRevisao && <span>Revisão Realizada: {info.horimetroRevisao}h</span>}
+                                {info.horimetroProximo && <span>Próxima Revisão: {info.horimetroProximo}h</span>}
+                              </div>
+                              {info.revisionNotes && <p className="text-emerald-950 font-medium">{info.revisionNotes}</p>}
+                              {info.complementaryNotes && <p className="text-slate-600 mt-1">{info.complementaryNotes}</p>}
+                            </div>
+                          )}
+
+                          {/* 2.4. RELAÇÃO COMPLETA DOS ITENS INSPECIONADOS - CENTRALIZADA E OCUPANDO TODA A PÁGINA */}
+                          {info.allItems.length > 0 && (
+                            <div className={`border border-slate-200 print:border-slate-300 rounded-lg overflow-hidden bg-white ${
+                              isExpanded ? 'block' : 'hidden print:block'
+                            }`}>
+                              {/* Cabeçalho da Relação */}
+                              <div className="px-3 py-1.5 bg-slate-100 print:bg-slate-100 border-b border-slate-200 print:border-slate-300 flex items-center justify-between text-[9.5px] font-bold text-slate-700 uppercase tracking-wider print:text-black">
+                                <span className="flex items-center gap-2">
+                                  <span>Relação Completa dos Itens Inspecionados ({info.allItems.length})</span>
+                                  <span className="font-mono text-[8.5px] text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded print:border-emerald-600 print:text-emerald-900">
+                                    {info.conformItems.length} CONFORME (SIM)
+                                  </span>
+                                  {info.failedItems.length > 0 && (
+                                    <span className="font-mono text-[8.5px] text-rose-800 bg-rose-100 border border-rose-300 px-1.5 py-0.2 rounded print:border-rose-600 print:text-rose-900">
+                                      {info.failedItems.length} NÃO CONFORME (NÃO)
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="font-mono text-[9px] text-slate-600 print:text-black font-semibold">
+                                  Conformidade: {Math.round((info.conformItems.length / info.allItems.length) * 100)}%
+                                </span>
+                              </div>
+
+                              {/* Grade Centralizada em 3 Colunas na Folha Inteira de Ponta a Ponta */}
+                              <div className="p-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5">
+                                {info.allItems.map((item) => {
+                                  const isOk = item.val === 'SIM' || item.val === 'OK' || item.val === 'TRUE';
+                                  const isFailed = item.val === 'NÃO' || item.val === 'NAO' || item.val === 'REPROVADO';
+                                  return (
+                                    <div
+                                      key={item.name}
+                                      className={`flex items-center justify-between py-1 px-2 rounded text-[10px] print:text-[8.5px] print:py-0.5 print:px-1.5 border print:break-inside-avoid ${
+                                        isFailed
+                                          ? 'bg-rose-50 border-rose-200 text-rose-950 font-semibold print:border-rose-400 print:bg-rose-50'
+                                          : isOk
+                                          ? 'bg-slate-50/70 hover:bg-slate-100/70 border-slate-200 text-slate-800 print:bg-white print:border-slate-200'
+                                          : 'bg-slate-50 border-slate-200 text-slate-700 print:bg-white'
+                                      }`}
+                                    >
+                                      <span className={`pr-1.5 leading-tight ${isFailed ? 'text-rose-950 font-bold print:text-rose-900' : 'text-slate-800 print:text-black'}`}>
+                                        {item.name}
+                                      </span>
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[8.5px] print:text-[8px] font-black shrink-0 flex items-center gap-0.5 ${
+                                          isOk
+                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 print:border-emerald-600 print:text-emerald-900'
+                                            : isFailed
+                                            ? 'bg-rose-100 text-rose-800 border border-rose-300 print:border-rose-600 print:text-rose-900'
+                                            : 'bg-slate-200 text-slate-700'
+                                        }`}
+                                      >
+                                        {isOk ? (
+                                          <>
+                                            <Check size={10} className="stroke-[3]" />
+                                            <span>SIM</span>
+                                          </>
+                                        ) : isFailed ? (
+                                          <>
+                                            <Check size={10} className="stroke-[3] rotate-180" />
+                                            <span>NÃO</span>
+                                          </>
+                                        ) : (
+                                          <span>{item.val || 'N/A'}</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           ) : (
