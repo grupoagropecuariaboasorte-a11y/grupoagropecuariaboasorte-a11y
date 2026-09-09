@@ -100,6 +100,19 @@ export function parseInspectionDetails(notesStr?: string, details?: any): Parsed
         }
       }
     });
+  } else {
+    // Caso o checklist não tenha o objeto individual de itens salvo, preenche com os itens canônicos padrão do sistema
+    const canonicalOrder = [
+      ...COMPONENT_ITEMS,
+      ...FLUID_LEVEL_ITEMS,
+      ...REVISION_ITEMS,
+      ...COMPLEMENTARY_ITEMS
+    ];
+    canonicalOrder.forEach(item => {
+      const entry = { name: item, val: 'SIM' };
+      allItems.push(entry);
+      conformItems.push(entry);
+    });
   }
 
   const operatorNotes = parsed?.notes || (!isJson && notesStr ? notesStr : '');
@@ -572,7 +585,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // SEÇÃO 7: HISTÓRICO DE CHECKLISTS
     if (selectedSections[7]) {
       rows.push(`"--- 7. HISTÓRICO DE CHECKLISTS E VISTORIAS 7 DIAS ---"`);
-      rows.push(`"Data da Vistoria";"Horímetro/KM";"Operador / Inspetor";"Status Geral";"Observações / Itens Reprovados"`);
+      rows.push(`"Data da Vistoria";"Horímetro/KM";"Operador / Inspetor";"Status Geral";"Observações / Resumo";"Relação Completa de Itens Inspecionados"`);
       if (machineData.chkLogs.length > 0) {
         machineData.chkLogs.forEach(c => {
           const info = parseInspectionDetails(c.failed_items_notes, c.details);
@@ -595,13 +608,17 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
             notesParts.push(info.rawText);
           }
           const formattedNotes = notesParts.join(' | ') || '-';
+          const fullItemsStr = info.allItems.length > 0
+            ? info.allItems.map(i => `${i.name}: ${i.val}`).join(' | ')
+            : '-';
 
           rows.push([
             escapeCsv(formatDisplayDateTime(c.date)),
             escapeCsv(formatNumberBr(c.hour_km, 1)),
             escapeCsv(c.operator_name),
             escapeCsv(c.overall_status),
-            escapeCsv(formattedNotes)
+            escapeCsv(formattedNotes),
+            escapeCsv(fullItemsStr)
           ].join(';'));
         });
       } else {
@@ -1599,8 +1616,11 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                         onChange={(e) => setExpandAllChecklists(e.target.checked)}
                         className="w-3.5 h-3.5 rounded text-[#1B3022] accent-[#1B3022] cursor-pointer"
                       />
-                      <span>Expandir todos os itens do checklist</span>
+                      <span>Expandir todos os itens na tela</span>
                     </label>
+                    <span className="hidden md:inline-block text-[9.5px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Relação completa de itens gerada automaticamente no PDF
+                    </span>
                   </div>
                 )}
               </div>
@@ -1613,7 +1633,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                       <th className="py-2 px-2 text-right whitespace-nowrap w-24">Horímetro</th>
                       <th className="py-2 px-3 whitespace-nowrap w-36">Operador / Inspetor</th>
                       <th className="py-2 px-2 text-center whitespace-nowrap w-28">Status Geral</th>
-                      <th className="py-2 px-4 min-w-[320px]">Observações e Itens Reprovados</th>
+                      <th className="py-2 px-4 min-w-[320px]">Observações e Itens Inspecionados</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 print:divide-slate-200 text-[11px]">
@@ -1635,7 +1655,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                         }
 
                         return (
-                          <tr key={c.id} className="hover:bg-slate-50 print:bg-white">
+                          <tr key={c.id} className="hover:bg-slate-50 print:bg-white print:break-inside-avoid">
                             <td className="py-2.5 px-3 font-mono text-[10.5px] text-slate-700 print:text-black whitespace-nowrap align-top">
                               {formatDisplayDateTime(c.date)}
                             </td>
@@ -1750,11 +1770,11 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
                                     {/* 5. AÇÕES: VER CHECKLIST COMPLETO OU LAUDO OFICIAL */}
                                     {info.allItems.length > 0 && (
-                                      <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+                                      <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 print:hidden">
                                         <button
                                           type="button"
                                           onClick={() => toggleChecklistExpand(c.id)}
-                                          className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md cursor-pointer transition-all print:hidden"
+                                          className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md cursor-pointer transition-all"
                                         >
                                           <ChevronRight 
                                             size={13} 
@@ -1762,7 +1782,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                                           />
                                           <span>
                                             {isExpanded 
-                                              ? 'Ocultar listagem completa' 
+                                              ? 'Ocultar listagem na tela' 
                                               : `Ver todos os ${info.allItems.length} itens do checklist (${info.conformItems.length} SIM / ${info.failedItems.length} NÃO)`
                                             }
                                           </span>
@@ -1771,7 +1791,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                                         <button
                                           type="button"
                                           onClick={() => setSelectedChecklistForModal(c)}
-                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-1 rounded-md cursor-pointer transition-colors print:hidden"
+                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-1 rounded-md cursor-pointer transition-colors"
                                           title="Abrir laudo técnico completo em tela cheia"
                                         >
                                           <Eye size={12} />
@@ -1780,45 +1800,63 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                                       </div>
                                     )}
 
-                                    {/* 6. LISTAGEM COMPLETA DOS ITENS UM ABAIXO DO OUTRO */}
-                                    {info.allItems.length > 0 && isExpanded && (
-                                      <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-                                        <div className="px-2.5 py-1.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[9.5px] font-bold text-slate-700 uppercase tracking-wider">
-                                          <span>Item Inspecionado / Referência</span>
-                                          <span>Situação (SIM / NÃO / N/A)</span>
+                                    {/* 6. LISTAGEM COMPLETA DOS ITENS INSPECIONADOS (SEMPRE EXIBIDA NO PDF/IMPRESSÃO E EXPANSÍVEL NA TELA) */}
+                                    {info.allItems.length > 0 && (
+                                      <div className={`mt-2 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs ${
+                                        isExpanded ? 'block' : 'hidden print:block'
+                                      } print:border-slate-300 print:shadow-none print:mt-1.5 print:break-inside-avoid`}>
+                                        <div className="px-2.5 py-1.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[9.5px] font-bold text-slate-700 uppercase tracking-wider print:bg-slate-100 print:text-black print:border-slate-300">
+                                          <span className="flex items-center gap-1.5">
+                                            <span>Relação Completa dos Itens Inspecionados ({info.allItems.length})</span>
+                                            <span className="font-mono text-[8.5px] text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-1 rounded print:border-emerald-600 print:text-emerald-900">
+                                              {info.conformItems.length} OK
+                                            </span>
+                                            {info.failedItems.length > 0 && (
+                                              <span className="font-mono text-[8.5px] text-rose-800 bg-rose-100/80 border border-rose-200 px-1 rounded print:border-rose-600 print:text-rose-900">
+                                                {info.failedItems.length} Reprovado(s)
+                                              </span>
+                                            )}
+                                          </span>
+                                          <span className="font-mono text-[9px] text-slate-500 print:text-black font-semibold">
+                                            Conformidade: {Math.round((info.conformItems.length / info.allItems.length) * 100)}%
+                                          </span>
                                         </div>
 
-                                        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-1 space-y-0.5">
+                                        <div className="max-h-64 overflow-y-auto print:max-h-none print:overflow-visible p-1.5 print:p-1.5 grid grid-cols-1 md:grid-cols-2 gap-1 print:grid-cols-2 print:gap-1">
                                           {info.allItems.map((item) => {
                                             const isOk = item.val === 'SIM' || item.val === 'OK' || item.val === 'TRUE';
                                             const isFailed = item.val === 'NÃO' || item.val === 'NAO' || item.val === 'REPROVADO';
                                             return (
                                               <div
                                                 key={item.name}
-                                                className={`flex items-center justify-between py-1 px-2 rounded text-[10.5px] transition-colors ${
-                                                  isFailed ? 'bg-rose-50/90 border border-rose-200/80 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                                                className={`flex items-center justify-between py-1 px-2 rounded text-[10.5px] transition-colors print:text-[9px] print:py-0.5 print:px-1.5 border print:break-inside-avoid ${
+                                                  isFailed 
+                                                    ? 'bg-rose-50 border-rose-200 text-rose-950 font-semibold print:border-rose-400 print:bg-rose-50' 
+                                                    : isOk
+                                                    ? 'bg-slate-50/60 hover:bg-slate-100/70 border-slate-200/80 text-slate-800 print:bg-white print:border-slate-200'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-700 print:bg-white'
                                                 }`}
                                               >
-                                                <span className={`pr-2 ${isFailed ? 'text-rose-950 font-bold' : 'text-slate-800'}`}>
+                                                <span className={`pr-1.5 text-[10px] print:text-[9px] leading-tight ${isFailed ? 'text-rose-950 font-bold print:text-rose-900' : 'text-slate-800 print:text-black'}`}>
                                                   {item.name}
                                                 </span>
                                                 <span
-                                                  className={`px-2 py-0.5 rounded text-[9px] font-extrabold shrink-0 flex items-center gap-1 ${
+                                                  className={`px-1.5 py-0.5 rounded text-[8.5px] print:text-[8px] font-extrabold shrink-0 flex items-center gap-0.5 ${
                                                     isOk
-                                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 print:border-emerald-600 print:text-emerald-900'
                                                       : isFailed
-                                                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                                      ? 'bg-rose-100 text-rose-800 border border-rose-300 print:border-rose-600 print:text-rose-900'
                                                       : 'bg-slate-200 text-slate-700'
                                                   }`}
                                                 >
                                                   {isOk ? (
                                                     <>
-                                                      <Check size={11} className="stroke-[3]" />
+                                                      <Check size={10} className="stroke-[3]" />
                                                       <span>SIM</span>
                                                     </>
                                                   ) : isFailed ? (
                                                     <>
-                                                      <Check size={11} className="stroke-[3] rotate-180" />
+                                                      <Check size={10} className="stroke-[3] rotate-180" />
                                                       <span>NÃO</span>
                                                     </>
                                                   ) : (

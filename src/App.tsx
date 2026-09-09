@@ -311,7 +311,7 @@ function AppContent() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans select-none relative">
+    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans select-none relative print:h-auto print:overflow-visible">
       {/* Sidebar de Navegação - Esconder na Impressão e com modo drawer em Tablet/Mobile */}
       <Sidebar 
         userEmail={userEmail} 
@@ -322,7 +322,7 @@ function AppContent() {
       />
 
       {/* Container Principal */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden print:h-auto print:overflow-visible">
         
         {/* Topbar com filtros Globais - Esconder na Impressão */}
         <Topbar
@@ -338,7 +338,7 @@ function AppContent() {
         />
 
         {/* Corpo da Página / Scroll Área - Máxima visualização em Tablet e Mobile */}
-        <main className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 print:p-0 print:overflow-visible">
+        <main className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 print:p-0 print:overflow-visible print:h-auto">
           <Routes>
             <Route 
               path="/" 

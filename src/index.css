@@ -31,20 +31,27 @@ body {
   background: #94a3b8; /* Slate 400 */
 }
 
-/* Print Styles for Monthly Report */
+/* Print Styles for Technical Reports and Dossiers */
 @media print {
-  .no-print {
-    display: none !important;
-  }
-  body {
+  html, body, #root {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
     background-color: white !important;
     color: black !important;
     font-family: sans-serif;
+  }
+  .no-print {
+    display: none !important;
   }
   .print-card {
     border: 1px solid #e2e8f0 !important;
     box-shadow: none !important;
     background-color: white !important;
     color: black !important;
+  }
+  tr, .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
