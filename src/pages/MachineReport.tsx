@@ -58,18 +58,18 @@ export function parseInspectionDetails(notesStr?: string, details?: any): Parsed
   const naItems: { name: string; val: string }[] = [];
 
   if (hasItems) {
-    // Manter a ordem canônica dos itens caso existam nas listas padrão do sistema
-    const canonicalOrder = [
+    // Manter a ordem canônica dos itens caso existam nas listas padrão do sistema (sem duplicatas)
+    const canonicalOrder = Array.from(new Set([
       ...COMPONENT_ITEMS,
       ...FLUID_LEVEL_ITEMS,
       ...REVISION_ITEMS,
       ...COMPLEMENTARY_ITEMS
-    ];
+    ]));
 
     const addedKeys = new Set<string>();
 
     canonicalOrder.forEach(item => {
-      if (itemData[item] !== undefined) {
+      if (!addedKeys.has(item) && itemData[item] !== undefined) {
         const rawVal = itemData[item];
         const val = String(rawVal).trim().toUpperCase();
         const entry = { name: item, val: rawVal };
@@ -91,6 +91,7 @@ export function parseInspectionDetails(notesStr?: string, details?: any): Parsed
         const val = String(rawVal).trim().toUpperCase();
         const entry = { name, val: rawVal as string };
         allItems.push(entry);
+        addedKeys.add(name);
         if (val === 'NÃO' || val === 'NAO' || val === 'REPROVADO' || val === 'FALSE') {
           failedItems.push(entry);
         } else if (val === 'SIM' || val === 'OK' || val === 'TRUE' || val === 'CONFORME') {
@@ -101,13 +102,13 @@ export function parseInspectionDetails(notesStr?: string, details?: any): Parsed
       }
     });
   } else {
-    // Caso o checklist não tenha o objeto individual de itens salvo, preenche com os itens canônicos padrão do sistema
-    const canonicalOrder = [
+    // Caso o checklist não tenha o objeto individual de itens salvo, preenche com os itens canônicos padrão do sistema sem duplicatas
+    const canonicalOrder = Array.from(new Set([
       ...COMPONENT_ITEMS,
       ...FLUID_LEVEL_ITEMS,
       ...REVISION_ITEMS,
       ...COMPLEMENTARY_ITEMS
-    ];
+    ]));
     canonicalOrder.forEach(item => {
       const entry = { name: item, val: 'SIM' };
       allItems.push(entry);
@@ -1725,9 +1726,9 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                                 </span>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5">
-                                {info.failedItems.map((item) => (
+                                {info.failedItems.map((item, idx) => (
                                   <div
-                                    key={item.name}
+                                    key={`${item.name}-${idx}`}
                                     className="flex items-center justify-between py-1 px-2 bg-white border border-rose-200 rounded text-[10.5px] print:text-[9px]"
                                   >
                                     <span className="font-bold text-rose-950 pr-1.5 leading-tight">{item.name}</span>
@@ -1790,12 +1791,12 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
                               {/* Grade Centralizada em 3 Colunas na Folha Inteira de Ponta a Ponta */}
                               <div className="p-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-1.5">
-                                {info.allItems.map((item) => {
+                                {info.allItems.map((item, idx) => {
                                   const isOk = item.val === 'SIM' || item.val === 'OK' || item.val === 'TRUE';
                                   const isFailed = item.val === 'NÃO' || item.val === 'NAO' || item.val === 'REPROVADO';
                                   return (
                                     <div
-                                      key={item.name}
+                                      key={`${item.name}-${idx}`}
                                       className={`flex items-center justify-between py-1 px-2 rounded text-[10px] print:text-[8.5px] print:py-0.5 print:px-1.5 border print:break-inside-avoid ${
                                         isFailed
                                           ? 'bg-rose-50 border-rose-200 text-rose-950 font-semibold print:border-rose-400 print:bg-rose-50'
@@ -1906,12 +1907,12 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
         const renderModalViewGrid = (itemsList: string[]) => (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {itemsList.map(item => {
+            {itemsList.map((item, idx) => {
               const valItem = itemData[item] || 'SIM';
               const isOk = valItem === 'SIM' || valItem === 'OK' || valItem === 'TRUE';
               const isFailed = valItem === 'NÃO' || valItem === 'NAO' || valItem === 'REPROVADO';
               return (
-                <div key={item} className="flex justify-between items-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
+                <div key={`${item}-${idx}`} className="flex justify-between items-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
                   <span className="text-slate-700 font-medium pr-2">{item}</span>
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 flex items-center justify-center ${
                     isOk

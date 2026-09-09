@@ -536,11 +536,11 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[380px] overflow-y-auto pr-1">
-          {itemsList.map((item) => {
+          {itemsList.map((item, idx) => {
             const currentVal = pdfItems[item] || 'SIM';
             return (
               <div 
-                key={item} 
+                key={`${item}-${idx}`} 
                 className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
                   currentVal === 'NÃO' 
                     ? 'bg-rose-50 border-rose-200' 
@@ -1180,10 +1180,10 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
 
         const renderViewGrid = (itemsList: string[]) => (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {itemsList.map(item => {
+            {itemsList.map((item, idx) => {
               const val = itemData[item] || 'SIM';
               return (
-                <div key={item} className="flex justify-between items-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
+                <div key={`${item}-${idx}`} className="flex justify-between items-center bg-slate-50 p-2 border border-slate-200 rounded-lg">
                   <span className="text-slate-700 font-medium pr-2">{item}</span>
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 flex items-center justify-center ${
                     val === 'SIM' || val === 'OK'

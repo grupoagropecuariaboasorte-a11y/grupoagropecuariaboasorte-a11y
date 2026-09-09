@@ -1,5 +1,5 @@
 // Service Worker - Agropecuária Boa Sorte PWA
-const CACHE_NAME = 'agro-boa-sorte-v8';
+const CACHE_NAME = 'agro-boa-sorte-v9';
 
 const PRECACHE_ASSETS = [
   '/',
