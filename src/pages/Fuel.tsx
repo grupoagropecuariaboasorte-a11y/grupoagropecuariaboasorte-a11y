@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { FuelLog, Farm, Machine, LookupItem, UserRole, isImplement } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   Fuel, Plus, Trash2, Search, Calendar, AlertTriangle, 
-  Info, Check, HelpCircle, FileText, Pencil, Clock
+  Info, Check, HelpCircle, FileText, Pencil, Clock, Lock, Printer
 } from 'lucide-react';
 import { 
   formatDateTimeForInput, 
@@ -120,14 +121,19 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   };
 
   // Carregar sequência de bomba para a fazenda
-  const loadPumpSequenceForFarm = async (farmId: string) => {
+  const loadPumpSequenceForFarm = async (farmId: string, fuelType?: string) => {
     if (!farmId || farmId === 'ALL') {
+      setFormPumpStart('');
+      setFormPumpEnd('');
       setDiscrepancyInfo(null);
       return;
     }
     setIsLoadingPump(true);
+    setFormPumpStart('');
+    setFormPumpEnd('');
     try {
-      const lastReading = await fleetService.getLatestPumpReading(farmId);
+      const selectedFuel = fuelType || formFuelType;
+      const lastReading = await fleetService.getLatestPumpReading(farmId, selectedFuel);
       if (lastReading !== null) {
         setFormPumpStart(lastReading);
         setDiscrepancyInfo({ lastEnd: lastReading, hasDiscrepancy: false, isFirstLog: false });
@@ -346,10 +352,15 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   // SUBMISSÃO DO ABASTECIMENTO COM TRAVA ANTI-DUPLICIDADE
   // =========================================================================
   const handleOpenAdd = async () => {
-    setFormDate(getDeviceLocalDateTimeString());
+    const nowStr = getDeviceLocalDateTimeString();
+    setFormDate(nowStr);
+    setFormPumpStart('');
     setFormPumpEnd('');
     setFormNotes('');
     setFormResponsible('');
+    setAddDateSynced(true);
+    setTimeout(() => setAddDateSynced(false), 1500);
+
     const defaultFarm = selectedFarmId === 'ALL' ? (farms[0]?.id || '') : selectedFarmId;
     setFormFarmId(defaultFarm);
     const nonImplMachines = machines
@@ -367,7 +378,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     }
     setIsAddOpen(true);
     if (defaultFarm) {
-      await loadPumpSequenceForFarm(defaultFarm);
+      await loadPumpSequenceForFarm(defaultFarm, formFuelType);
     }
   };
 
@@ -378,6 +389,15 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
     if (!formFarmId) {
       alert('Por favor, selecione uma fazenda.');
+      return;
+    }
+
+    // Validação rígida: data não pode ser retroativa
+    const logDate = new Date(formDate);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    if (logDate < todayStart) {
+      alert('Lançamento bloqueado: Não são permitidas datas retroativas. O abastecimento deve ser lançado na data do dia.');
       return;
     }
 
@@ -418,6 +438,22 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     setIsSubmitting(true);
     try {
       const newHourVal = Number(formHourKm);
+      const machineObj = machines.find(m => m.id === formMachineId);
+      const lastHour = machineObj ? getMachineEffectiveHourKm(machineObj) : 0;
+      let hoursDiff = 0;
+      if (newHourVal > lastHour && lastHour > 0) {
+        hoursDiff = newHourVal - lastHour;
+      }
+      const litersSupplied = endVal - startVal;
+      let consumptionRate = 0;
+      if (hoursDiff > 0 && litersSupplied > 0) {
+        if (machineObj?.type === 'caminhao') {
+          consumptionRate = Number((hoursDiff / litersSupplied).toFixed(2));
+        } else {
+          consumptionRate = Number((litersSupplied / hoursDiff).toFixed(2));
+        }
+      }
+
       await fleetService.addFuelLog({
         farm_id: formFarmId,
         machine_id: formMachineId,
@@ -426,6 +462,8 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
         pump_reading_start: startVal,
         pump_reading_end: endVal,
         hour_km_at_fueling: newHourVal,
+        hours_km_since_last: hoursDiff,
+        consumption_rate: consumptionRate,
         supplier: formSupplier,
         responsible: formResponsible,
         notes: formNotes
@@ -520,8 +558,8 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       
-      {/* CABEÇALHO DA SEÇÃO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
+      {/* CABEÇALHO DA SEÇÃO (OCULTO NA IMPRESSÃO) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs print:hidden">
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-[#1B3022] flex items-center gap-2">
             <Fuel size={18} className="text-[#1B3022]" />
@@ -530,19 +568,30 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           <p className="text-xs text-slate-500 mt-1">Lançamento de horímetros e bombas com auditoria automática de sequência.</p>
         </div>
 
-        {userRole !== 'viewer' && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Gerar e imprimir relatório completo em PDF"
           >
-            <Plus size={14} />
-            <span>Registrar Abastecimento</span>
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
           </button>
-        )}
+
+          {userRole !== 'viewer' && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+            >
+              <Plus size={14} />
+              <span>Registrar Abastecimento</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* FILTROS */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-wrap gap-4 items-center shadow-xs">
+      {/* FILTROS (OCULTOS NA IMPRESSÃO) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-wrap gap-4 items-center shadow-xs print:hidden">
         <div className="relative max-w-xs w-full">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
             <Search size={14} />
@@ -578,8 +627,8 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
         </div>
       </div>
 
-      {/* TABELA HISTÓRICA */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+      {/* TABELA HISTÓRICA (OCULTA NA IMPRESSÃO) */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs print:hidden">
         <div className="overflow-x-auto">
           {filteredLogs.length > 0 ? (
             <table className="w-full text-left border-collapse">
@@ -724,9 +773,9 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
         </div>
       </div>
 
-      {/* HISTÓRICO DE ABASTECIMENTOS REMOVIDOS */}
+      {/* HISTÓRICO DE ABASTECIMENTOS REMOVIDOS (OCULTO NA IMPRESSÃO) */}
       {deletedLogs.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs mt-8">
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs mt-8 print:hidden">
           <div className="p-6 border-b border-slate-200 bg-rose-50/50 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle size={16} className="text-rose-600 animate-pulse" />
@@ -796,7 +845,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   setFormFarmId(selected);
                   setFormPumpEnd('');
                   if (selected) {
-                    await loadPumpSequenceForFarm(selected);
+                    await loadPumpSequenceForFarm(selected, formFuelType);
                   }
                 }}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
@@ -809,7 +858,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
             <div>
               <div className="flex items-center justify-between mb-1.5 gap-2">
-                <label className="block text-xs font-semibold text-slate-700">Data / Hora</label>
+                <label className="block text-xs font-semibold text-slate-700">Data / Hora do Lançamento</label>
                 <button
                   type="button"
                   id="btn-auto-device-datetime-add"
@@ -827,7 +876,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   title="Capturar a data e a hora atual do relógio do seu dispositivo e preencher automaticamente"
                 >
                   <Clock size={12} className={addDateSynced ? 'animate-spin' : 'text-emerald-700'} />
-                  <span>{addDateSynced ? '✓ Atualizado Agora!' : 'Buscar Data/Hora Atual'}</span>
+                  <span>{addDateSynced ? '✓ Sincronizado!' : 'Atualizar Horário'}</span>
                 </button>
               </div>
               <div className="relative">
@@ -835,10 +884,25 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   type="datetime-local"
                   required
                   value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
+                  min={new Date().toISOString().slice(0, 10) + "T00:00"}
+                  onChange={(e) => {
+                    const selectedVal = e.target.value;
+                    const selectedDate = new Date(selectedVal);
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+                    if (selectedDate < todayStart) {
+                      alert('Atenção: Não são permitidos abastecimentos retroativos. A data e hora devem ser do momento do lançamento.');
+                      setFormDate(getDeviceLocalDateTimeString());
+                      return;
+                    }
+                    setFormDate(selectedVal);
+                  }}
                   className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] font-mono shadow-2xs"
                 />
               </div>
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                🔒 Registro auditado: A data e hora correspondem ao momento da realização do lançamento.
+              </span>
             </div>
 
             <div>
@@ -866,7 +930,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Combustível</label>
               <select
                 value={formFuelType}
-                onChange={(e) => setFormFuelType(e.target.value)}
+                onChange={async (e) => {
+                  const selectedFuel = e.target.value;
+                  setFormFuelType(selectedFuel);
+                  setFormPumpEnd('');
+                  if (formFarmId) {
+                    await loadPumpSequenceForFarm(formFarmId, selectedFuel);
+                  }
+                }}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
                 {lookups?.fuelTypes.filter((t: LookupItem) => t.id !== 'arla_32' && t.id !== 'gasolina' && !t.label?.toLowerCase().includes('arla') && !t.label?.toLowerCase().includes('gasolina')).map((t: LookupItem) => (
@@ -877,24 +948,51 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-500">Leitura INICIAL da Bomba (L)</label>
-                {isLoadingPump && <span className="text-[10px] text-amber-600 animate-pulse font-medium">Buscando último fechamento...</span>}
+                <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Lock size={12} className="text-emerald-700" />
+                  <span>Leitura INICIAL da Bomba (L)</span>
+                </label>
+                {isLoadingPump && <span className="text-[10px] text-amber-600 animate-pulse font-medium">Buscando fechamento...</span>}
               </div>
-              <input
-                type="number"
-                required
-                placeholder={isLoadingPump ? "Carregando..." : "Ex: 1040"}
-                value={formPumpStart}
-                onChange={(e) => setFormPumpStart(e.target.value !== '' ? Number(e.target.value) : '')}
-                className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022] font-mono"
-              />
-              <span className="text-[10px] text-slate-400 mt-1 block">
-                {discrepancyInfo?.isFirstLog
-                  ? 'Primeiro abastecimento desta fazenda: defina o início da bomba.'
-                  : discrepancyInfo?.lastEnd !== null
-                    ? `Preenchido automaticamente com o fechamento anterior (${discrepancyInfo?.lastEnd} L).`
-                    : 'Leitura inicial da bomba de combustível.'}
-              </span>
+              <div className="relative">
+                <input
+                  type="number"
+                  required
+                  readOnly={!discrepancyInfo?.isFirstLog}
+                  tabIndex={!discrepancyInfo?.isFirstLog ? -1 : 0}
+                  placeholder={isLoadingPump ? "Carregando..." : "Ex: 1040"}
+                  value={formPumpStart}
+                  onChange={(e) => {
+                    if (discrepancyInfo?.isFirstLog) {
+                      setFormPumpStart(e.target.value !== '' ? Number(e.target.value) : '');
+                    }
+                  }}
+                  className={`w-full rounded-xl py-2 px-3 pr-8 text-xs font-mono transition-all ${
+                    !discrepancyInfo?.isFirstLog
+                      ? 'bg-slate-100 border border-slate-300 font-bold text-slate-700 cursor-not-allowed select-none focus:outline-none'
+                      : 'bg-white border border-slate-300 text-slate-800 focus:outline-hidden focus:border-[#1B3022]'
+                  }`}
+                />
+                {!discrepancyInfo?.isFirstLog && (
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+                    <Lock size={13} />
+                  </div>
+                )}
+              </div>
+              {!discrepancyInfo?.isFirstLog ? (
+                <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">
+                  <Lock size={11} className="shrink-0 text-emerald-700" />
+                  <span>
+                    {discrepancyInfo?.lastEnd !== null
+                      ? `Início travado no último fechamento da bomba: ${discrepancyInfo?.lastEnd} L`
+                      : 'Início bloqueado: aguardando sequência da bomba.'}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[10px] text-amber-700 font-medium mt-1 block">
+                  Primeiro abastecimento histórico desta bomba/fazenda: defina o ponto inicial da bomba.
+                </span>
+              )}
             </div>
 
             <div>
@@ -1382,6 +1480,178 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           </div>
         </div>
       </Modal>
+
+      {/* ========================================================================= */}
+      {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+      {/* ========================================================================= */}
+      <div className="hidden print:block font-sans text-black">
+        <style>{`
+          @media print {
+            @page {
+              size: landscape;
+              margin: 6mm;
+            }
+            body {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              background: #fff !important;
+            }
+          }
+        `}</style>
+
+        {/* CABEÇALHO INSTITUCIONAL DO GRUPO BOA SORTE */}
+        <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AppLogo className="w-12 h-12 object-contain" />
+            <div>
+              <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+                Grupo Agropecuária Boa Sorte
+              </h1>
+              <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+                Relatório Auditado de Abastecimentos e Consumo de Combustível
+              </h2>
+            </div>
+          </div>
+          <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+            <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+            <div>
+              <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+            </div>
+            <div><strong>Equipamento Filtrado:</strong> {machineFilter === 'ALL' ? 'Todos os Equipamentos' : (machines.find(m => m.id === machineFilter)?.code || machineFilter)}</div>
+            <div><strong>Total de Lançamentos Auditados:</strong> {filteredLogs.length}</div>
+          </div>
+        </div>
+
+        {/* RESUMO EXECUTIVO CONSOLIDADO */}
+        <div className="grid grid-cols-4 gap-2 mb-2 text-center">
+          <div className="border border-slate-400 rounded p-1 bg-slate-50">
+            <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Volume Total Abastecido</span>
+            <span className="text-[11px] font-black font-mono text-[#1B3022]">{totalLitersSupplied.toLocaleString('pt-BR')} L</span>
+          </div>
+          <div className="border border-slate-400 rounded p-1 bg-slate-50">
+            <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Custo Financeiro Total</span>
+            <span className="text-[11px] font-black font-mono text-slate-900">R$ {totalValueSum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div className="border border-slate-400 rounded p-1 bg-slate-50">
+            <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Consumo Médio (Horímetro)</span>
+            <span className="text-[11px] font-black font-mono text-[#1B3022]">
+              {overallHourAverage > 0 ? `${overallHourAverage.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L/h` : 'N/A'}
+            </span>
+          </div>
+          <div className="border border-slate-400 rounded p-1 bg-slate-50">
+            <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Consumo Médio (Quilometragem)</span>
+            <span className="text-[11px] font-black font-mono text-slate-900">
+              {overallKmAverage > 0 ? `${overallKmAverage.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L` : 'N/A'}
+            </span>
+          </div>
+        </div>
+
+        {/* TABELA COMPLETA E ULTRA COMPACTA (100% PREENCHIDA SEM LACUNAS) */}
+        <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+          <thead>
+            <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+              <th className="border border-slate-400 p-0.5 w-5">#</th>
+              <th className="border border-slate-400 p-0.5 whitespace-nowrap text-left">Data / Hora</th>
+              <th className="border border-slate-400 p-0.5 text-left">Fazenda</th>
+              <th className="border border-slate-400 p-0.5 text-left">Equipamento</th>
+              <th className="border border-slate-400 p-0.5">Combustível</th>
+              <th className="border border-slate-400 p-0.5 font-mono">Bomba Início</th>
+              <th className="border border-slate-400 p-0.5 font-mono">Bomba Fim</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Litros (L)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Preço Un.</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Total (R$)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Horímetro / KM</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-center">Média Consumo</th>
+              <th className="border border-slate-400 p-0.5 text-left">Operador / Motorista</th>
+              <th className="border border-slate-400 p-0.5 text-left">Responsável</th>
+              <th className="border border-slate-400 p-0.5 text-left">Origem / Obs.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLogs.map((log, index) => {
+              const machine = machines.find(m => m.id === log.machine_id);
+              const farmName = farms.find(f => f.id === log.farm_id)?.name || 'N/A';
+              const fuelLabel = lookups?.fuelTypes.find((f: LookupItem) => f.id === log.fuel_type)?.label || log.fuel_type;
+              const isKm = machine?.type === 'caminhao';
+              const hasHistory = log.hours_km_since_last > 0 && log.liters_supplied > 0;
+              
+              let avgStr = '-';
+              if (hasHistory) {
+                if (isKm) {
+                  const avg = log.hours_km_since_last / log.liters_supplied;
+                  avgStr = `${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`;
+                } else {
+                  const avg = log.consumption_rate || (log.liters_supplied / log.hours_km_since_last);
+                  avgStr = `${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L/h`;
+                }
+              }
+
+              const obsDisplay = [log.supplier, log.notes].filter(Boolean).join(' - ') || '-';
+
+              return (
+                <tr key={log.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">{formatDisplayDateTime(log.date)}</td>
+                  <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                  <td className="border border-slate-300 p-0.5">
+                    <span className="font-bold text-slate-900">{machine?.code || 'N/A'}</span>
+                    <span className="text-[6.5px] text-slate-500 block truncate max-w-[120px]">{machine?.name || ''}</span>
+                  </td>
+                  <td className="border border-slate-300 p-0.5 text-center">{fuelLabel}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-center">{log.pump_reading_start}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-center">{log.pump_reading_end}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono font-bold text-right text-[#1B3022] whitespace-nowrap">
+                    {log.liters_supplied.toLocaleString('pt-BR')} L
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                    R$ {(log.unit_price || 5.85).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono font-bold text-right whitespace-nowrap">
+                    R$ {log.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                    {log.hour_km_at_fueling.toLocaleString('pt-BR')} {isKm ? 'km' : 'h'}
+                    {log.hours_km_since_last > 0 && (
+                      <span className="block text-[6.5px] text-slate-500">+{log.hours_km_since_last} {isKm ? 'km' : 'h'}</span>
+                    )}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-center font-bold whitespace-nowrap">{avgStr}</td>
+                  <td className="border border-slate-300 p-0.5 truncate max-w-[85px]">{machine?.driver_name || '-'}</td>
+                  <td className="border border-slate-300 p-0.5 truncate max-w-[75px]">{log.responsible || '-'}</td>
+                  <td className="border border-slate-300 p-0.5 truncate max-w-[140px]" title={obsDisplay}>{obsDisplay}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+            <tr>
+              <td colSpan={7} className="border border-slate-400 p-1 text-right uppercase text-[8px]">TOTAIS GERAIS CONSOLIDADOS:</td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+                {totalLitersSupplied.toLocaleString('pt-BR')} L
+              </td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px]">-</td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px] whitespace-nowrap">
+                R$ {totalValueSum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td colSpan={5} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+                {filteredLogs.length} abastecimentos registrados e auditados com sucesso.
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* ASSINATURAS INSTITUCIONAIS */}
+        <div className="grid grid-cols-2 gap-16 mt-8 pt-4 text-center text-[8.5px] text-slate-800">
+          <div className="border-t border-slate-700 pt-1">
+            <p className="font-bold">Responsável pelo Lançamento / Pista de Abastecimento</p>
+            <p className="text-[7px] text-slate-500">Conferência Física da Bomba e Registro de Campo</p>
+          </div>
+          <div className="border-t border-slate-700 pt-1">
+            <p className="font-bold">Gerência Operacional / Controle de Frotas</p>
+            <p className="text-[7px] text-slate-500">Grupo Agropecuária Boa Sorte</p>
+          </div>
+        </div>
+      </div>
 
     </div>
   );

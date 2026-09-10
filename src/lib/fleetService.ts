@@ -1267,37 +1267,57 @@ export const fleetService = {
     }
   },
 
-  // Busca a última leitura final da bomba registrada para uma fazenda
-  async getLatestPumpReading(farmId: string): Promise<number | null> {
+  // Busca a última leitura final da bomba registrada para uma fazenda (baseado no maior encerrante físico da bomba)
+  async getLatestPumpReading(farmId: string, fuelType?: string): Promise<number | null> {
     if (!farmId || farmId === 'ALL') return null;
     try {
-      const { data, error } = await supabase!
+      // 1. Busca ordenando estritamente pelo maior encerrante final físico registrado (pump_reading_end DESC)
+      // pois o contador da bomba é estritamente cumulativo e irreversível
+      let query = supabase!
         .from('fuel_logs')
-        .select('pump_reading_end, date, id')
-        .eq('farm_id', farmId)
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .select('pump_reading_end, date, id, created_at, fuel_type')
+        .eq('farm_id', farmId);
 
-      if (error) {
-        // Fallback caso a ordenação composta ou created_at falhe
-        const fallback = await supabase!
-          .from('fuel_logs')
-          .select('pump_reading_end, date, id')
-          .eq('farm_id', farmId)
-          .order('date', { ascending: false })
-          .limit(1);
-        if (fallback.data && fallback.data.length > 0) {
-          const val = Number(fallback.data[0].pump_reading_end);
-          return isNaN(val) ? null : val;
-        }
-        return null;
+      if (fuelType) {
+        query = query.eq('fuel_type', fuelType);
       }
 
-      if (data && data.length > 0) {
+      const { data, error } = await query
+        .order('pump_reading_end', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
         const val = Number(data[0].pump_reading_end);
         return isNaN(val) ? null : val;
       }
+
+      // Se filtrou por fuelType e não encontrou nenhum registro com aquele combustível, busca o geral da fazenda
+      if (fuelType) {
+        const generalQuery = await supabase!
+          .from('fuel_logs')
+          .select('pump_reading_end, date, id, created_at')
+          .eq('farm_id', farmId)
+          .order('pump_reading_end', { ascending: false })
+          .limit(1);
+        if (!generalQuery.error && generalQuery.data && generalQuery.data.length > 0) {
+          const val = Number(generalQuery.data[0].pump_reading_end);
+          return isNaN(val) ? null : val;
+        }
+      }
+
+      // 2. Fallback caso a ordenação por pump_reading_end falhe: busca por created_at
+      const fallback = await supabase!
+        .from('fuel_logs')
+        .select('pump_reading_end, date, id, created_at')
+        .eq('farm_id', farmId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (fallback.data && fallback.data.length > 0) {
+        const val = Number(fallback.data[0].pump_reading_end);
+        return isNaN(val) ? null : val;
+      }
+
       return null;
     } catch (e) {
       console.error('Erro ao buscar última leitura da bomba:', e);
@@ -1306,12 +1326,12 @@ export const fleetService = {
   },
 
   // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda
-  async getPumpDiscrepancy(farmId: string, currentStart: number): Promise<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog: boolean }> {
+  async getPumpDiscrepancy(farmId: string, currentStart: number, fuelType?: string): Promise<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog: boolean }> {
     if (!farmId || farmId === 'ALL') {
       return { lastEnd: null, hasDiscrepancy: false, isFirstLog: true };
     }
 
-    const lastEnd = await this.getLatestPumpReading(farmId);
+    const lastEnd = await this.getLatestPumpReading(farmId, fuelType);
     if (lastEnd === null) {
       return { lastEnd: null, hasDiscrepancy: false, isFirstLog: true };
     }
@@ -1346,9 +1366,9 @@ export const fleetService = {
 
     // Validação rígida de sequência da bomba e bloqueio de duplicidade
     if (log.farm_id && log.farm_id !== 'ALL') {
-      const lastReading = await this.getLatestPumpReading(log.farm_id);
+      const lastReading = await this.getLatestPumpReading(log.farm_id, log.fuel_type);
       if (lastReading !== null && pStart !== lastReading) {
-        throw new Error(`Sequência da bomba violada! O último fechamento registrado para esta fazenda foi de ${lastReading} L. O novo abastecimento deve iniciar obrigatoriamente em ${lastReading} L (foi informado ${pStart} L).`);
+        throw new Error(`Sequência da bomba violada! O último fechamento registrado para esta bomba/fazenda foi de ${lastReading} L. O novo abastecimento deve iniciar obrigatoriamente em ${lastReading} L (foi informado ${pStart} L).`);
       }
 
       // Prevenção de duplicidade idêntica (mesma fazenda, início e fim de bomba)
@@ -1365,6 +1385,35 @@ export const fleetService = {
       }
     }
 
+    let hoursSinceLast = Number(log.hours_km_since_last) || 0;
+    let consumptionRate = Number(log.consumption_rate) || 0;
+    const litersSupplied = pEnd - pStart;
+
+    if (hoursSinceLast <= 0 && log.machine_id && Number(log.hour_km_at_fueling) > 0) {
+      try {
+        const { data: lastMachineLog } = await supabase!
+          .from('fuel_logs')
+          .select('hour_km_at_fueling, machine_id')
+          .eq('machine_id', log.machine_id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        const currentHour = Number(log.hour_km_at_fueling);
+        if (lastMachineLog && lastMachineLog.length > 0) {
+          const prevHour = Number(lastMachineLog[0].hour_km_at_fueling);
+          if (currentHour > prevHour) {
+            hoursSinceLast = currentHour - prevHour;
+          }
+        }
+      } catch (e) {
+        // Fallback silencioso
+      }
+    }
+
+    if (consumptionRate <= 0 && hoursSinceLast > 0 && litersSupplied > 0) {
+      consumptionRate = Number((litersSupplied / hoursSinceLast).toFixed(2));
+    }
+
     const logToInsert = {
       farm_id: log.farm_id,
       machine_id: log.machine_id,
@@ -1373,8 +1422,8 @@ export const fleetService = {
       pump_reading_start: pStart,
       pump_reading_end: pEnd,
       hour_km_at_fueling: Number(log.hour_km_at_fueling) || 0,
-      hours_km_since_last: Number(log.hours_km_since_last) || 0,
-      consumption_rate: Number(log.consumption_rate) || 0,
+      hours_km_since_last: hoursSinceLast,
+      consumption_rate: consumptionRate,
       price_per_liter: price,
       supplier: log.supplier || '',
       responsible: log.responsible || '',
