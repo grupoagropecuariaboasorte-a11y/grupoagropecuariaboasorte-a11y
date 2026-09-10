@@ -1267,12 +1267,11 @@ export const fleetService = {
     }
   },
 
-  // Busca a última leitura final da bomba registrada para uma fazenda (baseado no maior encerrante físico da bomba)
+  // Busca a última leitura final da bomba registrada para uma fazenda (baseado no ÚLTIMO LANÇAMENTO cronológico)
   async getLatestPumpReading(farmId: string, fuelType?: string): Promise<number | null> {
     if (!farmId || farmId === 'ALL') return null;
     try {
-      // 1. Busca ordenando estritamente pelo maior encerrante final físico registrado (pump_reading_end DESC)
-      // pois o contador da bomba é estritamente cumulativo e irreversível
+      // 1. Busca estritamente o ÚLTIMO LANÇAMENTO realizado na fazenda (ordenação cronológica por data e criação)
       let query = supabase!
         .from('fuel_logs')
         .select('pump_reading_end, date, id, created_at, fuel_type')
@@ -1283,34 +1282,37 @@ export const fleetService = {
       }
 
       const { data, error } = await query
-        .order('pump_reading_end', { ascending: false })
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1);
 
       if (!error && data && data.length > 0) {
         const val = Number(data[0].pump_reading_end);
-        return isNaN(val) ? null : val;
+        if (!isNaN(val)) return val;
       }
 
-      // Se filtrou por fuelType e não encontrou nenhum registro com aquele combustível, busca o geral da fazenda
+      // Se filtrou por fuelType e não encontrou, busca o último lançamento geral daquela fazenda
       if (fuelType) {
         const generalQuery = await supabase!
           .from('fuel_logs')
           .select('pump_reading_end, date, id, created_at')
           .eq('farm_id', farmId)
-          .order('pump_reading_end', { ascending: false })
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1);
+
         if (!generalQuery.error && generalQuery.data && generalQuery.data.length > 0) {
           const val = Number(generalQuery.data[0].pump_reading_end);
-          return isNaN(val) ? null : val;
+          if (!isNaN(val)) return val;
         }
       }
 
-      // 2. Fallback caso a ordenação por pump_reading_end falhe: busca por created_at
+      // 2. Fallback caso a ordenação composta falhe: busca ordenando apenas por date DESC
       const fallback = await supabase!
         .from('fuel_logs')
-        .select('pump_reading_end, date, id, created_at')
+        .select('pump_reading_end, date, id')
         .eq('farm_id', farmId)
-        .order('created_at', { ascending: false })
+        .order('date', { ascending: false })
         .limit(1);
 
       if (fallback.data && fallback.data.length > 0) {
@@ -1325,7 +1327,7 @@ export const fleetService = {
     }
   },
 
-  // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda
+  // Busca se há discrepâncias nas leituras anteriores de bombas daquela fazenda (informativo)
   async getPumpDiscrepancy(farmId: string, currentStart: number, fuelType?: string): Promise<{ lastEnd: number | null; hasDiscrepancy: boolean; isFirstLog: boolean }> {
     if (!farmId || farmId === 'ALL') {
       return { lastEnd: null, hasDiscrepancy: false, isFirstLog: true };
@@ -1364,14 +1366,12 @@ export const fleetService = {
       throw new Error(`A leitura final da bomba (${pEnd} L) deve ser estritamente maior que a leitura inicial (${pStart} L).`);
     }
 
-    // Validação rígida de sequência da bomba e bloqueio de duplicidade
-    if (log.farm_id && log.farm_id !== 'ALL') {
-      const lastReading = await this.getLatestPumpReading(log.farm_id, log.fuel_type);
-      if (lastReading !== null && pStart !== lastReading) {
-        throw new Error(`Sequência da bomba violada! O último fechamento registrado para esta bomba/fazenda foi de ${lastReading} L. O novo abastecimento deve iniciar obrigatoriamente em ${lastReading} L (foi informado ${pStart} L).`);
-      }
+    if (pStart < 0 || pEnd < 0) {
+      throw new Error('As leituras de bomba não podem ser negativas.');
+    }
 
-      // Prevenção de duplicidade idêntica (mesma fazenda, início e fim de bomba)
+    // Prevenção de duplicidade idêntica exata no mesmo minuto e fazenda
+    if (log.farm_id && log.farm_id !== 'ALL') {
       const { data: existingDup } = await supabase!
         .from('fuel_logs')
         .select('id, date')
