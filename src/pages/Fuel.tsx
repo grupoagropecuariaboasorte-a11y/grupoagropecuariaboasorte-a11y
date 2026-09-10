@@ -415,15 +415,6 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       return;
     }
 
-    // Validação rígida: data não pode ser retroativa
-    const logDate = new Date(formDate);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    if (logDate < todayStart) {
-      alert('Lançamento bloqueado: Não são permitidas datas retroativas. O abastecimento deve ser lançado na data do dia.');
-      return;
-    }
-
     if (formPumpStart === '' || formPumpEnd === '') {
       alert('Por favor, preencha as leituras inicial e final da bomba.');
       return;
@@ -557,26 +548,30 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
   });
 
   // Totais no Rodapé
-  const totalLitersSupplied = filteredLogs.reduce((sum, log) => sum + log.liters_supplied, 0);
-  const totalValueSum = filteredLogs.reduce((sum, log) => sum + log.total_value, 0);
+  const totalLitersSupplied = filteredLogs.reduce((sum, log) => sum + (Number(log.liters_supplied) || 0), 0);
+  const totalValueSum = filteredLogs.reduce((sum, log) => sum + (Number(log.total_value) || 0), 0);
 
   // Calcular as médias de consumo agregadas para os registros filtrados
   const kmLogsForAvg = filteredLogs.filter(log => {
     const machine = machines.find(m => m.id === log.machine_id);
-    return machine?.type === 'caminhao' && log.hours_km_since_last > 0 && log.liters_supplied > 0;
+    const hrs = Number(log.hours_km_since_last) || 0;
+    const lts = Number(log.liters_supplied) || 0;
+    return machine?.type === 'caminhao' && hrs > 0 && lts > 0;
   });
 
   const hourLogsForAvg = filteredLogs.filter(log => {
     const machine = machines.find(m => m.id === log.machine_id);
-    return machine?.type !== 'caminhao' && log.hours_km_since_last > 0 && log.liters_supplied > 0;
+    const hrs = Number(log.hours_km_since_last) || 0;
+    const lts = Number(log.liters_supplied) || 0;
+    return machine?.type !== 'caminhao' && hrs > 0 && lts > 0;
   });
 
-  const totalKmForAvg = kmLogsForAvg.reduce((sum, log) => sum + log.hours_km_since_last, 0);
-  const totalLitersForKmAvg = kmLogsForAvg.reduce((sum, log) => sum + log.liters_supplied, 0);
+  const totalKmForAvg = kmLogsForAvg.reduce((sum, log) => sum + (Number(log.hours_km_since_last) || 0), 0);
+  const totalLitersForKmAvg = kmLogsForAvg.reduce((sum, log) => sum + (Number(log.liters_supplied) || 0), 0);
   const overallKmAverage = totalLitersForKmAvg > 0 ? (totalKmForAvg / totalLitersForKmAvg) : 0;
 
-  const totalHoursForAvg = hourLogsForAvg.reduce((sum, log) => sum + log.hours_km_since_last, 0);
-  const totalLitersForHourAvg = hourLogsForAvg.reduce((sum, log) => sum + log.liters_supplied, 0);
+  const totalHoursForAvg = hourLogsForAvg.reduce((sum, log) => sum + (Number(log.hours_km_since_last) || 0), 0);
+  const totalLitersForHourAvg = hourLogsForAvg.reduce((sum, log) => sum + (Number(log.liters_supplied) || 0), 0);
   const overallHourAverage = totalHoursForAvg > 0 ? (totalLitersForHourAvg / totalHoursForAvg) : 0;
 
   return (
@@ -678,18 +673,22 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 {filteredLogs.map((log) => {
                   const machine = machines.find(m => m.id === log.machine_id);
                   const farmName = farms.find(f => f.id === log.farm_id)?.name || 'N/A';
-                  const fuelLabel = lookups?.fuelTypes.find((f: LookupItem) => f.id === log.fuel_type)?.label || log.fuel_type;
+                  const fuelLabel = lookups?.fuelTypes?.find((f: LookupItem) => f.id === log.fuel_type)?.label || log.fuel_type;
 
                   const isKm = machine?.type === 'caminhao';
-                  const hasHistory = log.hours_km_since_last > 0 && log.liters_supplied > 0;
+                  const lts = Number(log.liters_supplied) || 0;
+                  const hrs = Number(log.hours_km_since_last) || 0;
+                  const totalVal = Number(log.total_value) || 0;
+                  const hourKmVal = Number(log.hour_km_at_fueling) || 0;
+                  const hasHistory = hrs > 0 && lts > 0;
                   
                   let averageText = 'N/A';
                   if (hasHistory) {
                     if (isKm) {
-                      const avg = log.hours_km_since_last / log.liters_supplied;
+                      const avg = hrs / lts;
                       averageText = `${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`;
                     } else {
-                      const avg = log.consumption_rate || (log.liters_supplied / log.hours_km_since_last);
+                      const avg = log.consumption_rate || (lts / hrs);
                       averageText = `${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L/h`;
                     }
                   }
@@ -715,14 +714,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                         {log.pump_reading_start} → {log.pump_reading_end}
                       </td>
                       <td className="py-3 px-3 font-mono text-right font-bold text-[#1B3022]">
-                        {log.liters_supplied.toLocaleString('pt-BR')} L
+                        {lts.toLocaleString('pt-BR')} L
                       </td>
                       <td className="py-3 px-3 font-mono text-right font-bold text-slate-800">
-                        R$ {log.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="py-3 px-3 font-mono text-slate-600 text-right">
-                        {log.hour_km_at_fueling.toLocaleString('pt-BR')} {isKm ? 'km' : 'h'}
-                        <span className="text-[9px] text-slate-400 block">+{log.hours_km_since_last} {isKm ? 'km' : 'h'}</span>
+                        {hourKmVal.toLocaleString('pt-BR')} {isKm ? 'km' : 'h'}
+                        <span className="text-[9px] text-slate-400 block">+{hrs} {isKm ? 'km' : 'h'}</span>
                       </td>
                       <td className="py-3 px-3 font-mono text-right text-slate-700">
                         {averageText !== 'N/A' ? (
@@ -976,18 +975,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   <Fuel size={13} className="text-[#1B3022]" />
                   <span>Leitura INICIAL da Bomba (L)</span>
                 </label>
-                {discrepancyInfo?.lastEnd !== null && (
+                {discrepancyInfo && discrepancyInfo.lastEnd !== null && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (discrepancyInfo?.lastEnd !== null) {
+                      if (discrepancyInfo && discrepancyInfo.lastEnd !== null) {
                         setFormPumpStart(discrepancyInfo.lastEnd);
                       }
                     }}
                     className="text-[10px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg cursor-pointer transition-colors"
                     title="Clique para preencher com o fechamento do último lançamento"
                   >
-                    Usar último fechamento: {discrepancyInfo?.lastEnd} L
+                    Usar último fechamento: {discrepancyInfo.lastEnd} L
                   </button>
                 )}
               </div>
@@ -1002,7 +1001,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs font-mono text-slate-800 focus:outline-hidden focus:border-[#1B3022] shadow-2xs transition-all"
                 />
               </div>
-              {discrepancyInfo?.lastEnd !== null ? (
+              {discrepancyInfo && discrepancyInfo.lastEnd !== null ? (
                 <div className="mt-1 flex items-center justify-between text-[10px]">
                   <span className="text-slate-500">
                     Último fechamento registrado: <strong className="text-slate-800 font-mono">{discrepancyInfo.lastEnd} L</strong>
@@ -1095,7 +1094,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   <AlertTriangle size={14} className="shrink-0 text-amber-600" />
                   <span>Atenção: Início da bomba difere do último lançamento</span>
                 </div>
-                {discrepancyInfo?.lastEnd !== null && (
+                {discrepancyInfo && discrepancyInfo.lastEnd !== null && (
                   <button
                     type="button"
                     onClick={() => setFormPumpStart(discrepancyInfo.lastEnd!)}
@@ -1608,17 +1607,21 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             {filteredLogs.map((log, index) => {
               const machine = machines.find(m => m.id === log.machine_id);
               const farmName = farms.find(f => f.id === log.farm_id)?.name || 'N/A';
-              const fuelLabel = lookups?.fuelTypes.find((f: LookupItem) => f.id === log.fuel_type)?.label || log.fuel_type;
+              const fuelLabel = lookups?.fuelTypes?.find((f: LookupItem) => f.id === log.fuel_type)?.label || log.fuel_type;
               const isKm = machine?.type === 'caminhao';
-              const hasHistory = log.hours_km_since_last > 0 && log.liters_supplied > 0;
+              const lts = Number(log.liters_supplied) || 0;
+              const hrs = Number(log.hours_km_since_last) || 0;
+              const totalVal = Number(log.total_value) || 0;
+              const hourKmVal = Number(log.hour_km_at_fueling) || 0;
+              const hasHistory = hrs > 0 && lts > 0;
               
               let avgStr = '-';
               if (hasHistory) {
                 if (isKm) {
-                  const avg = log.hours_km_since_last / log.liters_supplied;
+                  const avg = hrs / lts;
                   avgStr = `${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`;
                 } else {
-                  const avg = log.consumption_rate || (log.liters_supplied / log.hours_km_since_last);
+                  const avg = log.consumption_rate || (lts / hrs);
                   avgStr = `${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L/h`;
                 }
               }
@@ -1638,18 +1641,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   <td className="border border-slate-300 p-0.5 font-mono text-center">{log.pump_reading_start}</td>
                   <td className="border border-slate-300 p-0.5 font-mono text-center">{log.pump_reading_end}</td>
                   <td className="border border-slate-300 p-0.5 font-mono font-bold text-right text-[#1B3022] whitespace-nowrap">
-                    {log.liters_supplied.toLocaleString('pt-BR')} L
+                    {lts.toLocaleString('pt-BR')} L
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
-                    R$ {(log.unit_price || 5.85).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    R$ {(Number(log.unit_price) || 5.85).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono font-bold text-right whitespace-nowrap">
-                    R$ {log.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    R$ {totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
-                    {log.hour_km_at_fueling.toLocaleString('pt-BR')} {isKm ? 'km' : 'h'}
-                    {log.hours_km_since_last > 0 && (
-                      <span className="block text-[6.5px] text-slate-500">+{log.hours_km_since_last} {isKm ? 'km' : 'h'}</span>
+                    {hourKmVal.toLocaleString('pt-BR')} {isKm ? 'km' : 'h'}
+                    {hrs > 0 && (
+                      <span className="block text-[6.5px] text-slate-500">+{hrs} {isKm ? 'km' : 'h'}</span>
                     )}
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono text-center font-bold whitespace-nowrap">{avgStr}</td>

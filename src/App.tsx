@@ -25,6 +25,7 @@ import SettingsPage from './pages/Settings';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
 import AppLogo from './components/AppLogo';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useTablet12Inch } from './lib/useTablet12Inch';
 
 const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
@@ -339,7 +340,8 @@ function AppContent() {
 
         {/* Corpo da Página / Scroll Área - Máxima visualização em Tablet e Mobile */}
         <main className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 print:p-0 print:overflow-visible print:h-auto">
-          <Routes>
+          <ErrorBoundary fallbackTitle="Módulo indisponível temporariamente">
+            <Routes>
             <Route 
               path="/" 
               element={
@@ -446,6 +448,7 @@ function AppContent() {
             />
             <Route path="*" element={<Navigate to={ROLE_DEFAULT_PATH[userRole] || '/'} replace />} />
           </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

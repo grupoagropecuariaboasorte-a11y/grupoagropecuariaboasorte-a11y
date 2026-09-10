@@ -591,6 +591,26 @@ function unpackFuelStock(stock: any) {
   }
 
   item.notes = notes.replace(/\n?\[META:[^\]]+\]/g, '').replace(/\n?\[Justificativa da alteração:[^\]]+\]/g, '').trim();
+
+  // Garantir campos numéricos padrão não-nulos
+  const start = Number(item.pump_reading_start) || 0;
+  const end = Number(item.pump_reading_end) || 0;
+  if (item.liters_supplied === undefined || item.liters_supplied === null || isNaN(Number(item.liters_supplied))) {
+    item.liters_supplied = end > start ? (end - start) : 0;
+  } else {
+    item.liters_supplied = Number(item.liters_supplied);
+  }
+
+  if (item.total_value === undefined || item.total_value === null || isNaN(Number(item.total_value))) {
+    item.total_value = item.liters_supplied * item.price_per_liter;
+  } else {
+    item.total_value = Number(item.total_value);
+  }
+
+  item.hour_km_at_fueling = Number(item.hour_km_at_fueling) || 0;
+  item.hours_km_since_last = Number(item.hours_km_since_last) || 0;
+  item.consumption_rate = Number(item.consumption_rate) || 0;
+
   return item;
 }
 
