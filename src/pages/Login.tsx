@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isDemoMode, isSchemaMissing } from '../lib/supabaseClient';
 import { Tractor, Lock, Mail, ChevronRight, Play, User, ArrowLeft, CheckCircle2, X, Eye, EyeOff, ExternalLink, TrendingUp } from 'lucide-react';
 import SupabaseSetupAssistant from '../components/SupabaseSetupAssistant';
@@ -28,7 +28,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [showQuickDemo, setShowQuickDemo] = useState(false);
   const [showSupaWarning, setShowSupaWarning] = useState(!supabase);
   const [schemaMissing, setSchemaMissing] = useState(isSchemaMissing);
-  const isSubmittingRef = React.useRef(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     async function checkSchema() {
