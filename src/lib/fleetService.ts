@@ -103,17 +103,17 @@ const SEED_FARMS: Farm[] = [
   { id: '44444444-4444-4444-4444-444444444444', name: 'União', location: 'Nova Mutum - MT' }
 ];
 
-const SEED_EQUIPMENT_TYPES: LookupItem[] = [
-  { id: 'trator', label: 'Trator' },
-  { id: 'colheitadeira', label: 'Colheitadeira' },
-  { id: 'caminhao', label: 'Caminhão' },
-  { id: 'pa_carregadeira', label: 'Pá Carregadeira' },
-  { id: 'gerador', label: 'Gerador' },
-  { id: 'escavadeira', label: 'Escavadeira' },
-  { id: 'retroescavadeira', label: 'Retroescavadeira' },
-  { id: 'esteira', label: 'Trator de Esteira' },
-  { id: 'rolo', label: 'Rolo Compactador' },
-  { id: 'outro', label: 'Outro' }
+const SEED_EQUIPMENT_TYPES: (LookupItem & { unit?: 'h' | 'km' })[] = [
+  { id: 'trator', label: 'Trator', unit: 'h' },
+  { id: 'colheitadeira', label: 'Colheitadeira', unit: 'h' },
+  { id: 'caminhao', label: 'Caminhão', unit: 'km' },
+  { id: 'pa_carregadeira', label: 'Pá Carregadeira', unit: 'h' },
+  { id: 'gerador', label: 'Gerador', unit: 'h' },
+  { id: 'escavadeira', label: 'Escavadeira', unit: 'h' },
+  { id: 'retroescavadeira', label: 'Retroescavadeira', unit: 'h' },
+  { id: 'esteira', label: 'Trator de Esteira', unit: 'h' },
+  { id: 'rolo', label: 'Rolo Compactador', unit: 'h' },
+  { id: 'outro', label: 'Outro', unit: 'h' }
 ];
 
 const SEED_FUEL_TYPES: LookupItem[] = [
@@ -955,18 +955,190 @@ export const fleetService = {
         (f: any) => f.id !== 'arla_32' && f.id !== 'gasolina' && !f.label?.toLowerCase().includes('arla') && !f.label?.toLowerCase().includes('gasolina')
       );
 
+      // Carrega tipos customizados e unidades locais
+      let localCustomTypes: (LookupItem & { unit?: 'h' | 'km' })[] = [];
+      let localUnitsMap: Record<string, 'h' | 'km'> = {};
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localCustomTypes = JSON.parse(localStorage.getItem('agro_fleet_custom_equipment_types') || '[]');
+          localUnitsMap = JSON.parse(localStorage.getItem('agro_fleet_equipment_units') || '{}');
+        }
+      } catch (err) {}
+
+      // Mapeamento consolidado de tipos de equipamento
+      const combinedEqMap = new Map<string, LookupItem & { unit?: 'h' | 'km' }>();
+
+      // 1. Adiciona SEED_EQUIPMENT_TYPES por padrão
+      SEED_EQUIPMENT_TYPES.forEach(s => {
+        combinedEqMap.set(s.id, { ...s });
+      });
+
+      // 2. Adiciona registros do Supabase (se houver)
+      (eq.data || []).forEach((item: any) => {
+        let cleanLabel = item.label || item.id;
+        let unit: 'h' | 'km' = item.unit;
+
+        if (cleanLabel.includes('[UNIT:km]')) {
+          unit = 'km';
+          cleanLabel = cleanLabel.replace(/\[UNIT:km\]/g, '').trim();
+        } else if (cleanLabel.includes('[UNIT:h]')) {
+          unit = 'h';
+          cleanLabel = cleanLabel.replace(/\[UNIT:h\]/g, '').trim();
+        }
+
+        if (!unit) {
+          const typeLower = item.id.toLowerCase();
+          const labelLower = cleanLabel.toLowerCase();
+          unit = localUnitsMap[item.id] || (
+            typeLower === 'caminhao' ||
+            typeLower.includes('caminhao') ||
+            typeLower.includes('caminhão') ||
+            labelLower.includes('caminhão') ||
+            labelLower.includes('caminhao') ||
+            labelLower.includes('carro') ||
+            labelLower.includes('veiculo') ||
+            labelLower.includes('veículo') ||
+            labelLower.includes('caminhonete') ||
+            labelLower.includes('camionete') ||
+            labelLower.includes('van')
+              ? 'km'
+              : 'h'
+          );
+        }
+
+        combinedEqMap.set(item.id, {
+          id: item.id,
+          label: cleanLabel,
+          unit,
+          color_hex: item.color_hex
+        });
+      });
+
+      // 3. Adiciona tipos customizados criados pelo usuário localmente
+      localCustomTypes.forEach(custom => {
+        const existing = combinedEqMap.get(custom.id);
+        if (existing) {
+          combinedEqMap.set(custom.id, {
+            ...existing,
+            label: custom.label || existing.label,
+            unit: custom.unit || existing.unit || localUnitsMap[custom.id] || 'h'
+          });
+        } else {
+          combinedEqMap.set(custom.id, {
+            id: custom.id,
+            label: custom.label,
+            unit: custom.unit || localUnitsMap[custom.id] || 'h'
+          });
+        }
+      });
+
+      // Garante que cada item tenha unit definido
+      const parsedEquipmentTypes = Array.from(combinedEqMap.values()).map(item => {
+        if (!item.unit) {
+          const lower = (item.id + ' ' + item.label).toLowerCase();
+          item.unit = (
+            lower.includes('caminhao') ||
+            lower.includes('caminhão') ||
+            lower.includes('carro') ||
+            lower.includes('veiculo') ||
+            lower.includes('veículo') ||
+            lower.includes('caminhonete') ||
+            lower.includes('camionete') ||
+            lower.includes('van')
+          ) ? 'km' : 'h';
+        }
+        return item;
+      });
+
       return {
-        equipmentTypes: eq.data || [],
-        fuelTypes: filteredFuelTypes,
-        maintenanceTypes: mt.data || [],
-        priorities: pr.data || [],
-        serviceLocations: sl.data || [],
+        equipmentTypes: parsedEquipmentTypes,
+        fuelTypes: filteredFuelTypes.length > 0 ? filteredFuelTypes : SEED_FUEL_TYPES,
+        maintenanceTypes: mt.data && mt.data.length > 0 ? mt.data : SEED_MAINTENANCE_TYPES,
+        priorities: pr.data && pr.data.length > 0 ? pr.data : SEED_PRIORITIES,
+        serviceLocations: sl.data && sl.data.length > 0 ? sl.data : SEED_SERVICE_LOCATIONS,
         maintenanceCategories: categories,
       };
     } catch (e) {
       console.error('Erro ao carregar lookups do Supabase, usando local:', e);
       throw e;
     }
+  },
+
+  async addEquipmentType(label: string, unit: 'h' | 'km'): Promise<LookupItem & { unit: 'h' | 'km' }> {
+    const cleanLabel = label.trim();
+    if (!cleanLabel) {
+      throw new Error('O nome do tipo de ativo não pode ser vazio.');
+    }
+
+    const baseSlug = cleanLabel
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '') || 'ativo';
+
+    const id = `${baseSlug}_${Date.now().toString(36)}`;
+    const newItem: LookupItem & { unit: 'h' | 'km' } = {
+      id,
+      label: cleanLabel,
+      unit
+    };
+
+    // 1. Salvar no localStorage de forma resiliente
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const customList: any[] = JSON.parse(localStorage.getItem('agro_fleet_custom_equipment_types') || '[]');
+        if (!customList.some(x => x.id === id || x.label.toLowerCase() === cleanLabel.toLowerCase())) {
+          customList.push(newItem);
+          localStorage.setItem('agro_fleet_custom_equipment_types', JSON.stringify(customList));
+        }
+        const unitsMap: Record<string, 'h' | 'km'> = JSON.parse(localStorage.getItem('agro_fleet_equipment_units') || '{}');
+        unitsMap[id] = unit;
+        unitsMap[baseSlug] = unit;
+        localStorage.setItem('agro_fleet_equipment_units', JSON.stringify(unitsMap));
+      }
+    } catch (e) {
+      console.warn('Erro ao salvar equipment_type localmente:', e);
+    }
+
+    // 2. Tentar persistir no Supabase (com fallback e encoding na label para segurança)
+    try {
+      if (supabase) {
+        await safeInsert('equipment_types', {
+          id,
+          label: `${cleanLabel} [UNIT:${unit}]`,
+          unit
+        });
+      }
+    } catch (e) {
+      console.warn('Aviso: Não foi possível salvar tipo no Supabase, mantido localmente:', e);
+    }
+
+    return newItem;
+  },
+
+  async updateEquipmentTypeUnit(id: string, unit: 'h' | 'km'): Promise<void> {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const unitsMap: Record<string, 'h' | 'km'> = JSON.parse(localStorage.getItem('agro_fleet_equipment_units') || '{}');
+        unitsMap[id] = unit;
+        localStorage.setItem('agro_fleet_equipment_units', JSON.stringify(unitsMap));
+
+        const customList: any[] = JSON.parse(localStorage.getItem('agro_fleet_custom_equipment_types') || '[]');
+        const idx = customList.findIndex(x => x.id === id);
+        if (idx !== -1) {
+          customList[idx].unit = unit;
+          localStorage.setItem('agro_fleet_custom_equipment_types', JSON.stringify(customList));
+        }
+      }
+    } catch (e) {}
+
+    try {
+      if (supabase) {
+        await safeUpdate('equipment_types', id, { unit });
+      }
+    } catch (e) {}
   },
 
   // =======================================================================
@@ -1157,11 +1329,39 @@ export const fleetService = {
     try {
       const { data, error } = await supabase!.from('machines').select('*').order('code', { ascending: true });
       if (error) throw error;
-      return (data || []).map((m: Machine) => ({
-        ...m,
-        initial_hour_km: Number(m.initial_hour_km) || 0,
-        current_hour_km: Number(m.current_hour_km) || Number(m.initial_hour_km) || 0
-      }));
+
+      let localMachineUnits: Record<string, 'h' | 'km'> = {};
+      let localTypeUnits: Record<string, 'h' | 'km'> = {};
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localMachineUnits = JSON.parse(localStorage.getItem('agro_fleet_machine_units') || '{}');
+          localTypeUnits = JSON.parse(localStorage.getItem('agro_fleet_equipment_units') || '{}');
+        }
+      } catch (err) {}
+
+      return (data || []).map((m: any) => {
+        const typeLower = (m.type || '').toLowerCase();
+        const derivedUnit = m.unit || localMachineUnits[m.id] || localTypeUnits[m.type] || (
+          typeLower === 'caminhao' ||
+          typeLower.includes('caminhao') ||
+          typeLower.includes('caminhão') ||
+          typeLower.includes('veiculo') ||
+          typeLower.includes('veículo') ||
+          typeLower.includes('carro') ||
+          typeLower.includes('caminhonete') ||
+          typeLower.includes('camionete') ||
+          typeLower.includes('van')
+            ? 'km'
+            : 'h'
+        );
+
+        return {
+          ...m,
+          unit: derivedUnit,
+          initial_hour_km: Number(m.initial_hour_km) || 0,
+          current_hour_km: Number(m.current_hour_km) || Number(m.initial_hour_km) || 0
+        };
+      });
     } catch (e) {
       console.error('Erro ao buscar máquinas no Supabase, usando local:', e);
       throw e;
@@ -1169,11 +1369,11 @@ export const fleetService = {
   },
 
   async addMachine(machine: Partial<Machine>): Promise<Machine> {
-    
     const cleanMachine = {
       code: machine.code || 'MAQ-NEW',
       name: machine.name || 'Máquina Nova',
       type: machine.type || 'trator',
+      unit: machine.unit || 'h',
       brand: machine.brand || 'Marca',
       model: machine.model || 'Modelo',
       year: Number(machine.year) || new Date().getFullYear(),
@@ -1187,7 +1387,17 @@ export const fleetService = {
     };
     const { data, error } = await safeInsert('machines', cleanMachine);
     if (error) throw error;
-    return data;
+    const result = data || cleanMachine;
+    if (result && result.id && machine.unit) {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const map = JSON.parse(localStorage.getItem('agro_fleet_machine_units') || '{}');
+          map[result.id] = machine.unit;
+          localStorage.setItem('agro_fleet_machine_units', JSON.stringify(map));
+        }
+      } catch (e) {}
+    }
+    return { ...result, unit: machine.unit || result.unit || 'h' };
   },
 
   async updateMachine(id: string, machine: Partial<Machine>): Promise<Machine> {
@@ -1195,6 +1405,16 @@ export const fleetService = {
     if (machine.code !== undefined) cleanMachine.code = machine.code;
     if (machine.name !== undefined) cleanMachine.name = machine.name;
     if (machine.type !== undefined) cleanMachine.type = machine.type;
+    if (machine.unit !== undefined) {
+      cleanMachine.unit = machine.unit;
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const map = JSON.parse(localStorage.getItem('agro_fleet_machine_units') || '{}');
+          map[id] = machine.unit;
+          localStorage.setItem('agro_fleet_machine_units', JSON.stringify(map));
+        }
+      } catch (e) {}
+    }
     if (machine.brand !== undefined) cleanMachine.brand = machine.brand;
     if (machine.model !== undefined) cleanMachine.model = machine.model;
     if (machine.year !== undefined) cleanMachine.year = Number(machine.year);

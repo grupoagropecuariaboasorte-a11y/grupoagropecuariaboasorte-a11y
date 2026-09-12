@@ -7,8 +7,10 @@
 
 CREATE TABLE IF NOT EXISTS equipment_types (
     id VARCHAR(50) PRIMARY KEY,
-    label VARCHAR(100) NOT NULL
+    label VARCHAR(100) NOT NULL,
+    unit VARCHAR(10) DEFAULT 'h' -- 'h' para Horímetro (horas) ou 'km' para Odômetro (quilômetros)
 );
+ALTER TABLE equipment_types ADD COLUMN IF NOT EXISTS unit VARCHAR(10) DEFAULT 'h';
 
 CREATE TABLE IF NOT EXISTS fuel_types (
     id VARCHAR(50) PRIMARY KEY,
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS machines (
     code VARCHAR(50) NOT NULL UNIQUE, -- Ex: MAQ-001
     name VARCHAR(100) NOT NULL,       -- Ex: Trator John Deere 6125J
     type VARCHAR(50) REFERENCES equipment_types(id) ON DELETE SET NULL,
+    unit VARCHAR(10) DEFAULT 'h', -- 'h' ou 'km'
     brand VARCHAR(100) NOT NULL,
     model VARCHAR(100) NOT NULL,
     year INTEGER NOT NULL,
@@ -78,6 +81,7 @@ CREATE TABLE IF NOT EXISTS machines (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS unit VARCHAR(10) DEFAULT 'h';
 
 -- Estoque de Combustível por Fazenda (Entradas)
 CREATE TABLE IF NOT EXISTS fuel_stock (

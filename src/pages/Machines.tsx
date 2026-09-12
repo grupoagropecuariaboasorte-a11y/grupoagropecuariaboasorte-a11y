@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
-import { Machine, Farm, LookupItem, FuelLog, MaintenanceLog, PreventivePlanStatus, Checklist30d, UserRole, isImplement } from '../types';
+import { Machine, Farm, LookupItem, FuelLog, MaintenanceLog, PreventivePlanStatus, Checklist30d, UserRole, isImplement, getMachineUnit, isMachineKm, getMeterLabel, getUnitSuffix, getConsumptionLabel } from '../types';
 import Modal from '../components/Modal';
 import { 
   Tractor, Search, Plus, Trash2, Edit, X, Info, Fuel, Wrench, 
-  CheckSquare, Calendar, Sliders, ChevronRight, BarChart, Settings
+  CheckSquare, Calendar, Sliders, ChevronRight, BarChart, Settings,
+  Clock, Gauge, Tag, Check, Sparkles
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { formatDisplayDate } from '../lib/dateUtils';
@@ -41,11 +42,18 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
   // Modais de CRUD
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+
+  // Modal de Novo Tipo de Ativo
+  const [isAddTypeOpen, setIsAddTypeOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeUnit, setNewTypeUnit] = useState<'h' | 'km'>('h');
+  const [isSubmittingType, setIsSubmittingType] = useState(false);
   
   // Form States (Campos do cadastro)
   const [formCode, setFormCode] = useState('');
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState('trator');
+  const [formUnit, setFormUnit] = useState<'h' | 'km'>('h'); // 'h' = Horímetro (horas), 'km' = Odômetro (quilômetros)
   const [formBrand, setFormBrand] = useState('');
   const [formModel, setFormModel] = useState('');
   const [formYear, setFormYear] = useState(new Date().getFullYear());
@@ -157,12 +165,58 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     return `MAQ-${paddedNum}`;
   };
 
+  const handleTypeChange = (newType: string) => {
+    setFormType(newType);
+    const found = (lookups?.equipmentTypes || []).find((t: any) => t.id === newType);
+    if (found?.unit) {
+      setFormUnit(found.unit);
+    } else {
+      setFormUnit(getMachineUnit({ type: newType }, lookups?.equipmentTypes));
+    }
+  };
+
+  const handleOpenCreateType = () => {
+    setNewTypeName('');
+    setNewTypeUnit('h');
+    setIsAddTypeOpen(true);
+  };
+
+  const handleCreateType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = newTypeName.trim();
+    if (!cleanName) {
+      alert('Por favor, informe o nome do tipo de ativo.');
+      return;
+    }
+
+    setIsSubmittingType(true);
+    try {
+      const added = await fleetService.addEquipmentType(cleanName, newTypeUnit);
+      // Recarrega lookups para refletir na lista
+      const updatedLookups = await fleetService.getLookups();
+      setLookups(updatedLookups);
+      
+      // Seleciona automaticamente o novo tipo e sua unidade no formulário
+      setFormType(added.id);
+      setFormUnit(added.unit);
+      setNewTypeName('');
+      setIsAddTypeOpen(false);
+    } catch (err: any) {
+      alert('Erro ao cadastrar tipo de ativo: ' + (err.message || err));
+    } finally {
+      setIsSubmittingType(false);
+    }
+  };
+
   const handleOpenCreate = () => {
     const onlyMachs = machines.filter(m => !isImplement(m));
     const nextCode = getNextMachineCode(onlyMachs);
     setFormCode(nextCode);
     setFormName('');
-    setFormType('trator');
+    const defaultType = lookups?.equipmentTypes?.[0]?.id || 'trator';
+    setFormType(defaultType);
+    const defaultTypeObj = (lookups?.equipmentTypes || []).find((t: any) => t.id === defaultType);
+    setFormUnit(defaultTypeObj?.unit || getMachineUnit({ type: defaultType }, lookups?.equipmentTypes));
     setFormBrand('');
     setFormModel('');
     setFormYear(new Date().getFullYear());
@@ -188,6 +242,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
         code: codeToUse,
         name: formName,
         type: formType,
+        unit: formUnit,
         brand: formBrand,
         model: formModel,
         year: Number(formYear),
@@ -210,6 +265,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
     setFormCode(m.code || '');
     setFormName(m.name || '');
     setFormType(m.type || 'trator');
+    setFormUnit(getMachineUnit(m, lookups?.equipmentTypes));
     setFormBrand(m.brand || '');
     setFormModel(m.model || '');
     setFormYear(m.year || new Date().getFullYear());
@@ -229,6 +285,7 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
         code: formCode,
         name: formName,
         type: formType,
+        unit: formUnit,
         brand: formBrand,
         model: formModel,
         year: Number(formYear),
@@ -444,6 +501,8 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                     : null;
 
                   const isNextRevisionOverdue = nextRevisionHourKm !== null && currentHourKmVal >= nextRevisionHourKm;
+                  const machineUnit = getMachineUnit(m, lookups?.equipmentTypes);
+                  const unitSuffix = getUnitSuffix(machineUnit);
 
                   return (
                     <tr 
@@ -456,7 +515,16 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                       <td className="py-3 px-3 font-mono text-xs font-bold text-[#1B3022]">{m.code}</td>
                       <td className="py-3 px-3">
                         <div className="font-bold text-xs text-slate-800">{m.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{typeLabel} • {m.brand} {m.model}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                          <span>{typeLabel} • {m.brand} {m.model}</span>
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold font-mono border ${
+                            machineUnit === 'km' 
+                              ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {machineUnit === 'km' ? 'KM' : 'HORAS'}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-3 px-3 text-xs text-slate-600">{farmName}</td>
                       <td className="py-3 px-3">
@@ -472,19 +540,19 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                       <td className="py-3 px-3 text-right font-mono text-xs font-bold text-[#1B3022]">
                         {lastRevisionHourVal !== null ? (
                           <>
-                            {lastRevisionHourVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                            {lastRevisionHourVal.toLocaleString('pt-BR')} <span className="text-[9px] font-semibold text-slate-400">{unitSuffix}</span>
                           </>
                         ) : (
                           <span className="text-slate-400 font-normal italic text-[10px]">Sem registro</span>
                         )}
                       </td>
                       <td className="py-3 px-3 text-right font-mono text-xs font-bold text-slate-800">
-                        {currentHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                        {currentHourKmVal.toLocaleString('pt-BR')} <span className="text-[9px] font-semibold text-slate-400">{unitSuffix}</span>
                       </td>
                       <td className={`py-3 px-3 text-right font-mono text-xs font-bold ${isNextRevisionOverdue ? 'text-red-600' : 'text-slate-600'}`}>
                         {nextRevisionHourKm !== null ? (
                           <>
-                            {nextRevisionHourKm.toLocaleString('pt-BR')} <span className="text-[9px] font-normal text-slate-400">H/km</span>
+                            {nextRevisionHourKm.toLocaleString('pt-BR')} <span className="text-[9px] font-semibold text-slate-400">{unitSuffix}</span>
                           </>
                         ) : (
                           <span className="text-slate-300">-</span>
@@ -640,16 +708,16 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                         </p>
                       </div>
                       <div>
-                        <p className="text-slate-500 font-medium">Horímetro Inicial</p>
-                        <p className="text-slate-800 font-mono font-bold mt-0.5">{selectedMachine.initial_hour_km.toLocaleString('pt-BR')} h/km</p>
+                        <p className="text-slate-500 font-medium">{getMeterLabel(getMachineUnit(selectedMachine, lookups?.equipmentTypes))} Inicial</p>
+                        <p className="text-slate-800 font-mono font-bold mt-0.5">{selectedMachine.initial_hour_km.toLocaleString('pt-BR')} {getUnitSuffix(getMachineUnit(selectedMachine, lookups?.equipmentTypes))}</p>
                       </div>
                       <div>
-                        <p className="text-slate-500 font-medium">Horímetro Anterior</p>
-                        <p className="text-slate-800 font-mono font-bold mt-0.5">{drawerPreviousHourKm.toLocaleString('pt-BR')} h/km</p>
+                        <p className="text-slate-500 font-medium">{getMeterLabel(getMachineUnit(selectedMachine, lookups?.equipmentTypes))} Anterior</p>
+                        <p className="text-slate-800 font-mono font-bold mt-0.5">{drawerPreviousHourKm.toLocaleString('pt-BR')} {getUnitSuffix(getMachineUnit(selectedMachine, lookups?.equipmentTypes))}</p>
                       </div>
                       <div>
-                        <p className="text-slate-500 font-medium">Horímetro Atual (Abastecimento)</p>
-                        <p className="text-[#1B3022] font-mono font-black mt-0.5">{drawerCurrentHourKm.toLocaleString('pt-BR')} h/km</p>
+                        <p className="text-slate-500 font-medium">{getMeterLabel(getMachineUnit(selectedMachine, lookups?.equipmentTypes))} Atual (Abastecimento)</p>
+                        <p className="text-[#1B3022] font-mono font-black mt-0.5">{drawerCurrentHourKm.toLocaleString('pt-BR')} {getUnitSuffix(getMachineUnit(selectedMachine, lookups?.equipmentTypes))}</p>
                       </div>
                     </div>
                   </div>
@@ -688,40 +756,47 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
             })()}
 
             {/* TAB: FUEL LOGS / ABASTECIMENTOS */}
-            {drawerTab === 'fuel' && (
-              <div className="space-y-4">
-                {machineFuelLogs.length > 0 ? (
-                  machineFuelLogs.map(log => (
-                    <div key={log.id} className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex justify-between items-start text-xs hover:border-slate-200 transition-colors">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Fuel size={14} className="text-[#1B3022]" />
-                          <span className="font-bold text-slate-800">
-                            {log.liters_supplied} Litros ({lookups?.fuelTypes.find((f: any) => f.id === log.fuel_type)?.label || log.fuel_type})
-                          </span>
+            {drawerTab === 'fuel' && (() => {
+              const selUnit = getMachineUnit(selectedMachine, lookups?.equipmentTypes);
+              const selMeter = getMeterLabel(selUnit);
+              const selSuffix = getUnitSuffix(selUnit);
+              const selConsumptionSuffix = getConsumptionLabel(selUnit);
+
+              return (
+                <div className="space-y-4">
+                  {machineFuelLogs.length > 0 ? (
+                    machineFuelLogs.map(log => (
+                      <div key={log.id} className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex justify-between items-start text-xs hover:border-slate-200 transition-colors">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Fuel size={14} className="text-[#1B3022]" />
+                            <span className="font-bold text-slate-800">
+                              {log.liters_supplied} Litros ({lookups?.fuelTypes.find((f: any) => f.id === log.fuel_type)?.label || log.fuel_type})
+                            </span>
+                          </div>
+                          <p className="text-slate-500">
+                            {formatDisplayDate(log.date)} • {log.responsible || 'Responsável'}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            {selMeter}: {log.hour_km_at_fueling.toLocaleString('pt-BR')} (+{log.hours_km_since_last} {selSuffix}) • {log.consumption_rate ? `${log.consumption_rate} ${selConsumptionSuffix}` : 'Consumo N/A'}
+                          </p>
+                          {log.notes && <p className="text-[11px] text-slate-500 italic mt-1.5">Obs: {log.notes}</p>}
                         </div>
-                        <p className="text-slate-500">
-                          {formatDisplayDate(log.date)} • {log.responsible || 'Responsável'}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-mono">
-                          Horímetro: {log.hour_km_at_fueling.toLocaleString('pt-BR')} (+{log.hours_km_since_last}h) • {log.consumption_rate ? `${log.consumption_rate} L/h` : 'Consumo N/A'}
-                        </p>
-                        {log.notes && <p className="text-[11px] text-slate-500 italic mt-1.5">Obs: {log.notes}</p>}
+                        <div className="text-right">
+                          <p className="font-bold text-slate-800 font-mono">R$ {log.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">R$ {log.price_per_liter}/L</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-slate-800 font-mono">R$ {log.total_value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[10px] text-slate-500 font-mono">R$ {log.price_per_liter}/L</p>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="h-32 flex flex-col items-center justify-center text-slate-400 text-xs">
+                      <Fuel size={24} className="mb-2" />
+                      Nenhum registro de abastecimento para esta máquina.
                     </div>
-                  ))
-                ) : (
-                  <div className="h-32 flex flex-col items-center justify-center text-slate-400 text-xs">
-                    <Fuel size={24} className="mb-2" />
-                    Nenhum registro de abastecimento para esta máquina.
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })()}
 
             {/* TAB: SERVICES / SERVIÇOS */}
             {drawerTab === 'maintenance' && (
@@ -885,19 +960,31 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Tipo de Ativo</label>
+            <div className="col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500">Tipo de Ativo</label>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateType}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Cadastrar nova categoria/tipo de ativo"
+                >
+                  <Plus size={13} /> Novo Tipo
+                </button>
+              </div>
               <select
                 value={formType}
-                onChange={(e) => setFormType(e.target.value)}
+                onChange={(e) => handleTypeChange(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
                 {lookups?.equipmentTypes?.map((t: LookupItem) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.label} ({t.unit === 'km' ? 'KM - Rodoviário' : 'Horas - Agrícola'})
+                  </option>
                 ))}
               </select>
             </div>
-            <div>
+            <div className="col-span-2 sm:col-span-1">
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Fazenda Locada</label>
               <select
                 value={formFarmId}
@@ -909,6 +996,61 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                 ))}
               </select>
             </div>
+
+            {/* Configuração do Regime Operacional (Hora vs KM) */}
+            <div className="col-span-2 bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Gauge size={14} className="text-[#1B3022]" /> Regime Operacional / Unidade de Medida
+                </label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase font-mono ${
+                  formUnit === 'km' ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}>
+                  {formUnit === 'km' ? 'Quilômetros (km/L)' : 'Horímetro (L/h)'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Defina se este ativo trabalha por <strong>Horas</strong> ou por <strong>Quilômetros</strong> para cálculos precisos de consumo e manutenção:
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setFormUnit('h')}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                    formUnit === 'h'
+                      ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-2xs ring-1 ring-emerald-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70 font-medium'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${formUnit === 'h' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs">Por Horas (h)</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Média em Litros/Hora (L/h)</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormUnit('km')}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                    formUnit === 'km'
+                      ? 'bg-blue-50 border-blue-600 text-blue-950 font-bold shadow-2xs ring-1 ring-blue-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70 font-medium'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${formUnit === 'km' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    <Gauge size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs">Por KM (km)</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Média em KM/Litro (km/L)</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Marca</label>
               <input
@@ -952,7 +1094,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Inicial</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                {formUnit === 'km' ? 'Odômetro / Km Inicial (km)' : 'Horímetro Inicial (h)'}
+              </label>
               <input
                 type="number"
                 required
@@ -1029,19 +1173,31 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022]"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Tipo de Ativo</label>
+            <div className="col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500">Tipo de Ativo</label>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateType}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Cadastrar nova categoria/tipo de ativo"
+                >
+                  <Plus size={13} /> Novo Tipo
+                </button>
+              </div>
               <select
                 value={formType}
-                onChange={(e) => setFormType(e.target.value)}
+                onChange={(e) => handleTypeChange(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
               >
                 {lookups?.equipmentTypes?.map((t: LookupItem) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.label} ({t.unit === 'km' ? 'KM - Rodoviário' : 'Horas - Agrícola'})
+                  </option>
                 ))}
               </select>
             </div>
-            <div>
+            <div className="col-span-2 sm:col-span-1">
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Fazenda Locada (Localidade)</label>
               <select
                 value={formFarmId}
@@ -1053,6 +1209,61 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
                 ))}
               </select>
             </div>
+
+            {/* Configuração do Regime Operacional (Hora vs KM) */}
+            <div className="col-span-2 bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Gauge size={14} className="text-[#1B3022]" /> Regime Operacional / Unidade de Medida
+                </label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase font-mono ${
+                  formUnit === 'km' ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}>
+                  {formUnit === 'km' ? 'Quilômetros (km/L)' : 'Horímetro (L/h)'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Defina se este ativo trabalha por <strong>Horas</strong> ou por <strong>Quilômetros</strong> para cálculos precisos de consumo e manutenção:
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setFormUnit('h')}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                    formUnit === 'h'
+                      ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-2xs ring-1 ring-emerald-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70 font-medium'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${formUnit === 'h' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs">Por Horas (h)</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Média em Litros/Hora (L/h)</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormUnit('km')}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                    formUnit === 'km'
+                      ? 'bg-blue-50 border-blue-600 text-blue-950 font-bold shadow-2xs ring-1 ring-blue-500/20'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70 font-medium'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${formUnit === 'km' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    <Gauge size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs">Por KM (km)</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Média em KM/Litro (km/L)</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Marca</label>
               <input
@@ -1094,7 +1305,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Inicial</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                {formUnit === 'km' ? 'Odômetro Inicial (km)' : 'Horímetro Inicial (h)'}
+              </label>
               <input
                 type="number"
                 value={formInitialHourKm}
@@ -1103,7 +1316,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Horímetro / Km Atual</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                {formUnit === 'km' ? 'Odômetro Atual (km)' : 'Horímetro Atual (h)'}
+              </label>
               <input
                 type="number"
                 value={formCurrentHourKm}
@@ -1148,6 +1363,121 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
               className="px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
             >
               Atualizar Cadastro
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL: NOVO TIPO DE ATIVO */}
+      <Modal 
+        isOpen={isAddTypeOpen} 
+        onClose={() => !isSubmittingType && setIsAddTypeOpen(false)} 
+        title="Novo Tipo de Ativo"
+      >
+        <form onSubmit={handleCreateType} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <Tag size={13} className="text-[#1B3022]" /> Nome do Tipo de Ativo / Categoria
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="Ex: Caminhonete, Pulverizador, Van, Carreta, Pá Carregadeira..."
+              value={newTypeName}
+              onChange={(e) => setNewTypeName(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022] font-medium"
+              autoFocus
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Este tipo ficará disponível imediatamente para seleção no cadastro de máquinas e relatórios.
+            </p>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Gauge size={14} className="text-[#1B3022]" /> Regime Operacional / Unidade de Medida
+              </label>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase font-mono tracking-wider ${
+                newTypeUnit === 'km' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {newTypeUnit === 'km' ? 'Quilometragem (km)' : 'Horímetro (horas)'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-normal">
+              Defina se os ativos desta categoria trabalham por <strong>Horas (Horímetro)</strong> ou por <strong>KM (Odômetro)</strong>. Isso garantirá que as contas de combustível (L/h vs km/L) e planos de revisão funcionem corretamente.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setNewTypeUnit('h')}
+                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  newTypeUnit === 'h'
+                    ? 'bg-emerald-50 border-emerald-600 text-emerald-950 shadow-xs ring-1 ring-emerald-500/20'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                }`}
+              >
+                <div className={`p-2 rounded-lg mt-0.5 ${newTypeUnit === 'h' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    Trabalha por Horas (h)
+                    {newTypeUnit === 'h' && <Check size={12} className="text-emerald-700 stroke-[3]" />}
+                  </div>
+                  <div className="text-[10.5px] text-slate-500 mt-0.5 leading-snug">
+                    Medição por <strong>Horímetro</strong>. Médias calculadas em <strong>Litros por Hora (L/h)</strong>.
+                  </div>
+                  <div className="text-[9.5px] text-emerald-700 font-semibold mt-1">
+                    Ex: Tratores, Colheitadeiras, Pás
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNewTypeUnit('km')}
+                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  newTypeUnit === 'km'
+                    ? 'bg-blue-50 border-blue-600 text-blue-950 shadow-xs ring-1 ring-blue-500/20'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/70'
+                }`}
+              >
+                <div className={`p-2 rounded-lg mt-0.5 ${newTypeUnit === 'km' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <Gauge size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    Trabalha por KM (km)
+                    {newTypeUnit === 'km' && <Check size={12} className="text-blue-700 stroke-[3]" />}
+                  </div>
+                  <div className="text-[10.5px] text-slate-500 mt-0.5 leading-snug">
+                    Medição por <strong>Odômetro</strong>. Médias calculadas em <strong>KM por Litro (km/L)</strong>.
+                  </div>
+                  <div className="text-[9.5px] text-blue-700 font-semibold mt-1">
+                    Ex: Caminhões, Caminhonetes, Vans
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              disabled={isSubmittingType}
+              onClick={() => setIsAddTypeOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmittingType || !newTypeName.trim()}
+              className="px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {isSubmittingType ? 'Salvando...' : 'Salvar Tipo de Ativo'}
             </button>
           </div>
         </form>

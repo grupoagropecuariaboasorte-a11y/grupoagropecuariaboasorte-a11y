@@ -2,7 +2,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { 
   Farm, Machine, FuelLog, MaintenanceLog, Checklist30d, 
-  WorkOrder, PreventivePlanStatus, UserRole, isImplement 
+  WorkOrder, PreventivePlanStatus, UserRole, isImplement,
+  getMachineUnit, getMeterLabel, getUnitSuffix, getConsumptionLabel, isMachineKm
 } from '../types';
 import { 
   FileSpreadsheet, Printer, Search, Tractor, Calendar, 
@@ -334,6 +335,16 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     return farms.find(f => f.id === selectedMachine.farm_id) || null;
   }, [selectedMachine, farms]);
 
+  // Unidade operacional da máquina (Horas vs KM)
+  const machineUnit = useMemo(() => {
+    return selectedMachine ? getMachineUnit(selectedMachine, equipmentTypes) : 'h';
+  }, [selectedMachine, equipmentTypes]);
+
+  const isKm = machineUnit === 'km';
+  const meterLabel = getMeterLabel(machineUnit);
+  const unitSuffix = getUnitSuffix(machineUnit);
+  const consumptionSuffix = getConsumptionLabel(machineUnit);
+
   // Dados específicos da máquina selecionada
   const machineData = useMemo(() => {
     if (!selectedMachine) return null;
@@ -447,11 +458,12 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // SEÇÃO 1: FICHA CADASTRAL
     if (selectedSections[1]) {
       rows.push(`"--- 1. IDENTIFICAÇÃO CADASTRAL E DADOS TÉCNICOS ---"`);
-      rows.push(`"Código";"Nome da Máquina";"Tipo";"Marca";"Modelo";"Ano";"Chassi / Série";"Fazenda Alocada";"Status Operacional";"Motorista / Operador";"Data de Aquisição";"Horímetro Inicial";"Horímetro Atual";"Horas Trabalhadas Acumuladas"`);
+      rows.push(`"Código";"Nome da Máquina";"Tipo";"Regime";"Marca";"Modelo";"Ano";"Chassi / Série";"Fazenda Alocada";"Status Operacional";"Motorista / Operador";"Data de Aquisição";"${meterLabel} Inicial";"${meterLabel} Atual";"${isKm ? 'KM Rodados Acumulados' : 'Horas Trabalhadas Acumuladas'}"`);
       rows.push([
         escapeCsv(selectedMachine.code),
         escapeCsv(selectedMachine.name),
         escapeCsv(selectedMachine.type),
+        escapeCsv(isKm ? 'KM (Rodoviário)' : 'Horas (Agrícola)'),
         escapeCsv(selectedMachine.brand),
         escapeCsv(selectedMachine.model),
         escapeCsv(selectedMachine.year),
@@ -473,12 +485,12 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
       rows.push(`"Indicador";"Valor"`);
       rows.push(`"Total Abastecido (Litros)";"${formatNumberBr(machineData.totalLiters, 1)} L"`);
       rows.push(`"Total Gasto em Combustível (R$)";"R$ ${formatNumberBr(machineData.totalFuelCost, 2)}"`);
-      rows.push(`"Média de Consumo (L/h ou L/km)";"${formatNumberBr(machineData.avgConsumption, 2)}"`);
+      rows.push(`"Média de Consumo (${consumptionSuffix})";"${formatNumberBr(machineData.avgConsumption, 2)} ${consumptionSuffix}"`);
       rows.push(`"Total Gasto em Peças (R$)";"R$ ${formatNumberBr(machineData.totalPartsCost, 2)}"`);
       rows.push(`"Total Gasto em Mão de Obra (R$)";"R$ ${formatNumberBr(machineData.totalLaborCost, 2)}"`);
       rows.push(`"Total Gasto em Manutenções (R$)";"R$ ${formatNumberBr(machineData.totalMaintenanceCost, 2)}"`);
       rows.push(`"Custo Operacional Total Acumulado (R$)";"R$ ${formatNumberBr(machineData.totalOperationalCost, 2)}"`);
-      rows.push(`"Custo por Hora Trabalhada (R$/h)";"R$ ${formatNumberBr(machineData.costPerHourWorked, 2)}"`);
+      rows.push(`"Custo por ${isKm ? 'KM' : 'Hora'} Trabalhada (R$/${unitSuffix})";"R$ ${formatNumberBr(machineData.costPerHourWorked, 2)}"`);
       rows.push(`"Total de Abastecimentos Registrados";"${machineData.fLogs.length}"`);
       rows.push(`"Total de Manutenções Registradas";"${machineData.mLogs.length}"`);
       rows.push(`"Total de Vistorias Checklist Registradas";"${machineData.chkLogs.length}"`);
@@ -489,13 +501,13 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // SEÇÃO 3: CRONOGRAMA DO PLANO PREVENTIVO
     if (selectedSections[3]) {
       rows.push(`"--- 3. PLANO PREVENTIVO E PRÓXIMAS REVISÕES ---"`);
-      rows.push(`"Item de Manutenção";"Intervalo Horas/KM";"Intervalo Dias";"Última Realização (Data)";"Última Realização (Horímetro)";"Horímetro Atual";"Horímetro Próxima Revisão";"Saldo Horas Restantes";"Data Próxima Revisão";"Saldo Dias Restantes";"Status da Revisão"`);
+      rows.push(`"Item de Manutenção";"Intervalo (${unitSuffix})";"Intervalo Dias";"Última Realização (Data)";"Última Realização (${unitSuffix})";"${meterLabel} Atual";"${meterLabel} Próxima Revisão";"Saldo ${unitSuffix} Restantes";"Data Próxima Revisão";"Saldo Dias Restantes";"Status da Revisão"`);
       if (machineData.prevItems.length > 0) {
         machineData.prevItems.forEach(item => {
           const nextHour = (item.last_performed_hour_km || 0) + (item.interval_hour_km || 0);
           rows.push([
             escapeCsv(item.maintenance_item),
-            escapeCsv(item.interval_hour_km ? `${item.interval_hour_km} h/km` : '-'),
+            escapeCsv(item.interval_hour_km ? `${item.interval_hour_km} ${unitSuffix}` : '-'),
             escapeCsv(item.interval_days ? `${item.interval_days} dias` : '-'),
             escapeCsv(formatDisplayDate(item.last_performed_date)),
             escapeCsv(item.last_performed_hour_km ? formatNumberBr(item.last_performed_hour_km, 1) : '-'),
@@ -538,7 +550,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // SEÇÃO 5: HISTÓRICO DE MANUTENÇÕES
     if (selectedSections[5]) {
       rows.push(`"--- 5. HISTÓRICO DE MANUTENÇÕES E OFICINAS ---"`);
-      rows.push(`"Data";"Horímetro/KM";"Tipo";"Descrição do Serviço";"Peças Substituídas";"Custo Peças (R$)";"Custo Mão de Obra (R$)";"Custo Total (R$)";"Mecânico / Oficina"`);
+      rows.push(`"Data";"${meterLabel}";"Tipo";"Descrição do Serviço";"Peças Substituídas";"Custo Peças (R$)";"Custo Mão de Obra (R$)";"Custo Total (R$)";"Mecânico / Oficina"`);
       if (machineData.mLogs.length > 0) {
         machineData.mLogs.forEach(m => {
           rows.push([
@@ -562,7 +574,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // SEÇÃO 6: HISTÓRICO DE ABASTECIMENTOS
     if (selectedSections[6]) {
       rows.push(`"--- 6. HISTÓRICO DE ABASTECIMENTOS DE COMBUSTÍVEL ---"`);
-      rows.push(`"Data";"Horímetro/KM";"Tipo Combustível";"Litros Fornecidos";"Preço por Litro (R$)";"Valor Total (R$)";"Consumo Calculado";"Posto / Fornecedor";"Responsável"`);
+      rows.push(`"Data";"${meterLabel}";"Tipo Combustível";"Litros Fornecidos";"Preço por Litro (R$)";"Valor Total (R$)";"Consumo (${consumptionSuffix})";"Posto / Fornecedor";"Responsável"`);
       if (machineData.fLogs.length > 0) {
         machineData.fLogs.forEach(f => {
           rows.push([
@@ -586,7 +598,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
     // SEÇÃO 7: HISTÓRICO DE CHECKLISTS
     if (selectedSections[7]) {
       rows.push(`"--- 7. HISTÓRICO DE CHECKLISTS E VISTORIAS 7 DIAS ---"`);
-      rows.push(`"Data da Vistoria";"Horímetro/KM";"Operador / Inspetor";"Status Geral";"Observações / Resumo";"Relação Completa de Itens Inspecionados"`);
+      rows.push(`"Data da Vistoria";"${meterLabel}";"Operador / Inspetor";"Status Geral";"Observações / Resumo";"Relação Completa de Itens Inspecionados"`);
       if (machineData.chkLogs.length > 0) {
         machineData.chkLogs.forEach(c => {
           const info = parseInspectionDetails(c.failed_items_notes, c.details);
@@ -961,16 +973,22 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                   <span className="font-semibold text-slate-800 print:text-black">{formatDisplayDate(selectedMachine.acquisition_date)}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horímetro / KM Inicial</span>
-                  <span className="font-mono font-bold text-slate-700 print:text-black">{Number(selectedMachine.initial_hour_km || 0).toLocaleString('pt-BR')} h/km</span>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Regime Operacional</span>
+                  <span className="font-semibold text-slate-800 print:text-black">
+                    {isKm ? 'Quilometragem (KM)' : 'Horímetro (Horas)'}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horímetro / KM Atual</span>
-                  <span className="font-mono font-bold text-[#1B3022] print:text-black">{machineData.currentEffectiveHour.toLocaleString('pt-BR')} h/km</span>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">{meterLabel} Inicial</span>
+                  <span className="font-mono font-bold text-slate-700 print:text-black">{Number(selectedMachine.initial_hour_km || 0).toLocaleString('pt-BR')} {unitSuffix}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Horas Trabalhadas</span>
-                  <span className="font-mono font-bold text-emerald-800 print:text-black">+{machineData.hoursWorked.toLocaleString('pt-BR')} h/km</span>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">{meterLabel} Atual</span>
+                  <span className="font-mono font-bold text-[#1B3022] print:text-black">{machineData.currentEffectiveHour.toLocaleString('pt-BR')} {unitSuffix}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">{isKm ? 'KM Rodados Acumulados' : 'Horas Trabalhadas'}</span>
+                  <span className="font-mono font-bold text-emerald-800 print:text-black">+{machineData.hoursWorked.toLocaleString('pt-BR')} {unitSuffix}</span>
                 </div>
                 <div>
                   <span className="text-[9px] uppercase font-bold text-slate-400 block print:text-slate-600">Fazenda Atual</span>
@@ -1051,7 +1069,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                     R$ {machineData.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                    Média: {machineData.avgConsumption ? machineData.avgConsumption.toFixed(2) : '0.00'} L/h
+                    Média: {machineData.avgConsumption ? machineData.avgConsumption.toFixed(2) : '0.00'} {consumptionSuffix}
                   </span>
                 </div>
 
@@ -1091,7 +1109,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                     R$ {machineData.totalOperationalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
-                    R$ {machineData.costPerHourWorked.toFixed(2)} / hora
+                    R$ {machineData.costPerHourWorked.toFixed(2)} / {isKm ? 'km' : 'hora'}
                   </span>
                 </div>
               </div>
@@ -1144,7 +1162,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                   </h3>
                 </div>
                 <span className="text-[10px] text-slate-500 font-mono print:text-black">
-                  Horímetro Base de Referência: <strong>{machineData.currentEffectiveHour.toLocaleString('pt-BR')} h/km</strong>
+                  {meterLabel} Base de Referência: <strong>{machineData.currentEffectiveHour.toLocaleString('pt-BR')} {unitSuffix}</strong>
                 </span>
               </div>
 
@@ -1187,25 +1205,25 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                               {item.maintenance_item}
                             </td>
                             <td className="py-2 px-2 text-center font-mono text-[10.5px] text-slate-600 print:text-black">
-                              {item.interval_hour_km ? `${item.interval_hour_km} h` : ''} 
+                              {item.interval_hour_km ? `${item.interval_hour_km} ${unitSuffix}` : ''} 
                               {item.interval_hour_km && item.interval_days ? ' / ' : ''}
                               {item.interval_days ? `${item.interval_days} d` : ''}
                             </td>
                             <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-700 print:text-black">
-                              {item.last_performed_hour_km ? `${item.last_performed_hour_km.toLocaleString('pt-BR')} h` : '-'}
+                              {item.last_performed_hour_km ? `${item.last_performed_hour_km.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
                               <span className="text-[9px] text-slate-400 block">
                                 {formatDisplayDate(item.last_performed_date)}
                               </span>
                             </td>
                             <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold text-slate-800 print:text-black">
-                              {item.interval_hour_km ? `${nextHourKm.toLocaleString('pt-BR')} h` : '-'}
+                              {item.interval_hour_km ? `${nextHourKm.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
                               <span className="text-[9px] text-slate-400 block font-normal">
                                 {formatDisplayDate(item.next_due_date)}
                               </span>
                             </td>
                             <td className="py-2 px-2 text-right font-mono text-[10.5px] font-bold">
                               <span className={item.hour_km_remaining < 0 ? 'text-red-600' : item.hour_km_remaining <= 50 ? 'text-amber-600' : 'text-emerald-700 print:text-black'}>
-                                {item.hour_km_remaining !== undefined ? `${item.hour_km_remaining > 0 ? '+' : ''}${item.hour_km_remaining.toLocaleString('pt-BR')} h` : '-'}
+                                {item.hour_km_remaining !== undefined ? `${item.hour_km_remaining > 0 ? '+' : ''}${item.hour_km_remaining.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
                               </span>
                               <span className={`text-[9px] block font-normal ${item.days_remaining < 0 ? 'text-red-500' : 'text-slate-400'}`}>
                                 {item.days_remaining !== undefined ? `${item.days_remaining > 0 ? '+' : ''}${item.days_remaining} d` : ''}
@@ -1393,7 +1411,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                   <thead>
                     <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
                       <th className="py-2 px-3">Data</th>
-                      <th className="py-2 px-2 text-right">Horímetro</th>
+                      <th className="py-2 px-2 text-right">{meterLabel}</th>
                       <th className="py-2 px-2">Tipo</th>
                       <th className="py-2 px-3">Serviço Executado</th>
                       <th className="py-2 px-3">Peças Substituídas</th>
@@ -1417,7 +1435,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                             {formatDisplayDate(m.date)}
                           </td>
                           <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
-                            {m.hour_km_at_service ? `${m.hour_km_at_service.toLocaleString('pt-BR')} h` : '-'}
+                            {m.hour_km_at_service ? `${m.hour_km_at_service.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
                           </td>
                           <td className="py-2 px-2">
                             <span className="text-[9.5px] font-bold uppercase text-slate-600 print:text-black">
@@ -1506,12 +1524,12 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                   <thead>
                     <tr className="bg-slate-50/70 border-b border-slate-200 text-[9px] uppercase font-bold text-slate-500 print:bg-white print:border-slate-300 print:text-black">
                       <th className="py-2 px-3">Data / Hora</th>
-                      <th className="py-2 px-2 text-right">Horímetro/KM</th>
+                      <th className="py-2 px-2 text-right">{meterLabel}</th>
                       <th className="py-2 px-2">Combustível</th>
                       <th className="py-2 px-2 text-right">Litros</th>
                       <th className="py-2 px-2 text-right">Preço/L</th>
                       <th className="py-2 px-2 text-right">Valor Total (R$)</th>
-                      <th className="py-2 px-2 text-center">Consumo Médio</th>
+                      <th className="py-2 px-2 text-center">Consumo Médio ({consumptionSuffix})</th>
                       <th className="py-2 px-3">Fornecedor / Posto</th>
                       <th className="py-2 px-3">Responsável</th>
                     </tr>
@@ -1530,7 +1548,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                             {formatDisplayDateTime(f.date)}
                           </td>
                           <td className="py-2 px-2 text-right font-mono text-[10.5px] text-slate-800 print:text-black whitespace-nowrap">
-                            {f.hour_km_at_fueling ? `${f.hour_km_at_fueling.toLocaleString('pt-BR')} h` : '-'}
+                            {f.hour_km_at_fueling ? `${f.hour_km_at_fueling.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
                           </td>
                           <td className="py-2 px-2 text-slate-700 print:text-black text-[10.5px]">
                             {f.fuel_type || 'Diesel'}
@@ -1545,7 +1563,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                             R$ {Number(f.total_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2 px-2 text-center font-mono text-[10.5px] text-slate-600 print:text-black">
-                            {f.consumption_rate ? `${Number(f.consumption_rate).toFixed(2)} L/h` : '-'}
+                            {f.consumption_rate ? `${Number(f.consumption_rate).toFixed(2)} ${consumptionSuffix}` : '-'}
                           </td>
                           <td className="py-2 px-3 text-slate-600 print:text-black text-[10.5px]">
                             {f.supplier || '-'}
@@ -1662,9 +1680,9 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">Horímetro:</span>
+                              <span className="text-[9px] uppercase font-bold text-slate-500 print:text-slate-700 tracking-wider">{meterLabel}:</span>
                               <span className="font-mono font-bold text-slate-900 print:text-black text-[11px] print:text-[10px]">
-                                {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} h` : '-'}
+                                {c.hour_km ? `${c.hour_km.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
                               </span>
                             </div>
 

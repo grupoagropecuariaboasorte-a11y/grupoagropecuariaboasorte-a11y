@@ -31,6 +31,7 @@ export interface Machine {
   code: string;
   name: string;
   type: string; // FK equipment_types
+  unit?: 'h' | 'km'; // 'h' = Horímetro (horas), 'km' = Odômetro (quilômetros)
   brand: string;
   model: string;
   year: number;
@@ -43,6 +44,64 @@ export interface Machine {
   driver_name?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface EquipmentType extends LookupItem {
+  id: string;
+  label: string;
+  unit?: 'h' | 'km'; // 'h' = Horímetro (horas), 'km' = Odômetro (quilômetros)
+  color_hex?: string;
+}
+
+export function getMachineUnit(
+  m: { type?: string; unit?: 'h' | 'km' | string } | null | undefined,
+  equipmentTypes?: Array<{ id: string; unit?: 'h' | 'km' | string }>
+): 'h' | 'km' {
+  if (!m) return 'h';
+  if (m.unit === 'km' || m.unit === 'h') return m.unit;
+
+  const typeLower = (m.type || '').toLowerCase().trim();
+  if (equipmentTypes && equipmentTypes.length > 0) {
+    const found = equipmentTypes.find(t => t.id.toLowerCase() === typeLower);
+    if (found?.unit === 'km') return 'km';
+    if (found?.unit === 'h') return 'h';
+  }
+
+  if (
+    typeLower === 'caminhao' ||
+    typeLower.includes('caminhao') ||
+    typeLower.includes('caminhão') ||
+    typeLower.includes('carro') ||
+    typeLower.includes('veiculo') ||
+    typeLower.includes('veículo') ||
+    typeLower.includes('caminhonete') ||
+    typeLower.includes('camionete') ||
+    typeLower.includes('utilitario') ||
+    typeLower.includes('utilitário') ||
+    typeLower.includes('van')
+  ) {
+    return 'km';
+  }
+  return 'h';
+}
+
+export function isMachineKm(
+  m: { type?: string; unit?: 'h' | 'km' | string } | null | undefined,
+  equipmentTypes?: Array<{ id: string; unit?: 'h' | 'km' | string }>
+): boolean {
+  return getMachineUnit(m, equipmentTypes) === 'km';
+}
+
+export function getMeterLabel(unit: 'h' | 'km' | string): string {
+  return unit === 'km' ? 'Odômetro' : 'Horímetro';
+}
+
+export function getUnitSuffix(unit: 'h' | 'km' | string): string {
+  return unit === 'km' ? 'km' : 'h';
+}
+
+export function getConsumptionLabel(unit: 'h' | 'km' | string): string {
+  return unit === 'km' ? 'km/L' : 'L/h';
 }
 
 export function isImplement(m: { type?: string; code?: string } | null | undefined): boolean {
@@ -156,6 +215,7 @@ export interface LookupItem {
   id: string;
   label: string;
   color_hex?: string;
+  unit?: 'h' | 'km';
 }
 
 // VIEWS E AGREGADOS
