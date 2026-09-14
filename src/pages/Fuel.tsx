@@ -71,11 +71,13 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
   // Filters local
   const [searchTerm, setSearchTerm] = useState('');
+  const [assetTypeFilter, setAssetTypeFilter] = useState('ALL');
   const [machineFilter, setMachineFilter] = useState('ALL');
 
-  // Reset local machine filter when global farm filter changes
+  // Reset local machine & type filters when global farm filter changes
   useEffect(() => {
     setMachineFilter('ALL');
+    setAssetTypeFilter('ALL');
   }, [selectedFarmId]);
 
   // Load Initial Data
@@ -536,6 +538,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     const machineMatch = machineFilter === 'ALL' || log.machine_id === machineFilter;
     
     const machine = machines.find(m => m.id === log.machine_id);
+    const typeMatch = assetTypeFilter === 'ALL' || (machine && machine.type === assetTypeFilter);
     const farm = farms.find(f => f.id === log.farm_id);
     const textMatch = 
       (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -544,7 +547,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       (log.responsible && log.responsible.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (log.notes && log.notes.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return farmMatch && periodMatch && machineMatch && textMatch;
+    return farmMatch && periodMatch && machineMatch && typeMatch && textMatch;
   });
 
   // Totais no Rodapé
@@ -624,6 +627,27 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           />
         </div>
 
+        {/* Filtrar por Tipo de Ativo */}
+        <select
+          value={assetTypeFilter}
+          onChange={(e) => {
+            const val = e.target.value;
+            setAssetTypeFilter(val);
+            if (val !== 'ALL' && machineFilter !== 'ALL') {
+              const selectedMach = machines.find(m => m.id === machineFilter);
+              if (selectedMach && selectedMach.type !== val) {
+                setMachineFilter('ALL');
+              }
+            }
+          }}
+          className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#1B3022] cursor-pointer"
+        >
+          <option value="ALL">Todos os Tipos de Ativo</option>
+          {lookups?.equipmentTypes?.map((t: LookupItem) => (
+            <option key={t.id} value={t.id}>{t.label}</option>
+          ))}
+        </select>
+
         {/* Filtrar por Máquina */}
         <select
           value={machineFilter}
@@ -634,6 +658,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           {machines
             .filter(m => !isImplement(m))
             .filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId)
+            .filter(m => assetTypeFilter === 'ALL' || m.type === assetTypeFilter)
             .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }))
             .map(m => (
               <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
@@ -1553,6 +1578,11 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             <div>
               <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
             </div>
+            {assetTypeFilter !== 'ALL' && (
+              <div>
+                <strong>Tipo de Ativo:</strong> {lookups?.equipmentTypes?.find((t: LookupItem) => t.id === assetTypeFilter)?.label || assetTypeFilter}
+              </div>
+            )}
             <div><strong>Equipamento Filtrado:</strong> {machineFilter === 'ALL' ? 'Todos os Equipamentos' : (machines.find(m => m.id === machineFilter)?.code || machineFilter)}</div>
             <div><strong>Total de Lançamentos Auditados:</strong> {filteredLogs.length}</div>
           </div>
