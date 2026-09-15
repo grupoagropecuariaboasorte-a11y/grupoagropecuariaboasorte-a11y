@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { PreventivePlanStatus, Farm, Machine, MaintenanceLog, UserRole } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   CalendarDays, Plus, Search, CheckCircle, AlertTriangle, 
   Clock, ArrowRight, Wrench, ChevronRight, Info,
-  Filter, Edit, Trash2, FileText, History, ShieldCheck, Check
+  Filter, Edit, Trash2, FileText, History, ShieldCheck, Check,
+  Printer
 } from 'lucide-react';
-import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface PreventivePlanProps {
   selectedFarmId: string;
@@ -362,7 +364,9 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
   const okCount = selectedMachinePlans.filter(p => p.status === 'OK').length;
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="space-y-6 animate-fadeIn pb-12 print:hidden">
       
       {/* HEADER DA SEÇÃO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
@@ -376,8 +380,17 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
           </p>
         </div>
 
-        {userRole !== 'viewer' && (
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Gerar e imprimir relatório completo em PDF"
+          >
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
+          </button>
+
+          {userRole !== 'viewer' && (
             <button
               onClick={handleOpenConfig}
               className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
@@ -385,8 +398,8 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
               <Plus size={14} />
               <span>Configurar Nova Preventiva</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* PAINEL DE INSPEÇÃO RÁPIDA DA MÁQUINA SELECIONADA */}
@@ -1256,5 +1269,243 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
       </Modal>
 
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório do Plano e Cronograma de Manutenção Preventiva
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div>
+            <strong>Máquina:</strong> {machineFilter === 'ALL' ? 'Todas as Máquinas' : (machines.find(m => m.id === machineFilter)?.name || machineFilter)}
+          </div>
+          <div><strong>Status Filtrado:</strong> {statusFilter === 'ALL' ? 'Todos os Status' : statusFilter}</div>
+          <div><strong>Total de Planos:</strong> {filteredPlans.length} itens monitorados</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Itens Monitorados</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredPlans.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Em Dia (OK)</span>
+          <span className="text-[11px] font-black font-mono text-emerald-800">
+            {filteredPlans.filter(p => p.status === 'OK').length}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Próximas da Troca</span>
+          <span className="text-[11px] font-black font-mono text-amber-700">
+            {filteredPlans.filter(p => p.status === 'PRÓXIMA').length}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Preventivas Vencidas</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">
+            {filteredPlans.filter(p => p.status === 'VENCIDA').length}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Custo Histórico Preventivas</span>
+          <span className="text-[11px] font-black font-mono text-slate-900">
+            R$ {filteredMaintLogs.reduce((s, l) => s + (Number(l.total_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      </div>
+
+      {/* SUB-SEÇÃO 1: CRONOGRAMA VIGENTE DE PREVENTIVAS */}
+      <div className="mb-2">
+        <div className="bg-slate-300 text-slate-900 font-bold uppercase text-[8px] px-1.5 py-0.5 border border-slate-400 mb-0.5">
+          1. Cronograma Vigente de Revisões e Próximas Trocas Calculadas
+        </div>
+        <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight mb-2">
+          <thead>
+            <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+              <th className="border border-slate-400 p-0.5 w-5">#</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Máquina / Código</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Item / Componente</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Horímetro Atual</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-center whitespace-nowrap">Última Troca (Data / H)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Intervalo</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Próxima Troca</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Saldo / Horas Rest.</th>
+              <th className="border border-slate-400 p-0.5 text-center whitespace-nowrap">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPlans.map((plan, idx) => {
+              const mach = machines.find(m => m.id === plan.machine_id);
+              const farmName = farms.find(f => f.id === plan.farm_id)?.name || '-';
+              const isOverdue = plan.status === 'VENCIDA';
+              const isWarning = plan.status === 'PRÓXIMA';
+
+              return (
+                <tr key={plan.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{idx + 1}</td>
+                  <td className="border border-slate-300 p-0.5 whitespace-nowrap">
+                    <span className="font-mono font-bold text-[#1B3022]">{mach?.code || '-'}</span>
+                    <span className="text-slate-700 ml-1 font-medium">{mach?.name || ''}</span>
+                  </td>
+                  <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                  <td className="border border-slate-300 p-0.5 font-bold text-slate-900 whitespace-nowrap">{plan.maintenance_item}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold text-[#1B3022]">
+                    {(mach?.current_hour_km || 0).toLocaleString('pt-BR')} h
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-center whitespace-nowrap">
+                    {plan.last_maintenance_date ? formatDisplayDate(plan.last_maintenance_date) : 'Inicial'} 
+                    {plan.last_hour_km ? ` (${plan.last_hour_km.toLocaleString('pt-BR')} h)` : ''}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                    {plan.interval_hours ? `${plan.interval_hours.toLocaleString('pt-BR')} h` : plan.interval_days ? `${plan.interval_days} dias` : '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold">
+                    {plan.next_due_hour_km ? `${plan.next_due_hour_km.toLocaleString('pt-BR')} h` : plan.next_due_date ? formatDisplayDate(plan.next_due_date) : '-'}
+                  </td>
+                  <td className={`border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold ${
+                    isOverdue ? 'text-rose-700 bg-rose-50' : isWarning ? 'text-amber-700 bg-amber-50' : 'text-emerald-800'
+                  }`}>
+                    {plan.remaining_hours !== undefined 
+                      ? `${plan.remaining_hours <= 0 ? 'Vencida há ' : 'Resta '}${Math.abs(plan.remaining_hours).toLocaleString('pt-BR')} h`
+                      : plan.remaining_days !== undefined
+                      ? `${plan.remaining_days <= 0 ? 'Vencida há ' : 'Resta '}${Math.abs(plan.remaining_days)} d`
+                      : '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 text-center font-bold whitespace-nowrap text-[7px] uppercase">
+                    {isOverdue ? (
+                      <span className="text-rose-700">⚠️ VENCIDA</span>
+                    ) : isWarning ? (
+                      <span className="text-amber-700">⚡ PRÓXIMA</span>
+                    ) : (
+                      <span className="text-emerald-800">✓ EM DIA</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+            <tr>
+              <td colSpan={4} className="border border-slate-400 p-1 text-right uppercase text-[8px]">TOTAL DE ITENS:</td>
+              <td colSpan={6} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+                {filteredPlans.length} planos ({filteredPlans.filter(p => p.status === 'OK').length} em dia • {filteredPlans.filter(p => p.status === 'PRÓXIMA').length} próximas • {filteredPlans.filter(p => p.status === 'VENCIDA').length} vencidas)
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* SUB-SEÇÃO 2: HISTÓRICO DE INTERVENÇÕES PREVENTIVAS */}
+      <div>
+        <div className="bg-slate-300 text-slate-900 font-bold uppercase text-[8px] px-1.5 py-0.5 border border-slate-400 mb-0.5">
+          2. Histórico Auditado de Manutenções Preventivas Executadas
+        </div>
+        <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+          <thead>
+            <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+              <th className="border border-slate-400 p-0.5 w-5">#</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Data Execução</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Máquina / Código</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Item / Componente</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Horímetro no Serviço</th>
+              <th className="border border-slate-400 p-0.5 text-left">Descrição e Peças Trocadas</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Responsável Técnico</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Peças (R$)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Mão Obra (R$)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Total (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMaintLogs.map((log, index) => {
+              const mach = machines.find(m => m.id === log.machine_id);
+              const pCost = Number(log.parts_cost) || 0;
+              const lCost = Number(log.labor_cost) || 0;
+              const tCost = Number(log.total_cost) || (pCost + lCost);
+
+              return (
+                <tr key={log.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">{formatDisplayDate(log.date)}</td>
+                  <td className="border border-slate-300 p-0.5 whitespace-nowrap font-bold text-slate-900">
+                    <span className="font-mono text-[#1B3022]">{mach?.code || '-'}</span> - {mach?.name || ''}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 whitespace-nowrap font-medium text-slate-800">{log.main_item}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold text-[#1B3022]">
+                    {log.hour_km_at_service ? `${log.hour_km_at_service.toLocaleString('pt-BR')} h` : '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 truncate max-w-[250px]">
+                    {[log.service_description, log.parts_replaced ? `[Peças: ${log.parts_replaced}]` : ''].filter(Boolean).join(' ') || '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 whitespace-nowrap truncate max-w-[120px]">{log.responsible || '-'}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                    {pCost > 0 ? pCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                    {lCost > 0 ? lCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono font-bold text-right whitespace-nowrap text-slate-900">
+                    R$ {tCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+            <tr>
+              <td colSpan={7} className="border border-slate-400 p-1 text-right uppercase text-[8px]">TOTAIS DO HISTÓRICO:</td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px] whitespace-nowrap">
+                R$ {filteredMaintLogs.reduce((s, l) => s + (Number(l.parts_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px] whitespace-nowrap">
+                R$ {filteredMaintLogs.reduce((s, l) => s + (Number(l.labor_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+                R$ {filteredMaintLogs.reduce((s, l) => s + (Number(l.total_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Oficial de Manutenção Preventiva</span>
+        <span>Documento oficial gerado para controle do ciclo de vida e garantia mecânica da frota</span>
+      </div>
+    </div>
+  </>
   );
 }

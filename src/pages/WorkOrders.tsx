@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { WorkOrder, Farm, Machine, UserRole } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   ClipboardList, Plus, Search, Calendar, ChevronRight, 
   ArrowRight, CheckCircle2, Clock, PlayCircle, Trash2, 
-  AlertTriangle, Wrench, ArrowLeft, Filter, Edit
+  AlertTriangle, Wrench, ArrowLeft, Filter, Edit,
+  Printer
 } from 'lucide-react';
-import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface WorkOrdersProps {
   selectedFarmId: string;
@@ -359,7 +361,9 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
   const selectedMachineObj = machineFilter !== 'ALL' ? machines.find(m => m.id === machineFilter) : null;
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12 flex flex-col min-h-screen">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="space-y-6 animate-fadeIn pb-12 flex flex-col min-h-screen print:hidden">
       
       {/* HEADER DE OS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shrink-0 shadow-xs">
@@ -371,15 +375,26 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
           <p className="text-xs text-slate-500 mt-1">Quadro Kanban de controle operacional de corretivas, vistorias e manutenção com filtro por máquina e CRUD completo.</p>
         </div>
 
-        {userRole !== 'viewer' && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 shrink-0"
+            title="Gerar e imprimir relatório completo em PDF"
           >
-            <Plus size={14} />
-            <span>Abrir Nova O.S.</span>
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
           </button>
-        )}
+
+          {userRole !== 'viewer' && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus size={14} />
+              <span>Abrir Nova O.S.</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* PAINEL DE INFORMAÇÃO DA MÁQUINA FILTRADA */}
@@ -1125,5 +1140,166 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
       )}
 
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório Gerencial de Ordens de Serviço (O.S.) e Manutenção
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div>
+            <strong>Máquina:</strong> {machineFilter === 'ALL' ? 'Todas as Máquinas' : (machines.find(m => m.id === machineFilter)?.name || machineFilter)}
+          </div>
+          <div><strong>Prioridade:</strong> {priorityFilter === 'ALL' ? 'Todas as Prioridades' : priorityFilter}</div>
+          <div><strong>Total de O.S.:</strong> {filteredOrders.length} ordens de serviço</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total de O.S.</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredOrders.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Abertas / Pendentes</span>
+          <span className="text-[11px] font-black font-mono text-amber-700">{laneAberta.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Em Andamento</span>
+          <span className="text-[11px] font-black font-mono text-blue-800">{laneAndamento.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Concluídas / Fechadas</span>
+          <span className="text-[11px] font-black font-mono text-emerald-800">{laneConcluida.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Prioridade Alta</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">
+            {filteredOrders.filter(o => (o.priority || '').toLowerCase() === 'alta').length}
+          </span>
+        </div>
+      </div>
+
+      {/* TABELA ULTRA COMPACTA DE ORDENS DE SERVIÇO */}
+      <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+        <thead>
+          <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+            <th className="border border-slate-400 p-0.5 w-5">#</th>
+            <th className="border border-slate-400 p-0.5 font-mono whitespace-nowrap">Nº O.S.</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap text-left">Data Abertura</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Máquina / Código</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda</th>
+            <th className="border border-slate-400 p-0.5 text-center whitespace-nowrap">Prioridade</th>
+            <th className="border border-slate-400 p-0.5 text-center whitespace-nowrap">Status</th>
+            <th className="border border-slate-400 p-0.5 text-left">Descrição da Ocorrência / Serviço Solicitado</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Responsável / Atribuído</th>
+            <th className="border border-slate-400 p-0.5 font-mono whitespace-nowrap text-center">Conclusão</th>
+            <th className="border border-slate-400 p-0.5 text-left">Notas / Relatório de Fechamento</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredOrders.map((wo, index) => {
+            const mach = machines.find(m => m.id === wo.machine_id);
+            const farmName = farms.find(f => f.id === mach?.farm_id)?.name || '-';
+            const prio = (wo.priority || 'Média').toLowerCase();
+
+            return (
+              <tr key={wo.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                <td className="border border-slate-300 p-0.5 font-mono font-bold text-[#1B3022] text-center whitespace-nowrap">
+                  #{wo.os_number || wo.id.slice(0, 6)}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">{formatDisplayDate(wo.open_date)}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">
+                  <span className="font-mono font-bold text-[#1B3022]">{mach?.code || '-'}</span>
+                  <span className="text-slate-700 ml-1 font-medium">{mach?.name || ''}</span>
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                <td className="border border-slate-300 p-0.5 text-center font-bold whitespace-nowrap text-[7px] uppercase">
+                  {prio === 'alta' ? (
+                    <span className="text-rose-700">ALTA</span>
+                  ) : prio === 'baixa' ? (
+                    <span className="text-blue-700">BAIXA</span>
+                  ) : (
+                    <span className="text-amber-700">MÉDIA</span>
+                  )}
+                </td>
+                <td className="border border-slate-300 p-0.5 text-center font-bold whitespace-nowrap text-[7px] uppercase">
+                  {wo.status === 'Concluída' ? (
+                    <span className="text-emerald-800 bg-emerald-50 px-1 py-0.5 rounded">CONCLUÍDA</span>
+                  ) : wo.status === 'Em Andamento' ? (
+                    <span className="text-blue-800 bg-blue-50 px-1 py-0.5 rounded">EM ANDAMENTO</span>
+                  ) : wo.status === 'Cancelada' ? (
+                    <span className="text-slate-500 bg-slate-100 px-1 py-0.5 rounded">CANCELADA</span>
+                  ) : (
+                    <span className="text-amber-800 bg-amber-50 px-1 py-0.5 rounded">ABERTA</span>
+                  )}
+                </td>
+                <td className="border border-slate-300 p-0.5 max-w-[240px] truncate text-slate-800">
+                  {wo.description || wo.reason || '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap truncate max-w-[120px]">
+                  {wo.responsible || wo.assigned_to || '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-center whitespace-nowrap">
+                  {wo.close_date ? formatDisplayDate(wo.close_date) : '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 max-w-[200px] truncate text-slate-600">
+                  {wo.notes || '-'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+          <tr>
+            <td colSpan={4} className="border border-slate-400 p-1 text-right uppercase text-[8px]">
+              TOTALIZAÇÃO DE ORDENS DE SERVIÇO:
+            </td>
+            <td colSpan={7} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+              {filteredOrders.length} O.S. registradas ({laneAberta.length} Abertas • {laneAndamento.length} Em Andamento • {laneConcluida.length} Concluídas • {new Set(filteredOrders.map(o => o.machine_id)).size} máquinas atendidas)
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Oficial de Ordens de Serviço e Manutenção Operacional</span>
+        <span>Documento oficial de acompanhamento de oficinas, serviços mecânicos e disponibilidade de frota</span>
+      </div>
+    </div>
+  </>
   );
 }

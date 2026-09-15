@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { MaintenanceLog, Farm, Machine, LookupItem, UserRole } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   Wrench, Plus, Trash2, Search, Calendar, DollarSign, 
-  Settings, CheckSquare, Info, ClipboardCheck
+  Settings, CheckSquare, Info, ClipboardCheck, Printer
 } from 'lucide-react';
-import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface MaintenanceProps {
   selectedFarmId: string;
@@ -221,7 +222,9 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
   const totalMaintCost = filteredLogs.reduce((sum, log) => sum + log.total_cost, 0);
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="space-y-6 animate-fadeIn pb-12 print:hidden">
       
       {/* SEÇÃO HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
@@ -233,15 +236,26 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
           <p className="text-xs text-slate-500 mt-1">Histórico completo de serviços, substituição de peças e somatório de gastos.</p>
         </div>
 
-        {userRole !== 'viewer' && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Gerar e imprimir relatório completo em PDF"
           >
-            <Plus size={14} />
-            <span>Registrar Manutenção</span>
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
           </button>
-        )}
+
+          {userRole !== 'viewer' && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+            >
+              <Plus size={14} />
+              <span>Registrar Manutenção</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* FILTROS DE PESQUISA */}
@@ -563,5 +577,167 @@ export default function Maintenance({ selectedFarmId, selectedPeriod, userRole }
       </Modal>
 
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório Consolidado de Manutenções e Reparos Mecânicos
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div>
+            <strong>Período:</strong> {selectedPeriod === 'ALL' ? 'Todo o Histórico' : selectedPeriod === '30_DAYS' ? 'Últimos 30 Dias' : selectedPeriod === 'THIS_MONTH' ? 'Mês Atual' : 'Ano Vigente'}
+          </div>
+          <div><strong>Categoria Filtrada:</strong> {categoryFilter === 'ALL' ? 'Todas as Categorias' : categoryFilter}</div>
+          <div><strong>Total de Ordens Registradas:</strong> {filteredLogs.length} serviços</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total de Serviços</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredLogs.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Custo Peças Trocadas</span>
+          <span className="text-[11px] font-black font-mono text-slate-900">
+            R$ {filteredLogs.reduce((s, l) => s + (Number(l.parts_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Custo de Mão de Obra</span>
+          <span className="text-[11px] font-black font-mono text-slate-900">
+            R$ {filteredLogs.reduce((s, l) => s + (Number(l.labor_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Custo Geral Total</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">
+            R$ {totalMaintCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Máquinas / Ativos Atendidos</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">
+            {new Set(filteredLogs.map(l => l.machine_id)).size} máquinas
+          </span>
+        </div>
+      </div>
+
+      {/* TABELA ULTRA COMPACTA DE MANUTENÇÕES */}
+      <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+        <thead>
+          <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+            <th className="border border-slate-400 p-0.5 w-5">#</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap text-left">Data</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Máquina / Cód.</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Item / Categoria</th>
+            <th className="border border-slate-400 p-0.5 text-left">Descrição do Serviço Executado</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Horímetro / KM</th>
+            <th className="border border-slate-400 p-0.5 text-left">Peças Substituídas</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Mecânico / Resp.</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Operador</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Peças (R$)</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Mão Obra (R$)</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Total (R$)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredLogs.map((log, index) => {
+            const mach = machines.find(m => m.id === log.machine_id);
+            const farmName = farms.find(f => f.id === mach?.farm_id)?.name || '-';
+            const partsCost = Number(log.parts_cost) || 0;
+            const laborCost = Number(log.labor_cost) || 0;
+            const totalCost = Number(log.total_cost) || (partsCost + laborCost);
+
+            return (
+              <tr key={log.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">{formatDisplayDate(log.date)}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">
+                  <span className="font-mono font-bold text-[#1B3022]">{mach?.code || '-'}</span>
+                  <span className="text-slate-700 ml-1 font-medium">{mach?.name || ''}</span>
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                <td className="border border-slate-300 p-0.5 font-bold text-slate-800 whitespace-nowrap">{log.main_item || '-'}</td>
+                <td className="border border-slate-300 p-0.5 max-w-[200px] truncate">{log.service_description || '-'}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold text-[#1B3022]">
+                  {log.hour_km_at_service ? `${log.hour_km_at_service.toLocaleString('pt-BR')} h/km` : '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 max-w-[140px] truncate text-slate-700">{log.parts_replaced || '-'}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap truncate max-w-[100px]">{log.responsible || '-'}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap truncate max-w-[100px]">{log.operator_name || '-'}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                  {partsCost > 0 ? partsCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                  {laborCost > 0 ? laborCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono font-bold text-right whitespace-nowrap text-rose-700">
+                  R$ {totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+          <tr>
+            <td colSpan={6} className="border border-slate-400 p-1 text-right uppercase text-[8px]">
+              TOTAIS CONSOLIDADOS DE MANUTENÇÃO:
+            </td>
+            <td colSpan={4} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+              {filteredLogs.length} serviços realizados • {new Set(filteredLogs.map(l => l.machine_id)).size} equipamentos atendidos
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-slate-900 text-[8px] whitespace-nowrap">
+              R$ {filteredLogs.reduce((s, l) => s + (Number(l.parts_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-slate-900 text-[8px] whitespace-nowrap">
+              R$ {filteredLogs.reduce((s, l) => s + (Number(l.labor_cost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-rose-700 text-[8px] whitespace-nowrap">
+              R$ {totalMaintCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Oficial de Manutenções e Reparos Mecânicos</span>
+        <span>Documento emitido para controle técnico, gestão patrimonial e auditoria contábil</span>
+      </div>
+    </div>
+  </>
   );
 }

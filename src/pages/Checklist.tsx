@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { Checklist30d, Farm, Machine, UserRole } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   CheckSquare, Plus, Search, ShieldCheck, 
   AlertTriangle, Eye, Info, Filter, Edit, Trash2, 
-  ShieldX, Check, Minus, Clock, CheckCircle2, Wrench
+  ShieldX, Check, Minus, Clock, CheckCircle2, Wrench,
+  Printer
 } from 'lucide-react';
-import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface ChecklistProps {
   selectedFarmId: string;
@@ -597,7 +599,9 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="space-y-6 animate-fadeIn pb-12 print:hidden">
       
       {/* HEADER DE SEÇÃO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
@@ -611,15 +615,26 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
           </p>
         </div>
 
-        {userRole !== 'viewer' && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 shrink-0"
+            title="Gerar e imprimir relatório completo em PDF"
           >
-            <Plus size={15} />
-            <span>Fazer Vistoria (Checklist)</span>
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
           </button>
-        )}
+
+          {userRole !== 'viewer' && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus size={15} />
+              <span>Fazer Vistoria (Checklist)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* PAINEL DE INSPEÇÃO DA MÁQUINA SELECIONADA */}
@@ -1421,5 +1436,166 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
       })()}
 
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório Consolidado de Vistorias e Checklists (7 Dias / Diário)
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div>
+            <strong>Máquina:</strong> {machineFilter === 'ALL' ? 'Todas as Máquinas' : (machines.find(m => m.id === machineFilter)?.name || machineFilter)}
+          </div>
+          <div><strong>Status:</strong> {statusFilter === 'ALL' ? 'Todos os Status' : statusFilter} | <strong>Validade:</strong> {validityFilter === 'ALL' ? 'Todas' : validityFilter}</div>
+          <div><strong>Total de Vistorias:</strong> {filteredLogs.length} registros</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total Vistorias</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredLogs.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Equipamentos Aptos (OK)</span>
+          <span className="text-[11px] font-black font-mono text-emerald-800">
+            {filteredLogs.filter(l => l.overall_status === 'OK').length}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Prioridade Média (Atenção)</span>
+          <span className="text-[11px] font-black font-mono text-amber-700">
+            {filteredLogs.filter(l => l.overall_status === 'Prioridade Média' || l.overall_status === 'Necessita Atenção').length}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Paradas / Críticas (Alta)</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">
+            {filteredLogs.filter(l => l.overall_status === 'Prioridade Alta (Máquina Parada)' || l.overall_status === 'Máquina Parada').length}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Máquinas Inspecionadas</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">
+            {new Set(filteredLogs.map(l => l.machine_id)).size} máquinas
+          </span>
+        </div>
+      </div>
+
+      {/* TABELA ULTRA COMPACTA DE VISTORIAS */}
+      <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+        <thead>
+          <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+            <th className="border border-slate-400 p-0.5 w-5">#</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Data Vistoria</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Máquina / Código</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Horímetro / KM</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Operador / Vistoriador</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Tipo de Trabalho</th>
+            <th className="border border-slate-400 p-0.5 text-center whitespace-nowrap">Condição Operacional</th>
+            <th className="border border-slate-400 p-0.5 text-left">Itens Não-Conformes / Apontamentos do Laudo</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-center whitespace-nowrap">Validade (7d)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredLogs.map((log, index) => {
+            const mach = machines.find(m => m.id === log.machine_id);
+            const farmName = farms.find(f => f.id === mach?.farm_id)?.name || '-';
+            
+            // Calcular validade (7 dias)
+            const logDate = new Date(log.date + 'T00:00:00');
+            const validUntil = new Date(logDate);
+            validUntil.setDate(validUntil.getDate() + 7);
+            const isExpired = new Date() > validUntil;
+
+            const isCritical = log.overall_status === 'Prioridade Alta (Máquina Parada)' || log.overall_status === 'Máquina Parada';
+            const isWarning = log.overall_status === 'Prioridade Média' || log.overall_status === 'Necessita Atenção';
+
+            return (
+              <tr key={log.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">{formatDisplayDate(log.date)}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">
+                  <span className="font-mono font-bold text-[#1B3022]">{mach?.code || '-'}</span>
+                  <span className="text-slate-700 ml-1 font-medium">{mach?.name || ''}</span>
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold text-[#1B3022]">
+                  {(log.hour_km || 0).toLocaleString('pt-BR')} h
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap truncate max-w-[110px]">{log.operator_name || '-'}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap truncate max-w-[120px]">{log.work_type || '-'}</td>
+                <td className="border border-slate-300 p-0.5 text-center font-bold whitespace-nowrap text-[7px] uppercase">
+                  {isCritical ? (
+                    <span className="text-rose-700 bg-rose-50 px-1 py-0.5 rounded">⛔ MÁQUINA PARADA</span>
+                  ) : isWarning ? (
+                    <span className="text-amber-700 bg-amber-50 px-1 py-0.5 rounded">⚠️ NECESSITA ATENÇÃO</span>
+                  ) : (
+                    <span className="text-emerald-800 bg-emerald-50 px-1 py-0.5 rounded">✓ APTO / CONFORME</span>
+                  )}
+                </td>
+                <td className="border border-slate-300 p-0.5 max-w-[280px] truncate text-slate-800">
+                  {log.failed_items_notes ? log.failed_items_notes : 'Sem avarias registradas (Todos os itens conformes)'}
+                </td>
+                <td className={`border border-slate-300 p-0.5 font-mono text-center whitespace-nowrap text-[7px] font-bold ${
+                  isExpired ? 'text-rose-700' : 'text-emerald-800'
+                }`}>
+                  {formatDisplayDate(validUntil.toISOString().split('T')[0])} {isExpired ? '(Vencido)' : '(Válido)'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+          <tr>
+            <td colSpan={4} className="border border-slate-400 p-1 text-right uppercase text-[8px]">
+              RESUMO CONSOLIDADO DE VISTORIAS:
+            </td>
+            <td colSpan={6} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+              {filteredLogs.length} vistorias analisadas • {filteredLogs.filter(l => l.overall_status === 'OK').length} máquinas aptas • {filteredLogs.filter(l => l.overall_status?.includes('Parada')).length} com alerta crítico
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Oficial de Vistorias e Checklists Operacionais (7 Dias)</span>
+        <span>Em conformidade com as normas de segurança operacional e inspeção preventiva de frota</span>
+      </div>
+    </div>
+  </>
   );
 }
