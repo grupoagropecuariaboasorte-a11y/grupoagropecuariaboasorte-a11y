@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { Farm, FuelStock, FuelStockBalance, UserRole } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   Database, Plus, Calendar, ShieldAlert, CheckCircle, 
   TrendingUp, ArrowDownCircle, ArrowUpCircle, Info,
-  Pencil, Trash2, XCircle, AlertTriangle, FileText
+  Pencil, Trash2, XCircle, AlertTriangle, FileText,
+  Printer
 } from 'lucide-react';
-import { formatDateForInput, formatDisplayDate } from '../lib/dateUtils';
+import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface DieselStockProps {
   selectedFarmId: string;
@@ -211,7 +213,9 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
   const activeHistory = filteredHistory.filter(h => !h.is_deleted);
 
   return (
-    <div className="space-y-8 animate-fadeIn pb-12">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="space-y-8 animate-fadeIn pb-12 print:hidden">
       
       {/* SEÇÃO HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-xs">
@@ -225,15 +229,26 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
           </p>
         </div>
 
-        {userRole !== 'viewer' && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Gerar e imprimir relatório completo em PDF"
           >
-            <Plus size={14} />
-            <span>Registrar Entrada de Diesel</span>
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
           </button>
-        )}
+
+          {userRole !== 'viewer' && (
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all shrink-0"
+            >
+              <Plus size={14} />
+              <span>Registrar Entrada de Diesel</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* CARDS COM PROGRESSO DO ESTOQUE */}
@@ -763,5 +778,249 @@ export default function DieselStock({ selectedFarmId, userRole }: DieselStockPro
       </Modal>
 
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório Consolidado de Estoque e Suprimento de Óleo Diesel
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div><strong>Depósitos Monitorados:</strong> {filteredBalances.length} tanques</div>
+          <div><strong>Cargas Recebidas no Período:</strong> {activeHistory.length} registros</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Saldo Atual Consolidado</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">
+            {filteredBalances.reduce((s, b) => s + (b.current_balance || 0), 0).toLocaleString('pt-BR')} L
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total Histórico Recebido</span>
+          <span className="text-[11px] font-black font-mono text-slate-900">
+            {filteredBalances.reduce((s, b) => s + (b.total_received || 0), 0).toLocaleString('pt-BR')} L
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Consumo / Saídas Acumuladas</span>
+          <span className="text-[11px] font-black font-mono text-slate-700">
+            {filteredBalances.reduce((s, b) => s + (b.total_consumed || 0), 0).toLocaleString('pt-BR')} L
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Valor Financeiro Total Recebido</span>
+          <span className="text-[11px] font-black font-mono text-slate-900">
+            R$ {activeHistory.reduce((s, h) => s + ((h.liters_received || 0) * (Number(h.price_per_liter) || 5.85)), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Tanques em Alerta Crítico</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">
+            {filteredBalances.filter(b => (b.current_balance || 0) <= (b.min_alert || 0)).length}
+          </span>
+        </div>
+      </div>
+
+      {/* SUB-SEÇÃO 1: POSIÇÃO DOS TANQUES POR FAZENDA */}
+      <div className="mb-2">
+        <div className="bg-slate-300 text-slate-900 font-bold uppercase text-[8px] px-1.5 py-0.5 border border-slate-400 mb-0.5">
+          1. Posição Atual dos Depósitos e Tanques de Combustível por Fazenda
+        </div>
+        <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight mb-2">
+          <thead>
+            <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+              <th className="border border-slate-400 p-0.5 w-5">#</th>
+              <th className="border border-slate-400 p-0.5 text-left">Fazenda / Tanque</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Volume Recebido (L)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Consumo / Abastecimentos (L)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Saldo Atual (L)</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-center">Nível %</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right">Limite de Alerta Mínimo (L)</th>
+              <th className="border border-slate-400 p-0.5 text-center">Situação Operacional</th>
+              <th className="border border-slate-400 p-0.5 text-left">Última Carga Registrada</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredBalances.map((item, idx) => {
+              const capMax = item.total_received || 5000;
+              const currentBal = item.current_balance || 0;
+              const minAlert = item.min_alert || 0;
+              const perc = capMax > 0 ? Math.min(100, Math.max(0, (currentBal / capMax) * 100)) : 0;
+              const isLow = currentBal <= minAlert;
+              const farmActiveStocks = stockHistory.filter(s => s.farm_id === item.farm_id && !s.is_deleted);
+              const lastLaunch = farmActiveStocks.length > 0
+                ? [...farmActiveStocks].sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0]
+                : null;
+
+              return (
+                <tr key={item.farm_id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{idx + 1}</td>
+                  <td className="border border-slate-300 p-0.5 font-bold text-slate-900">{item.farm_name}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right">{(item.total_received || 0).toLocaleString('pt-BR')} L</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right text-slate-650">{(item.total_consumed || 0).toLocaleString('pt-BR')} L</td>
+                  <td className={`border border-slate-300 p-0.5 font-mono text-right font-bold ${isLow ? 'text-rose-700 bg-rose-50' : 'text-[#1B3022]'}`}>
+                    {currentBal.toLocaleString('pt-BR')} L
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-center font-bold">
+                    {perc.toFixed(1)}%
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right text-slate-500">
+                    {minAlert.toLocaleString('pt-BR')} L
+                  </td>
+                  <td className="border border-slate-300 p-0.5 text-center font-bold uppercase text-[7px]">
+                    {isLow ? (
+                      <span className="text-rose-700">⚠️ Crítico / Baixo</span>
+                    ) : (
+                      <span className="text-emerald-800">✓ Adequado</span>
+                    )}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-slate-600">
+                    {lastLaunch ? `${formatDisplayDate(lastLaunch.entry_date)} (+${(lastLaunch.liters_received || 0).toLocaleString('pt-BR')} L)` : '-'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+            <tr>
+              <td colSpan={2} className="border border-slate-400 p-1 text-right uppercase text-[8px]">TOTAIS DOS TANQUES:</td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px] whitespace-nowrap">
+                {filteredBalances.reduce((s, b) => s + (b.total_received || 0), 0).toLocaleString('pt-BR')} L
+              </td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px] whitespace-nowrap">
+                {filteredBalances.reduce((s, b) => s + (b.total_consumed || 0), 0).toLocaleString('pt-BR')} L
+              </td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+                {filteredBalances.reduce((s, b) => s + (b.current_balance || 0), 0).toLocaleString('pt-BR')} L
+              </td>
+              <td colSpan={4} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+                {filteredBalances.length} tanques monitorados em tempo real.
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* SUB-SEÇÃO 2: LOG DETALHADO DE CARGAS RECEBIDAS */}
+      <div>
+        <div className="bg-slate-300 text-slate-900 font-bold uppercase text-[8px] px-1.5 py-0.5 border border-slate-400 mb-0.5">
+          2. Log Auditado de Cargas Recebidas / Entradas de Diesel
+        </div>
+        <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+          <thead>
+            <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+              <th className="border border-slate-400 p-0.5 w-5">#</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Data de Entrada</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda Destino</th>
+              <th className="border border-slate-400 p-0.5 whitespace-nowrap">Status</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Lts Recebidos</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Preço / Litro</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Total da Carga (R$)</th>
+              <th className="border border-slate-400 p-0.5 whitespace-nowrap text-left">NFe / Nota Fiscal</th>
+              <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fornecedor / Distribuidora</th>
+              <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Alerta Mín.</th>
+              <th className="border border-slate-400 p-0.5 text-left">Observações / Justificativa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeHistory.map((h, index) => {
+              const farmName = farms.find(f => f.id === h.farm_id)?.name || 'N/A';
+              const liters = Number(h.liters_received) || 0;
+              const price = Number(h.price_per_liter) || 5.85;
+              const totalVal = liters * price;
+
+              return (
+                <tr key={h.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">{formatDisplayDate(h.entry_date)}</td>
+                  <td className="border border-slate-300 p-0.5 font-bold text-slate-800 whitespace-nowrap">{farmName}</td>
+                  <td className="border border-slate-300 p-0.5 text-center whitespace-nowrap font-bold text-[7px] uppercase">
+                    {h.edit_justification ? (
+                      <span className="text-amber-800">Editado</span>
+                    ) : (
+                      <span className="text-emerald-800">Lançado</span>
+                    )}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono font-bold text-right text-[#1B3022] whitespace-nowrap">
+                    +{liters.toLocaleString('pt-BR')} L
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                    R$ {price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono font-bold text-right whitespace-nowrap text-slate-900">
+                    R$ {totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 font-mono whitespace-nowrap">
+                    {h.invoice_number ? `NFe: ${h.invoice_number}` : '-'}
+                  </td>
+                  <td className="border border-slate-300 p-0.5 truncate max-w-[120px]">{h.supplier || '-'}</td>
+                  <td className="border border-slate-300 p-0.5 font-mono text-right text-slate-500 whitespace-nowrap">
+                    {(h.minimum_stock_alert ?? 0).toLocaleString('pt-BR')} L
+                  </td>
+                  <td className="border border-slate-300 p-0.5 truncate max-w-[150px]">
+                    {[h.edit_justification ? `[Editado: ${h.edit_justification}]` : '', h.notes].filter(Boolean).join(' ') || '-'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+            <tr>
+              <td colSpan={4} className="border border-slate-400 p-1 text-right uppercase text-[8px]">TOTAIS DE CARGAS RECEBIDAS:</td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+                +{activeHistory.reduce((s, h) => s + (Number(h.liters_received) || 0), 0).toLocaleString('pt-BR')} L
+              </td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-[8px]">-</td>
+              <td className="border border-slate-400 p-1 text-right font-mono text-slate-900 text-[8px] whitespace-nowrap">
+                R$ {activeHistory.reduce((s, h) => s + ((Number(h.liters_received) || 0) * (Number(h.price_per_liter) || 5.85)), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td colSpan={4} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+                {activeHistory.length} cargas registradas e auditadas com sucesso.
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Consolidado de Estoque de Diesel</span>
+        <span>Documento oficial gerado para controle de suprimentos e auditoria interna</span>
+      </div>
+    </div>
+  </>
   );
 }

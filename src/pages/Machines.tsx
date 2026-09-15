@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { Machine, Farm, LookupItem, FuelLog, MaintenanceLog, PreventivePlanStatus, Checklist30d, UserRole, isImplement, getMachineUnit, isMachineKm, getMeterLabel, getUnitSuffix, getConsumptionLabel } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   Tractor, Search, Plus, Trash2, Edit, X, Info, Fuel, Wrench, 
   CheckSquare, Calendar, Sliders, ChevronRight, BarChart, Settings,
-  Clock, Gauge, Tag, Check, Sparkles
+  Clock, Gauge, Tag, Check, Sparkles, Printer
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { formatDisplayDate } from '../lib/dateUtils';
+import { formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
 interface MachinesProps {
   selectedFarmId: string;
@@ -367,7 +368,9 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
   };
 
   return (
-    <div className="flex gap-8 relative h-[calc(100vh-6rem)]">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="flex gap-8 relative h-[calc(100vh-6rem)] print:hidden">
       
       {/* SEÇÃO PRINCIPAL - TABELA DE MÁQUINAS */}
       <div className={`flex-1 transition-all ${selectedMachine ? 'max-w-[55%]' : 'w-full'} flex flex-col h-full bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs`}>
@@ -416,15 +419,26 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
             </select>
           </div>
 
-          {userRole !== 'viewer' && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+              onClick={() => window.print()}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+              title="Gerar e imprimir relatório completo em PDF"
             >
-              <Plus size={14} />
-              <span>Cadastrar Máquina</span>
+              <Printer size={15} className="text-[#1B3022]" />
+              <span>Gerar Relatório em PDF</span>
             </button>
-          )}
+
+            {userRole !== 'viewer' && (
+              <button
+                onClick={handleOpenCreate}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all"
+              >
+                <Plus size={14} />
+                <span>Cadastrar Máquina</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* LISTA/TABELA */}
@@ -1484,5 +1498,244 @@ export default function Machines({ selectedFarmId, userRole }: MachinesProps) {
       </Modal>
 
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório Cadastral e Operacional da Frota de Máquinas e Veículos
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div><strong>Status Filtrado:</strong> {statusFilter === 'ALL' ? 'Todos os Status' : statusFilter}</div>
+          <div>
+            <strong>Tipo de Ativo:</strong> {typeFilter === 'ALL' ? 'Todos os Tipos' : (lookups?.equipmentTypes.find((t: LookupItem) => t.id === typeFilter)?.label || typeFilter)}
+          </div>
+          <div><strong>Total de Máquinas Cadastradas:</strong> {filteredMachines.length}</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total de Máquinas</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredMachines.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Ativas em Operação</span>
+          <span className="text-[11px] font-black font-mono text-emerald-800">{filteredMachines.filter(m => m.status === 'Ativa').length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Em Manutenção</span>
+          <span className="text-[11px] font-black font-mono text-amber-700">{filteredMachines.filter(m => m.status === 'Em manutenção').length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Paradas / Baixadas</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">{filteredMachines.filter(m => m.status === 'Parada' || m.status === 'Vendida/Baixada').length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Diesel Abastecido Total</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">
+            {filteredMachines.reduce((acc, m) => {
+              const liters = allFuelLogs
+                .filter(l => l.machine_id === m.id)
+                .reduce((s, curr) => s + (Number(curr.liters_supplied) || 0), 0);
+              return acc + liters;
+            }, 0).toLocaleString('pt-BR')} L
+          </span>
+        </div>
+      </div>
+
+      {/* TABELA ULTRA COMPACTA DE MÁQUINAS (APROVEITAMENTO MÁXIMO DE ESPAÇO) */}
+      <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+        <thead>
+          <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+            <th className="border border-slate-400 p-0.5 w-5">#</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap text-left">Código</th>
+            <th className="border border-slate-400 p-0.5 text-left">Equipamento / Descrição</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap">Tipo</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap">Regime</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Marca / Modelo</th>
+            <th className="border border-slate-400 p-0.5">Ano</th>
+            <th className="border border-slate-400 p-0.5 text-left">Chassi / N° Série</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda Alocada</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Inicial</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Horímetro / KM Atual</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Últ. Revisão</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Próx. Revisão</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap">Situação Revisão</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Operador / Motorista</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap">Status</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Abastecido (L)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredMachines.map((m, index) => {
+            const farmName = farms.find(f => f.id === m.farm_id)?.name || 'N/A';
+            const typeLabel = lookups?.equipmentTypes.find((t: LookupItem) => t.id === m.type)?.label || m.type;
+            const machineUnit = getMachineUnit(m, lookups?.equipmentTypes);
+            const unitSuffix = getUnitSuffix(machineUnit);
+
+            // Horímetro/Km atual atualizado com base nos lançamentos
+            const machineFuelLogsSorted = allFuelLogs
+              .filter(log => log.machine_id === m.id)
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            let currentHourKmVal = m.current_hour_km;
+            if (machineFuelLogsSorted.length > 0) {
+              currentHourKmVal = machineFuelLogsSorted[0].hour_km_at_fueling;
+            }
+
+            // Revisões
+            const machinePrevItems = allPrevStatuses.filter(p => p.machine_id === m.id);
+            const hasVencida = machinePrevItems.some(p => p.status === 'VENCIDA');
+            const revisionStatusText = machinePrevItems.length === 0 ? 'Sem plano' : hasVencida ? 'VENCIDA' : 'EM DIA';
+
+            const machineMaintSorted = allMaintLogs
+              .filter(log => log.machine_id === m.id)
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.hour_km_at_service - a.hour_km_at_service);
+
+            const prevLastHours = machinePrevItems.map(p => p.last_performed_hour_km).filter(h => h > 0);
+            const maxPrevLastHour = prevLastHours.length > 0 ? Math.max(...prevLastHours) : null;
+            const lastMaintLogHour = machineMaintSorted.length > 0 ? machineMaintSorted[0].hour_km_at_service : null;
+
+            let lastRevisionHourVal: number | null = null;
+            if (lastMaintLogHour !== null && maxPrevLastHour !== null) {
+              lastRevisionHourVal = Math.max(lastMaintLogHour, maxPrevLastHour);
+            } else if (lastMaintLogHour !== null) {
+              lastRevisionHourVal = lastMaintLogHour;
+            } else if (maxPrevLastHour !== null) {
+              lastRevisionHourVal = maxPrevLastHour;
+            }
+
+            const hourKmItems = machinePrevItems.filter(p => p.interval_hour_km > 0);
+            const nextRevisionHourKm = hourKmItems.length > 0
+              ? Math.min(...hourKmItems.map(p => p.last_performed_hour_km + p.interval_hour_km))
+              : null;
+
+            const machineLiters = allFuelLogs
+              .filter(log => log.machine_id === m.id)
+              .reduce((acc, curr) => acc + (Number(curr.liters_supplied) || 0), 0);
+
+            return (
+              <tr key={m.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                <td className="border border-slate-300 p-0.5 font-mono font-bold text-[#1B3022] whitespace-nowrap">{m.code}</td>
+                <td className="border border-slate-300 p-0.5">
+                  <span className="font-bold text-slate-900">{m.name}</span>
+                </td>
+                <td className="border border-slate-300 p-0.5 text-center whitespace-nowrap">{typeLabel}</td>
+                <td className="border border-slate-300 p-0.5 text-center whitespace-nowrap uppercase font-bold text-slate-600">
+                  {machineUnit === 'km' ? 'Quilômetros (KM)' : 'Horímetro (Horas)'}
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap text-slate-800">
+                  {m.brand} {m.model}
+                </td>
+                <td className="border border-slate-300 p-0.5 text-center font-mono">{m.year || '-'}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-slate-600 truncate max-w-[90px]">{m.serial_number || '-'}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap text-slate-500">
+                  {m.initial_hour_km.toLocaleString('pt-BR')} {unitSuffix}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono font-bold text-right whitespace-nowrap text-[#1B3022]">
+                  {currentHourKmVal.toLocaleString('pt-BR')} {unitSuffix}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap text-slate-600">
+                  {lastRevisionHourVal !== null ? `${lastRevisionHourVal.toLocaleString('pt-BR')} ${unitSuffix}` : '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
+                  {nextRevisionHourKm !== null ? (
+                    <span className={currentHourKmVal >= nextRevisionHourKm ? 'text-red-700 font-bold' : 'text-slate-800'}>
+                      {nextRevisionHourKm.toLocaleString('pt-BR')} {unitSuffix}
+                    </span>
+                  ) : '-'}
+                </td>
+                <td className="border border-slate-300 p-0.5 text-center whitespace-nowrap font-bold">
+                  {revisionStatusText === 'VENCIDA' && (
+                    <span className="text-red-700">⚠️ Vencida</span>
+                  )}
+                  {revisionStatusText === 'EM DIA' && (
+                    <span className="text-emerald-800">✓ Em dia</span>
+                  )}
+                  {revisionStatusText === 'Sem plano' && (
+                    <span className="text-slate-400 font-normal">Sem plano</span>
+                  )}
+                </td>
+                <td className="border border-slate-300 p-0.5 truncate max-w-[100px]">{m.driver_name || '-'}</td>
+                <td className="border border-slate-300 p-0.5 text-center whitespace-nowrap font-bold">
+                  <span className={
+                    m.status === 'Ativa' ? 'text-emerald-800' :
+                    m.status === 'Em manutenção' ? 'text-amber-700' :
+                    'text-red-700'
+                  }>
+                    {m.status}
+                  </span>
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right font-bold text-slate-900 whitespace-nowrap">
+                  {machineLiters > 0 ? `${machineLiters.toLocaleString('pt-BR')} L` : '-'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+          <tr>
+            <td colSpan={9} className="border border-slate-400 p-1 text-right uppercase text-[8px]">
+              TOTAIS CONSOLIDADOS DA FROTA:
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-slate-700 text-[8px] whitespace-nowrap">-</td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+              {filteredMachines.length} Máquinas
+            </td>
+            <td colSpan={5} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+              {filteredMachines.filter(m => m.status === 'Ativa').length} em operação • {filteredMachines.filter(m => m.status === 'Em manutenção').length} em manutenção • {filteredMachines.filter(m => m.status === 'Parada' || m.status === 'Vendida/Baixada').length} paradas
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+              {filteredMachines.reduce((acc, m) => {
+                const liters = allFuelLogs
+                  .filter(l => l.machine_id === m.id)
+                  .reduce((s, curr) => s + (Number(curr.liters_supplied) || 0), 0);
+                return acc + liters;
+              }, 0).toLocaleString('pt-BR')} L
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Operacional de Frota e Maquinário</span>
+        <span>Documento oficial gerado para fins de auditoria, manutenção e controle interno</span>
+      </div>
+    </div>
+  </>
   );
 }

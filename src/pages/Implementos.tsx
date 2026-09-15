@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { Machine, Farm, UserRole, MaintenanceLog, PreventivePlanStatus, Checklist30d, isImplement } from '../types';
 import Modal from '../components/Modal';
+import AppLogo from '../components/AppLogo';
 import { 
   Layers, Search, Plus, Trash2, Edit, X, Info, Wrench, 
-  CheckSquare, Calendar, Sliders, ChevronRight, Settings, ShieldAlert
+  CheckSquare, Calendar, Sliders, ChevronRight, Settings, ShieldAlert,
+  Printer
 } from 'lucide-react';
+import { formatDisplayDateTime } from '../lib/dateUtils';
 
 interface ImplementosProps {
   selectedFarmId: string;
@@ -268,7 +271,9 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
   const stoppedCount = filteredImplements.filter(i => i.status === 'Parada' || i.status === 'Vendida/Baixada').length;
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* SEÇÃO INTERATIVA PRINCIPAL (OCULTA NA IMPRESSÃO) */}
+      <div className="space-y-6 print:hidden">
       {/* Cabeçalho de Título */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -281,16 +286,27 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
           </p>
         </div>
 
-        {/* Botão de Cadastrar Implemento */}
-        {userRole !== 'viewer' && (
+        {/* Botões de Ação */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1B3022] hover:bg-[#284532] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            onClick={() => window.print()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+            title="Gerar e imprimir relatório completo em PDF"
           >
-            <Plus size={16} />
-            <span>Cadastrar Implemento</span>
+            <Printer size={15} className="text-[#1B3022]" />
+            <span>Gerar Relatório em PDF</span>
           </button>
-        )}
+
+          {userRole !== 'viewer' && (
+            <button
+              onClick={handleOpenCreate}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#1B3022] hover:bg-[#284532] text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Plus size={16} />
+              <span>Cadastrar Implemento</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Cards de Resumo */}
@@ -893,5 +909,182 @@ export default function Implementos({ selectedFarmId, userRole }: ImplementosPro
         </div>
       )}
     </div>
+
+    {/* ========================================================================= */}
+    {/* RELATÓRIO OFICIAL COMPACTO E DETALHADO PARA IMPRESSÃO EM PDF              */}
+    {/* ========================================================================= */}
+    <div className="hidden print:block font-sans text-black">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 6mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: #fff !important;
+          }
+        }
+      `}</style>
+
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <div className="border-b-2 border-[#1B3022] pb-2 mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AppLogo className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-sm font-black tracking-wider text-[#1B3022] uppercase">
+              Grupo Agropecuária Boa Sorte
+            </h1>
+            <h2 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+              Relatório Cadastral de Implementos e Equipamentos Agrícolas
+            </h2>
+          </div>
+        </div>
+        <div className="text-right text-[8.5px] text-slate-600 space-y-0.5 font-mono">
+          <div><strong>Data de Emissão:</strong> {formatDisplayDateTime(new Date().toISOString())}</div>
+          <div>
+            <strong>Fazenda:</strong> {selectedFarmId === 'ALL' ? 'Todas as Fazendas' : (farms.find(f => f.id === selectedFarmId)?.name || selectedFarmId)}
+          </div>
+          <div><strong>Categoria Filtrada:</strong> {categoryFilter === 'ALL' ? 'Todas as Categorias' : categoryFilter}</div>
+          <div><strong>Status Filtrado:</strong> {statusFilter === 'ALL' ? 'Todos os Status' : statusFilter}</div>
+          <div><strong>Total de Implementos Cadastrados:</strong> {filteredImplements.length}</div>
+        </div>
+      </div>
+
+      {/* RESUMO EXECUTIVO CONSOLIDADO */}
+      <div className="grid grid-cols-5 gap-2 mb-2 text-center">
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total de Implementos</span>
+          <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredImplements.length}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Em Operação / Ativos</span>
+          <span className="text-[11px] font-black font-mono text-emerald-800">{activeCount}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Em Manutenção</span>
+          <span className="text-[11px] font-black font-mono text-amber-700">{maintCount}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Parados / Baixados</span>
+          <span className="text-[11px] font-black font-mono text-rose-700">{stoppedCount}</span>
+        </div>
+        <div className="border border-slate-400 rounded p-1 bg-slate-50">
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Custo Total Manutenções</span>
+          <span className="text-[11px] font-black font-mono text-slate-900">
+            R$ {filteredImplements.reduce((acc, imp) => {
+              const costs = maintLogs
+                .filter(l => l.machine_id === imp.id)
+                .reduce((s, curr) => s + (Number(curr.total_cost) || 0), 0);
+              return acc + costs;
+            }, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      </div>
+
+      {/* TABELA ULTRA COMPACTA DE IMPLEMENTOS (100% APROVEITAMENTO DE ESPAÇO) */}
+      <table className="w-full border-collapse border border-slate-400 text-[7.5px] leading-tight">
+        <thead>
+          <tr className="bg-slate-200 border-b border-slate-400 font-bold uppercase text-slate-900 text-center">
+            <th className="border border-slate-400 p-0.5 w-5">#</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap text-left">Código</th>
+            <th className="border border-slate-400 p-0.5 text-left">Nome do Implemento</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Categoria / Tipo</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Marca</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Modelo</th>
+            <th className="border border-slate-400 p-0.5">Ano</th>
+            <th className="border border-slate-400 p-0.5 text-left">Chassi / N° Série</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Fazenda Alocada</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Horas Acum.</th>
+            <th className="border border-slate-400 p-0.5 text-left whitespace-nowrap">Operador / Responsável</th>
+            <th className="border border-slate-400 p-0.5 whitespace-nowrap">Status</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-center whitespace-nowrap">OS / Manut.</th>
+            <th className="border border-slate-400 p-0.5 font-mono text-right whitespace-nowrap">Custo Manut. (R$)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredImplements.map((imp, index) => {
+            const farmName = getFarmName(imp.farm_id);
+            const impMaintLogs = maintLogs.filter(l => l.machine_id === imp.id);
+            const totalMaintCost = impMaintLogs.reduce((s, curr) => s + (Number(curr.total_cost) || 0), 0);
+
+            return (
+              <tr key={imp.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                <td className="border border-slate-300 p-0.5 text-center font-mono font-bold text-slate-700">{index + 1}</td>
+                <td className="border border-slate-300 p-0.5 font-mono font-bold text-[#1B3022] whitespace-nowrap">{imp.code}</td>
+                <td className="border border-slate-300 p-0.5">
+                  <span className="font-bold text-slate-900">{imp.name}</span>
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap text-slate-700">
+                  {imp.model && IMPLEMENT_CATEGORIES.some(c => imp.model.includes(c))
+                    ? IMPLEMENT_CATEGORIES.find(c => imp.model.includes(c))
+                    : 'Implemento Agrícola'}
+                </td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap text-slate-800">{imp.brand || '-'}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap text-slate-800">{imp.model || '-'}</td>
+                <td className="border border-slate-300 p-0.5 text-center font-mono">{imp.year || '-'}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-slate-600 truncate max-w-[100px]">{imp.serial_number || '-'}</td>
+                <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap text-[#1B3022] font-bold">
+                  {(imp.current_hour_km || 0).toLocaleString('pt-BR')} h
+                </td>
+                <td className="border border-slate-300 p-0.5 truncate max-w-[110px]">{imp.driver_name || '-'}</td>
+                <td className="border border-slate-300 p-0.5 text-center whitespace-nowrap font-bold">
+                  <span className={
+                    imp.status === 'Ativa' ? 'text-emerald-800' :
+                    imp.status === 'Em manutenção' ? 'text-amber-700' :
+                    'text-red-700'
+                  }>
+                    {imp.status}
+                  </span>
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-center">
+                  {impMaintLogs.length > 0 ? (
+                    <span className="font-bold text-slate-800">{impMaintLogs.length} reg.</span>
+                  ) : (
+                    <span className="text-slate-400">0</span>
+                  )}
+                </td>
+                <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold text-slate-900">
+                  {totalMaintCost > 0 ? `R$ ${totalMaintCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="bg-slate-200 border-t-2 border-slate-500 font-bold">
+          <tr>
+            <td colSpan={9} className="border border-slate-400 p-1 text-right uppercase text-[8px]">
+              TOTAIS CONSOLIDADOS DE IMPLEMENTOS:
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-[#1B3022] text-[8px] whitespace-nowrap">
+              {filteredImplements.reduce((s, i) => s + (i.current_hour_km || 0), 0).toLocaleString('pt-BR')} h
+            </td>
+            <td colSpan={2} className="border border-slate-400 p-1 text-left text-[7.5px] text-slate-700">
+              {filteredImplements.length} implementos ({activeCount} ativos • {maintCount} em manutenção • {stoppedCount} parados)
+            </td>
+            <td className="border border-slate-400 p-1 text-center font-mono text-slate-800 text-[8px]">
+              {filteredImplements.reduce((acc, imp) => acc + maintLogs.filter(l => l.machine_id === imp.id).length, 0)} OS
+            </td>
+            <td className="border border-slate-400 p-1 text-right font-mono text-slate-900 text-[8px] whitespace-nowrap">
+              R$ {filteredImplements.reduce((acc, imp) => {
+                const costs = maintLogs
+                  .filter(l => l.machine_id === imp.id)
+                  .reduce((s, curr) => s + (Number(curr.total_cost) || 0), 0);
+                return acc + costs;
+              }, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* RODAPÉ DO DOCUMENTO */}
+      <div className="mt-2 text-[7.5px] text-slate-500 flex justify-between border-t border-slate-300 pt-1">
+        <span>Grupo Agropecuária Boa Sorte • Relatório Oficial de Implementos Agrícolas</span>
+        <span>Documento oficial gerado para fins de auditoria, manutenção e controle patrimonial</span>
+      </div>
+    </div>
+  </>
   );
 }
