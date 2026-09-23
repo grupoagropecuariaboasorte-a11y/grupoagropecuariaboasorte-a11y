@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Keystores e segredos de assinatura Android
+*.keystore
+*.jks
+keystore.properties
+local.properties
