@@ -8,9 +8,11 @@ import {
   Settings, Database, Play, Trash2, Plus, RefreshCw, 
   Map, Server, ShieldCheck, AlertCircle, Info, Pencil,
   Download, Upload, HardDrive, FileJson, CheckCircle2, Check,
-  Users, User, History, Search, Filter, Clock, Key, Lock, Eye, EyeOff
+  Users, User, History, Search, Filter, Clock, Key, Lock, Eye, EyeOff,
+  Smartphone
 } from 'lucide-react';
 import { formatDisplayDateTime } from '../lib/dateUtils';
+import { getNativeAppVersion, isAndroidCapacitor } from '../lib/appUpdateService';
 
 interface SettingsProps {
   userRole: UserRole;
@@ -60,6 +62,23 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
   const [loadingDeletedLogs, setLoadingDeletedLogs] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
   const [cacheSuccessMsg, setCacheSuccessMsg] = useState('');
+
+  // Versão Nativa do Aplicativo (Android)
+  const [installedVersion, setInstalledVersion] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    getNativeAppVersion().then((version) => {
+      if (isMounted && version) {
+        setInstalledVersion(version);
+      }
+    }).catch(() => {
+      // fallback silencioso
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleForceUpdateApp = async () => {
     setCacheClearing(true);
@@ -765,10 +784,19 @@ export default function SettingsPage({ userRole, onRefreshFarms }: SettingsProps
           </div>
 
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versão do App</p>
-            <p className="font-bold text-slate-800 font-mono">v1.2.5 (PWA / Android Native)</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versão do Aplicativo</p>
+            <p className="font-bold text-slate-800 font-mono flex items-center gap-1.5">
+              <Smartphone size={14} className="text-emerald-700 shrink-0" />
+              <span>
+                {installedVersion
+                  ? `V${installedVersion.replace(/^[vV]/, '')}`
+                  : 'Carregando...'}
+              </span>
+            </p>
             <p className="text-[10px] text-slate-500 mt-1">
-              Compatível com Google Chrome, tablets Android e computadores de campo.
+              {isAndroidCapacitor()
+                ? 'Versão nativa instalada no dispositivo Android.'
+                : 'Versão do aplicativo detectada no ambiente ativo.'}
             </p>
           </div>
 
