@@ -7,6 +7,9 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Registra o plugin de instalação de APKs customizado
+        registerPlugin(AppUpdateInstallerPlugin.class);
+
         super.onCreate(savedInstanceState);
 
         // Desativa o Force Dark do Android WebView para não desconfigurar o layout/cores CSS

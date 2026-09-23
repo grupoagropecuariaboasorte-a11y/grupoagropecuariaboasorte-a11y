@@ -26,7 +26,9 @@ import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
 import AppLogo from './components/AppLogo';
 import ErrorBoundary from './components/ErrorBoundary';
+import AppUpdateModal from './components/AppUpdateModal';
 import { useTablet12Inch } from './lib/useTablet12Inch';
+import { checkForAppUpdate, UpdateCheckResult, isAndroidCapacitor } from './lib/appUpdateService';
 
 const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   admin: [
@@ -156,6 +158,24 @@ function AppContent() {
   // Filtros Globais
   const [selectedFarmId, setSelectedFarmId] = useState('ALL');
   const [selectedPeriod, setSelectedPeriod] = useState('ALL');
+
+  // Controle de Atualização Automática (Apenas Android Capacitor)
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+
+  useEffect(() => {
+    // Executa a verificação apenas no aplicativo nativo Android
+    if (isAndroidCapacitor()) {
+      checkForAppUpdate()
+        .then((result) => {
+          if (result && result.hasUpdate) {
+            setUpdateInfo(result);
+          }
+        })
+        .catch((err) => {
+          console.warn('[AppUpdate] Erro na verificação de atualização:', err);
+        });
+    }
+  }, []);
 
   const refreshFarms = async () => {
     try {
@@ -451,6 +471,14 @@ function AppContent() {
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* Modal de Atualização Automática (Apenas Android nativo com nova versão detectada) */}
+      {updateInfo && (
+        <AppUpdateModal 
+          updateInfo={updateInfo} 
+          onClose={() => setUpdateInfo(null)} 
+        />
+      )}
     </div>
   );
 }
