@@ -1,6 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
 
-export const CURRENT_APP_VERSION = 'V6.0';
 export const GITHUB_REPO_OWNER = 'grupoagropecuariaboasorte-a11y';
 export const GITHUB_REPO_NAME = 'grupoagropecuariaboasorte-a11y';
 
@@ -31,11 +30,26 @@ export interface UpdateCheckResult {
 }
 
 interface AppUpdateInstallerInterface {
+  getAppVersion(): Promise<{ versionName: string; versionCode: number; packageName: string }>;
   installApkFromBase64(options: { base64: string; fileName: string }): Promise<{ success: boolean; message?: string }>;
   openBrowserDownload(options: { url: string }): Promise<{ success: boolean }>;
 }
 
 const AppUpdateInstaller = registerPlugin<AppUpdateInstallerInterface>('AppUpdateInstaller');
+
+/**
+ * Obtém dinamicamente a versão nativa instalada no Android (versionName do PackageInfo)
+ */
+export async function getNativeAppVersion(): Promise<string> {
+  if (!isAndroidCapacitor()) return '1.0';
+  try {
+    const res = await AppUpdateInstaller.getAppVersion();
+    return res.versionName || '1.0';
+  } catch (err) {
+    console.warn('[AppUpdate] Erro ao obter versão nativa do app:', err);
+    return '1.0';
+  }
+}
 
 /**
  * Detecta se o aplicativo está rodando estritamente dentro do ambiente Android nativo do Capacitor
@@ -105,13 +119,14 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult | null> {
       return null;
     }
 
+    const currentVersion = await getNativeAppVersion();
     const latestTag = data.tag_name;
-    const isNewer = compareVersions(latestTag, CURRENT_APP_VERSION) > 0;
+    const isNewer = compareVersions(latestTag, currentVersion) > 0;
 
     if (!isNewer) {
       return {
         hasUpdate: false,
-        currentVersion: CURRENT_APP_VERSION,
+        currentVersion,
         latestVersion: latestTag,
         releaseNotes: data.body || '',
         releaseDate: data.published_at,
@@ -126,7 +141,7 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult | null> {
 
     return {
       hasUpdate: true,
-      currentVersion: CURRENT_APP_VERSION,
+      currentVersion,
       latestVersion: latestTag,
       releaseNotes: data.body || '',
       releaseDate: data.published_at,

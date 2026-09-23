@@ -2,6 +2,8 @@ package com.boasorte.agrogestao;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Base64;
@@ -16,6 +18,30 @@ import java.io.FileOutputStream;
 
 @CapacitorPlugin(name = "AppUpdateInstaller")
 public class AppUpdateInstallerPlugin extends Plugin {
+
+    @PluginMethod
+    public void getAppVersion(PluginCall call) {
+        try {
+            Context context = getContext();
+            PackageManager pm = context.getPackageManager();
+            PackageInfo pInfo = pm.getPackageInfo(context.getPackageName(), 0);
+            String versionName = pInfo.versionName != null ? pInfo.versionName : "1.0";
+            long versionCode;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                versionCode = pInfo.getLongVersionCode();
+            } else {
+                versionCode = pInfo.versionCode;
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("versionName", versionName);
+            ret.put("versionCode", versionCode);
+            ret.put("packageName", context.getPackageName());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Erro ao obter versão nativa do aplicativo: " + e.getMessage(), e);
+        }
+    }
 
     @PluginMethod
     public void installApkFromBase64(PluginCall call) {
