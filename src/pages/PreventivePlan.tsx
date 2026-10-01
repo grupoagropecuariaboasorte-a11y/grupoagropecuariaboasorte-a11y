@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fleetService } from '../lib/fleetService';
-import { PreventivePlanStatus, Farm, Machine, MaintenanceLog, UserRole } from '../types';
+import { PreventivePlanStatus, Farm, Machine, MaintenanceLog, FuelLog, UserRole, getMachineUnit, getUnitSuffix } from '../types';
 import Modal from '../components/Modal';
 import AppLogo from '../components/AppLogo';
 import { 
@@ -23,6 +23,21 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
   const [maintLogs, setMaintLogs] = useState<MaintenanceLog[]>([]);
   const [lookups, setLookups] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [allFuelLogs, setAllFuelLogs] = useState<FuelLog[]>([]);
+
+  // Horímetro/Km atual em tempo real da mesma forma que na aba Máquinas/Frota
+  const getCurrentHourKm = (mach: Machine | undefined): number => {
+    if (!mach) return 0;
+    const machineFuelLogsSorted = (allFuelLogs || [])
+      .filter(log => log.machine_id === mach.id && log.hour_km_at_fueling !== undefined && log.hour_km_at_fueling !== null)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || Number(b.hour_km_at_fueling) - Number(a.hour_km_at_fueling));
+
+    let currentHourKmVal = Number(mach.current_hour_km) || Number(mach.initial_hour_km) || 0;
+    if (machineFuelLogsSorted.length > 0) {
+      currentHourKmVal = Number(machineFuelLogsSorted[0].hour_km_at_fueling);
+    }
+    return currentHourKmVal;
+  };
 
   // Navegação de Visualização: Cronograma/Configurações ou Histórico de Lançamentos
   const [activeTab, setActiveTab] = useState<'cronograma' | 'historico'>('cronograma');
@@ -82,26 +97,30 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     async function loadData() {
       setLoading(true);
       try {
-        const [prevList, mList, fList, lData, mLogs] = await Promise.all([
+        const [prevList, mList, fList, lData, mLogs, fLogs] = await Promise.all([
           fleetService.getPreventivePlanStatus(),
           fleetService.getMachines(),
           fleetService.getFarms(),
           fleetService.getLookups(),
-          fleetService.getMaintenanceLogs()
+          fleetService.getMaintenanceLogs(),
+          fleetService.getFuelLogs()
         ]);
         setPlans(prevList);
         setMachines(mList);
         setFarms(fList);
         setLookups(lData);
         setMaintLogs(mLogs);
+        setAllFuelLogs(fLogs);
 
         const farmMachs = mList.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
-        if (farmMachs.length > 0) {
-          setConfigMachineId(farmMachs[0].id);
-          setConfigLastHourKm(farmMachs[0].current_hour_km || farmMachs[0].initial_hour_km);
-        } else if (mList.length > 0) {
-          setConfigMachineId(mList[0].id);
-          setConfigLastHourKm(mList[0].current_hour_km || mList[0].initial_hour_km);
+        const targetMach = farmMachs.length > 0 ? farmMachs[0] : (mList.length > 0 ? mList[0] : null);
+        if (targetMach) {
+          setConfigMachineId(targetMach.id);
+          const machFuelLogsSorted = (fLogs || [])
+            .filter(log => log.machine_id === targetMach.id && log.hour_km_at_fueling !== undefined && log.hour_km_at_fueling !== null)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || Number(b.hour_km_at_fueling) - Number(a.hour_km_at_fueling));
+          const effectiveHour = machFuelLogsSorted.length > 0 ? Number(machFuelLogsSorted[0].hour_km_at_fueling) : (targetMach.current_hour_km || targetMach.initial_hour_km || 0);
+          setConfigLastHourKm(effectiveHour);
         }
       } catch (e) {
         console.error(e);
@@ -114,14 +133,16 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
 
   const refreshList = async () => {
     try {
-      const [prevList, mList, mLogs] = await Promise.all([
+      const [prevList, mList, mLogs, fLogs] = await Promise.all([
         fleetService.getPreventivePlanStatus(),
         fleetService.getMachines(),
-        fleetService.getMaintenanceLogs()
+        fleetService.getMaintenanceLogs(),
+        fleetService.getFuelLogs()
       ]);
       setPlans(prevList);
       setMachines(mList);
       setMaintLogs(mLogs);
+      setAllFuelLogs(fLogs);
     } catch (err) {
       console.error(err);
     }
@@ -132,9 +153,9 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     if (!configMachineId) return;
     const mach = machines.find(m => m.id === configMachineId);
     if (mach) {
-      setConfigLastHourKm(mach.current_hour_km || mach.initial_hour_km);
+      setConfigLastHourKm(getCurrentHourKm(mach));
     }
-  }, [configMachineId, machines]);
+  }, [configMachineId, machines, allFuelLogs]);
 
   // Submissão de novo item de plano preventivo
   const handleConfigSubmit = async (e: React.FormEvent) => {
@@ -178,12 +199,10 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     setConfigLastDate('');
     
     const farmMachines = machines.filter(m => selectedFarmId === 'ALL' || m.farm_id === selectedFarmId);
-    if (farmMachines.length > 0) {
-      setConfigMachineId(farmMachines[0].id);
-      setConfigLastHourKm(farmMachines[0].current_hour_km || farmMachines[0].initial_hour_km);
-    } else if (machines.length > 0) {
-      setConfigMachineId(machines[0].id);
-      setConfigLastHourKm(machines[0].current_hour_km || machines[0].initial_hour_km);
+    const targetMach = farmMachines.length > 0 ? farmMachines[0] : (machines.length > 0 ? machines[0] : null);
+    if (targetMach) {
+      setConfigMachineId(targetMach.id);
+      setConfigLastHourKm(getCurrentHourKm(targetMach));
     } else {
       setConfigMachineId('');
       setConfigLastHourKm('');
@@ -234,7 +253,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
     setPerformDate(formatDateForInput(new Date()));
     
     const mach = machines.find(m => m.id === p.machine_id);
-    setPerformHourKm(mach ? mach.current_hour_km : '');
+    setPerformHourKm(mach ? getCurrentHourKm(mach) : (p.current_hour_km || ''));
     
     setPerformPartsCost('');
     setPerformLaborCost('');
@@ -418,7 +437,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 mt-0.5 font-mono">
-                  Horímetro Atual: <strong className="text-emerald-400">{selectedMachineObj.current_hour_km.toLocaleString('pt-BR')} H/km</strong>
+                  Horímetro Atual: <strong className="text-emerald-400">{getCurrentHourKm(selectedMachineObj).toLocaleString('pt-BR')} {getUnitSuffix(getMachineUnit(selectedMachineObj, lookups?.equipmentTypes))}</strong>
                 </p>
               </div>
             </div>
@@ -581,6 +600,8 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
           {filteredPlans.length > 0 ? (
             filteredPlans.map((p) => {
               const mach = machines.find(m => m.id === p.machine_id);
+              const machUnit = getUnitSuffix(getMachineUnit(mach, lookups?.equipmentTypes));
+              const currentMachHourKm = getCurrentHourKm(mach);
 
               const cardStyles = {
                 'VENCIDA': {
@@ -634,7 +655,7 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                         </div>
                         <div>
                           <p className="text-slate-400 leading-normal">Último Horímetro</p>
-                          <p className="text-slate-700 font-bold">{p.last_performed_hour_km.toLocaleString('pt-BR')} h/km</p>
+                          <p className="text-slate-700 font-bold">{p.last_performed_hour_km.toLocaleString('pt-BR')} {machUnit}</p>
                         </div>
                       </div>
 
@@ -646,12 +667,12 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                           </p>
                           <p className="font-mono font-bold text-[#1B3022] text-xs">
                             {p.interval_hour_km > 0 
-                              ? `${((p.last_performed_hour_km || 0) + (p.interval_hour_km || 0)).toLocaleString('pt-BR')} h/km`
+                              ? `${((p.last_performed_hour_km || 0) + (p.interval_hour_km || 0)).toLocaleString('pt-BR')} ${machUnit}`
                               : 'N/A'}
                           </p>
                           {p.interval_hour_km > 0 && (
                             <span className="text-[9px] text-slate-400 block font-mono">
-                              (Intervalo: +{p.interval_hour_km.toLocaleString('pt-BR')} h/km)
+                              (Intervalo: +{p.interval_hour_km.toLocaleString('pt-BR')} {machUnit})
                             </span>
                           )}
                         </div>
@@ -668,14 +689,14 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                           }`}>
                             {p.interval_hour_km > 0 ? (
                               p.hour_km_remaining < 0 ? (
-                                `Atrasado (${Math.abs(p.hour_km_remaining).toLocaleString('pt-BR')} h/km)`
+                                `Atrasado (${Math.abs(p.hour_km_remaining).toLocaleString('pt-BR')} ${machUnit})`
                               ) : (
-                                `Faltam ${p.hour_km_remaining.toLocaleString('pt-BR')} h/km`
+                                `Faltam ${p.hour_km_remaining.toLocaleString('pt-BR')} ${machUnit}`
                               )
                             ) : 'N/A'}
                           </p>
                           <span className="text-[9px] text-slate-400 block font-mono">
-                            Horímetro Atual: {mach?.current_hour_km?.toLocaleString('pt-BR') || '0'} h/km
+                            Horímetro Atual: {currentMachHourKm.toLocaleString('pt-BR')} {machUnit}
                           </span>
                         </div>
                       </div>
@@ -1372,6 +1393,8 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
               const farmName = farms.find(f => f.id === plan.farm_id)?.name || '-';
               const isOverdue = plan.status === 'VENCIDA';
               const isWarning = plan.status === 'PRÓXIMA';
+              const machUnit = getUnitSuffix(getMachineUnit(mach, lookups?.equipmentTypes));
+              const currentMachHourKm = getCurrentHourKm(mach);
 
               return (
                 <tr key={plan.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
@@ -1383,25 +1406,25 @@ export default function PreventivePlan({ selectedFarmId, userRole }: PreventiveP
                   <td className="border border-slate-300 p-0.5 whitespace-nowrap">{farmName}</td>
                   <td className="border border-slate-300 p-0.5 font-bold text-slate-900 whitespace-nowrap">{plan.maintenance_item}</td>
                   <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold text-[#1B3022]">
-                    {(mach?.current_hour_km || 0).toLocaleString('pt-BR')} h
+                    {currentMachHourKm.toLocaleString('pt-BR')} {machUnit}
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono text-center whitespace-nowrap">
-                    {plan.last_maintenance_date ? formatDisplayDate(plan.last_maintenance_date) : 'Inicial'} 
-                    {plan.last_hour_km ? ` (${plan.last_hour_km.toLocaleString('pt-BR')} h)` : ''}
+                    {plan.last_performed_date && plan.last_performed_date !== '1970-01-01' ? formatDisplayDate(plan.last_performed_date) : 'Inicial'} 
+                    {plan.last_performed_hour_km ? ` (${plan.last_performed_hour_km.toLocaleString('pt-BR')} ${machUnit})` : ''}
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap">
-                    {plan.interval_hours ? `${plan.interval_hours.toLocaleString('pt-BR')} h` : plan.interval_days ? `${plan.interval_days} dias` : '-'}
+                    {plan.interval_hour_km ? `${plan.interval_hour_km.toLocaleString('pt-BR')} ${machUnit}` : plan.interval_days ? `${plan.interval_days} dias` : '-'}
                   </td>
                   <td className="border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold">
-                    {plan.next_due_hour_km ? `${plan.next_due_hour_km.toLocaleString('pt-BR')} h` : plan.next_due_date ? formatDisplayDate(plan.next_due_date) : '-'}
+                    {plan.interval_hour_km > 0 ? `${((plan.last_performed_hour_km || 0) + plan.interval_hour_km).toLocaleString('pt-BR')} ${machUnit}` : plan.next_due_date ? formatDisplayDate(plan.next_due_date) : '-'}
                   </td>
                   <td className={`border border-slate-300 p-0.5 font-mono text-right whitespace-nowrap font-bold ${
                     isOverdue ? 'text-rose-700 bg-rose-50' : isWarning ? 'text-amber-700 bg-amber-50' : 'text-emerald-800'
                   }`}>
-                    {plan.remaining_hours !== undefined 
-                      ? `${plan.remaining_hours <= 0 ? 'Vencida há ' : 'Resta '}${Math.abs(plan.remaining_hours).toLocaleString('pt-BR')} h`
-                      : plan.remaining_days !== undefined
-                      ? `${plan.remaining_days <= 0 ? 'Vencida há ' : 'Resta '}${Math.abs(plan.remaining_days)} d`
+                    {plan.hour_km_remaining !== undefined && plan.interval_hour_km > 0
+                      ? `${plan.hour_km_remaining <= 0 ? 'Vencida há ' : 'Resta '}${Math.abs(plan.hour_km_remaining).toLocaleString('pt-BR')} ${machUnit}`
+                      : plan.days_remaining !== undefined && plan.interval_days > 0
+                      ? `${plan.days_remaining <= 0 ? 'Vencida há ' : 'Resta '}${Math.abs(plan.days_remaining)} d`
                       : '-'}
                   </td>
                   <td className="border border-slate-300 p-0.5 text-center font-bold whitespace-nowrap text-[7px] uppercase">

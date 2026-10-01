@@ -1327,8 +1327,22 @@ export const fleetService = {
   // =======================================================================
   async getMachines(): Promise<Machine[]> {
     try {
-      const { data, error } = await supabase!.from('machines').select('*').order('code', { ascending: true });
+      const [{ data, error }, { data: fuelData }] = await Promise.all([
+        supabase!.from('machines').select('*').order('code', { ascending: true }),
+        supabase!.from('fuel_logs').select('machine_id, hour_km_at_fueling, date').order('date', { ascending: false })
+      ]);
       if (error) throw error;
+
+      // Agrupa os registros de abastecimento por máquina para calcular horímetro em tempo real
+      const fuelLogsByMachine: Record<string, any[]> = {};
+      (fuelData || []).forEach((fl: any) => {
+        if (fl.machine_id && fl.hour_km_at_fueling !== undefined && fl.hour_km_at_fueling !== null) {
+          if (!fuelLogsByMachine[fl.machine_id]) {
+            fuelLogsByMachine[fl.machine_id] = [];
+          }
+          fuelLogsByMachine[fl.machine_id].push(fl);
+        }
+      });
 
       let localMachineUnits: Record<string, 'h' | 'km'> = {};
       let localTypeUnits: Record<string, 'h' | 'km'> = {};
@@ -1355,11 +1369,20 @@ export const fleetService = {
             : 'h'
         );
 
+        // Horímetro/Km atual atualizado com base nos lançamentos (mesma regra da aba Máquinas/Frota)
+        const machineFuelLogsSorted = (fuelLogsByMachine[m.id] || [])
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || Number(b.hour_km_at_fueling) - Number(a.hour_km_at_fueling));
+
+        let currentHourKmVal = Number(m.current_hour_km) || Number(m.initial_hour_km) || 0;
+        if (machineFuelLogsSorted.length > 0) {
+          currentHourKmVal = Number(machineFuelLogsSorted[0].hour_km_at_fueling);
+        }
+
         return {
           ...m,
           unit: derivedUnit,
           initial_hour_km: Number(m.initial_hour_km) || 0,
-          current_hour_km: Number(m.current_hour_km) || Number(m.initial_hour_km) || 0
+          current_hour_km: currentHourKmVal
         };
       });
     } catch (e) {
@@ -2095,12 +2118,75 @@ export const fleetService = {
 
   // VIEW preventive_plan_status
   async getPreventivePlanStatus(): Promise<PreventivePlanStatus[]> {
-    
-
     try {
-      const { data, error } = await supabase!.from('preventive_plan_status').select('*');
+      const [{ data, error }, { data: fuelData }] = await Promise.all([
+        supabase!.from('preventive_plan_status').select('*'),
+        supabase!.from('fuel_logs').select('machine_id, hour_km_at_fueling, date').order('date', { ascending: false })
+      ]);
       if (error) throw error;
-      return data || [];
+
+      const fuelLogsByMachine: Record<string, any[]> = {};
+      (fuelData || []).forEach((fl: any) => {
+        if (fl.machine_id && fl.hour_km_at_fueling !== undefined && fl.hour_km_at_fueling !== null) {
+          if (!fuelLogsByMachine[fl.machine_id]) {
+            fuelLogsByMachine[fl.machine_id] = [];
+          }
+          fuelLogsByMachine[fl.machine_id].push(fl);
+        }
+      });
+
+      return (data || []).map((p: any) => {
+        const machineFuelLogsSorted = (fuelLogsByMachine[p.machine_id] || [])
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || Number(b.hour_km_at_fueling) - Number(a.hour_km_at_fueling));
+
+        let currentHourKmVal = Number(p.current_hour_km) || 0;
+        if (machineFuelLogsSorted.length > 0) {
+          currentHourKmVal = Number(machineFuelLogsSorted[0].hour_km_at_fueling);
+        }
+
+        const lastHourKm = Number(p.last_performed_hour_km) || 0;
+        const hoursSinceLast = currentHourKmVal - lastHourKm;
+        const intervalHourKm = Number(p.interval_hour_km) || 0;
+        const hourKmRemaining = intervalHourKm > 0 ? (intervalHourKm - hoursSinceLast) : 999999;
+
+        const intervalDays = Number(p.interval_days) || 0;
+        let daysRemaining = Number(p.days_remaining) || 99999;
+        if (intervalDays > 0 && p.last_performed_date && p.last_performed_date !== '1970-01-01') {
+          try {
+            const lastDate = new Date(p.last_performed_date);
+            const dueDate = new Date(lastDate);
+            dueDate.setDate(dueDate.getDate() + intervalDays);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            daysRemaining = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          } catch (err) {}
+        }
+
+        let status = p.status;
+        if ((intervalHourKm > 0 && hourKmRemaining < 0) || (intervalDays > 0 && daysRemaining < 0)) {
+          status = 'VENCIDA';
+        } else if ((intervalHourKm > 0 && hourKmRemaining <= 50) || (intervalDays > 0 && daysRemaining <= 7)) {
+          status = 'PRÓXIMA';
+        } else {
+          status = 'OK';
+        }
+
+        const nextDueHourKm = intervalHourKm > 0 ? (lastHourKm + intervalHourKm) : null;
+
+        return {
+          ...p,
+          current_hour_km: currentHourKmVal,
+          hours_km_since_last: hoursSinceLast,
+          hour_km_remaining: hourKmRemaining,
+          remaining_hours: intervalHourKm > 0 ? hourKmRemaining : undefined,
+          days_remaining: daysRemaining,
+          remaining_days: intervalDays > 0 ? daysRemaining : undefined,
+          status,
+          next_due_hour_km: nextDueHourKm,
+          interval_hours: intervalHourKm,
+          last_hour_km: lastHourKm
+        };
+      });
     } catch (e) {
       console.error('Erro ao buscar status do plano preventivo no Supabase, usando local:', e);
       throw e;
