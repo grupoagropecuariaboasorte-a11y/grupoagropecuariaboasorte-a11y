@@ -1530,11 +1530,11 @@ export const fleetService = {
     }
   },
 
-  // Busca a última leitura final da bomba registrada para uma fazenda (baseado no ÚLTIMO LANÇAMENTO cronológico)
+  // Busca a última leitura final da bomba registrada para uma fazenda (trava 100% rígida de continuidade)
   async getLatestPumpReading(farmId: string, fuelType?: string): Promise<number | null> {
     if (!farmId || farmId === 'ALL') return null;
     try {
-      // 1. Busca estritamente o ÚLTIMO LANÇAMENTO realizado na fazenda (ordenação cronológica por data e criação)
+      // 1. Busca os registros mais recentes da fazenda no banco online
       let query = supabase!
         .from('fuel_logs')
         .select('pump_reading_end, date, id, created_at, fuel_type')
@@ -1547,40 +1547,54 @@ export const fleetService = {
       const { data, error } = await query
         .order('date', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(1);
+        .limit(5);
 
-      if (!error && data && data.length > 0) {
-        const val = Number(data[0].pump_reading_end);
-        if (!isNaN(val)) return val;
+      // 2. Busca também o registro com a MAIOR leitura física de fim já registrada na fazenda
+      let maxQuery = supabase!
+        .from('fuel_logs')
+        .select('pump_reading_end')
+        .eq('farm_id', farmId);
+
+      if (fuelType) {
+        maxQuery = maxQuery.eq('fuel_type', fuelType);
       }
 
-      // Se filtrou por fuelType e não encontrou, busca o último lançamento geral daquela fazenda
-      if (fuelType) {
-        const generalQuery = await supabase!
-          .from('fuel_logs')
-          .select('pump_reading_end, date, id, created_at')
-          .eq('farm_id', farmId)
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(1);
+      const { data: maxData } = await maxQuery
+        .order('pump_reading_end', { ascending: false })
+        .limit(1);
 
-        if (!generalQuery.error && generalQuery.data && generalQuery.data.length > 0) {
-          const val = Number(generalQuery.data[0].pump_reading_end);
-          if (!isNaN(val)) return val;
+      const candidates: number[] = [];
+
+      if (!error && data && data.length > 0) {
+        for (const item of data) {
+          const val = Number(item.pump_reading_end);
+          if (!isNaN(val) && val > 0) candidates.push(val);
         }
       }
 
-      // 2. Fallback caso a ordenação composta falhe: busca ordenando apenas por date DESC
-      const fallback = await supabase!
-        .from('fuel_logs')
-        .select('pump_reading_end, date, id')
-        .eq('farm_id', farmId)
-        .order('date', { ascending: false })
-        .limit(1);
+      if (maxData && maxData.length > 0) {
+        const val = Number(maxData[0].pump_reading_end);
+        if (!isNaN(val) && val > 0) candidates.push(val);
+      }
 
-      if (fallback.data && fallback.data.length > 0) {
-        const val = Number(fallback.data[0].pump_reading_end);
-        return isNaN(val) ? null : val;
+      // Se filtrou por fuelType e não encontrou nenhum candidato, busca geral da fazenda
+      if (candidates.length === 0 && fuelType) {
+        const fallback = await supabase!
+          .from('fuel_logs')
+          .select('pump_reading_end')
+          .eq('farm_id', farmId)
+          .order('pump_reading_end', { ascending: false })
+          .limit(1);
+
+        if (fallback.data && fallback.data.length > 0) {
+          const val = Number(fallback.data[0].pump_reading_end);
+          if (!isNaN(val) && val > 0) candidates.push(val);
+        }
+      }
+
+      if (candidates.length > 0) {
+        // A contagem mecânica da bomba nunca regride: o ponto mínimo é o maior fim registrado
+        return Math.max(...candidates);
       }
 
       return null;
@@ -1631,6 +1645,14 @@ export const fleetService = {
 
     if (pStart < 0 || pEnd < 0) {
       throw new Error('As leituras de bomba não podem ser negativas.');
+    }
+
+    // TRAVA 100% RÍGIDA DE BOMBA: O início NUNCA pode ser menor do que o fim do último abastecimento registrado
+    if (log.farm_id && log.farm_id !== 'ALL') {
+      const latestPumpEnd = await this.getLatestPumpReading(log.farm_id, log.fuel_type);
+      if (latestPumpEnd !== null && !isNaN(latestPumpEnd) && pStart < latestPumpEnd) {
+        throw new Error(`Lançamento bloqueado: A leitura inicial da bomba (${pStart} L) não pode ser menor que o fechamento anterior (${latestPumpEnd} L)! A contagem da bomba deve dar continuidade e nunca retroceder.`);
+      }
     }
 
     // Prevenção de duplicidade idêntica exata no mesmo minuto e fazenda
@@ -1751,6 +1773,19 @@ export const fleetService = {
     if (log.supplier !== undefined) updatedFields.supplier = log.supplier;
     if (log.responsible !== undefined) updatedFields.responsible = log.responsible;
     if (log.notes !== undefined) updatedFields.notes = log.notes;
+
+    if (updatedFields.pump_reading_start !== undefined || updatedFields.pump_reading_end !== undefined) {
+      const pStart = updatedFields.pump_reading_start !== undefined ? updatedFields.pump_reading_start : log.pump_reading_start;
+      const pEnd = updatedFields.pump_reading_end !== undefined ? updatedFields.pump_reading_end : log.pump_reading_end;
+      if (pStart !== undefined && pEnd !== undefined) {
+        if (pEnd <= pStart) {
+          throw new Error(`A leitura final da bomba (${pEnd} L) deve ser estritamente maior que a leitura inicial (${pStart} L).`);
+        }
+        if (pStart < 0 || pEnd < 0) {
+          throw new Error('As leituras de bomba não podem ser negativas.');
+        }
+      }
+    }
 
     // Direct update to prevent safeUpdate from stripping user edits silently
     const { data, error } = await supabase!.from('fuel_logs').update(updatedFields).eq('id', id).select().maybeSingle();

@@ -122,18 +122,25 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     setMachines(mList);
   };
 
-  // Helper para obter o fechamento do último lançamento registrado para uma fazenda
+  // Helper para obter o fechamento do último lançamento registrado para uma fazenda (trava 100% rígida)
   const getLatestFarmPumpEnd = (targetFarmId: string): number | null => {
     if (!targetFarmId || targetFarmId === 'ALL') return null;
     const farmLogs = fuelLogs
-      .filter((l: any) => !l.is_deleted && l.farm_id === targetFarmId && l.pump_reading_end !== undefined && l.pump_reading_end !== null)
-      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+      .filter((l: any) => !l.is_deleted && l.farm_id === targetFarmId && l.pump_reading_end !== undefined && l.pump_reading_end !== null);
 
-    if (farmLogs.length > 0) {
-      const val = Number(farmLogs[0].pump_reading_end);
-      if (!isNaN(val)) return val;
-    }
-    return null;
+    if (farmLogs.length === 0) return null;
+
+    // 1. Maior leitura física já registrada na bomba da fazenda
+    const maxEnd = Math.max(...farmLogs.map(l => Number(l.pump_reading_end) || 0));
+
+    // 2. Leitura do lançamento mais recente por criação/data
+    const sorted = [...farmLogs].sort((a: any, b: any) =>
+      new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime()
+    );
+    const latestLogEnd = Number(sorted[0].pump_reading_end);
+
+    const highest = Math.max(isNaN(maxEnd) ? 0 : maxEnd, isNaN(latestLogEnd) ? 0 : latestLogEnd);
+    return highest > 0 ? highest : null;
   };
 
   // Carregar sequência de bomba para a fazenda
@@ -153,8 +160,11 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       const selectedFuel = fuelType || formFuelType;
       const apiLatest = await fleetService.getLatestPumpReading(farmId, selectedFuel);
 
-      // Prioriza o valor mais recente encontrado
-      const resolvedLast = memLatest !== null ? memLatest : apiLatest;
+      // Prioriza a maior leitura física já registrada para garantir continuidade estrita
+      const candidates: number[] = [];
+      if (memLatest !== null && !isNaN(memLatest)) candidates.push(memLatest);
+      if (apiLatest !== null && !isNaN(apiLatest)) candidates.push(apiLatest);
+      const resolvedLast = candidates.length > 0 ? Math.max(...candidates) : null;
 
       if (resolvedLast !== null) {
         setFormPumpStart(resolvedLast);
@@ -287,17 +297,33 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
   const isAddPumpMissing = formPumpStart === '' || formPumpEnd === '';
   const isAddPumpEndInvalid = formPumpStart !== '' && formPumpEnd !== '' && Number(formPumpEnd) <= Number(formPumpStart);
-  const isAddPumpDiscrepancy = Boolean(
-    discrepancyInfo &&
-    !discrepancyInfo.isFirstLog &&
-    discrepancyInfo.lastEnd !== null &&
-    (formPumpStart === '' || Number(formPumpStart) !== Number(discrepancyInfo.lastEnd))
+  
+  // TRAVA DE BOMBA 100% RÍGIDA: O início NUNCA pode ser menor do que o fim do último abastecimento registrado
+  const effectiveLastPumpEnd = (discrepancyInfo && discrepancyInfo.lastEnd !== null && !isNaN(Number(discrepancyInfo.lastEnd)))
+    ? Number(discrepancyInfo.lastEnd)
+    : getLatestFarmPumpEnd(formFarmId);
+
+  const isAddPumpStartLowerThanLast = Boolean(
+    effectiveLastPumpEnd !== null &&
+    !isNaN(effectiveLastPumpEnd) &&
+    formPumpStart !== '' &&
+    Number(formPumpStart) < effectiveLastPumpEnd
   );
+
+  // Alerta informativo: se o início for maior que o último fechamento (permitido se houver justificativa de abastecimento não registrado)
+  const isAddPumpStartHigherThanLast = Boolean(
+    effectiveLastPumpEnd !== null &&
+    !isNaN(effectiveLastPumpEnd) &&
+    formPumpStart !== '' &&
+    Number(formPumpStart) > effectiveLastPumpEnd
+  );
+
+  // TRAVA DE HORÍMETRO: O horímetro NUNCA pode ser menor do que o último horímetro registrado para a máquina
   const isAddHourKmInvalid = formHourKm !== '' && selectedAddMachine !== undefined && lastAddMachineHour > 0 && Number(formHourKm) < lastAddMachineHour;
   const isAddNegative = (formPumpStart !== '' && Number(formPumpStart) < 0) || (formPumpEnd !== '' && Number(formPumpEnd) < 0) || (formHourKm !== '' && Number(formHourKm) < 0);
 
-  // NOTA: Discrepância de bomba é informativa para o operador e não bloqueia a gravação
-  const hasAddAlert = isAddPumpMissing || isAddPumpEndInvalid || isAddNegative;
+  // Trava 100% rígida: bloqueia caso falte preenchimento, se o fim for menor que o início, se o início for menor que o anterior, se o horímetro for menor que o anterior, se houver negativo ou enquanto carrega
+  const hasAddAlert = isAddPumpMissing || isAddPumpEndInvalid || isAddPumpStartLowerThanLast || isAddHourKmInvalid || isAddNegative || isLoadingPump;
 
   // Validações do Modal de Edição (EDIT)
   const selectedEditMachine = machines.find(m => m.id === editMachineId);
@@ -305,11 +331,17 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
 
   const isEditPumpMissing = editPumpStart === '' || editPumpEnd === '';
   const isEditPumpEndInvalid = editPumpStart !== '' && editPumpEnd !== '' && Number(editPumpEnd) <= Number(editPumpStart);
-  const isEditPumpDiscrepancy = Boolean(editDiscrepancyInfo && editDiscrepancyInfo.hasDiscrepancy);
+  const isEditPumpStartLowerThanLast = Boolean(
+    editDiscrepancyInfo &&
+    !editDiscrepancyInfo.isFirstLog &&
+    editDiscrepancyInfo.lastEnd !== null &&
+    editPumpStart !== '' &&
+    Number(editPumpStart) < Number(editDiscrepancyInfo.lastEnd)
+  );
   const isEditHourKmInvalid = editHourKm !== '' && selectedEditMachine !== undefined && lastEditMachineHour > 0 && Number(editHourKm) < lastEditMachineHour;
   const isEditNegative = (editPumpStart !== '' && Number(editPumpStart) < 0) || (editPumpEnd !== '' && Number(editPumpEnd) < 0) || (editHourKm !== '' && Number(editHourKm) < 0);
 
-  const hasEditAlert = isEditPumpMissing || isEditPumpEndInvalid || isEditNegative;
+  const hasEditAlert = isEditPumpMissing || isEditPumpEndInvalid || isEditPumpStartLowerThanLast || isEditHourKmInvalid || isEditNegative;
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -318,10 +350,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
     if (hasEditAlert) {
       if (isEditPumpEndInvalid) {
         alert('Alteração não permitida: A leitura final da bomba deve ser estritamente maior que a leitura inicial!');
+      } else if (isEditPumpStartLowerThanLast) {
+        alert(`Alteração bloqueada: A leitura inicial da bomba (${editPumpStart} L) não pode ser menor que o fechamento anterior (${editDiscrepancyInfo?.lastEnd} L)! A contagem da bomba deve dar continuidade.`);
+      } else if (isEditHourKmInvalid) {
+        alert(`Alteração bloqueada: O horímetro informado (${editHourKm}) não pode ser menor do que o horímetro anterior da máquina (${lastEditMachineHour})!`);
       } else if (isEditNegative) {
         alert('Alteração não permitida: Leituras de bomba e horímetro não podem ser negativas!');
       } else {
-        alert('Alteração não permitida: Preencha as leituras inicial e final da bomba.');
+        alert('Alteração não permitida: Preencha as leituras válidas da bomba.');
       }
       return;
     }
@@ -440,13 +476,31 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
       return;
     }
 
+    if (isLoadingPump) {
+      alert('Aguarde a validação da sequência da bomba em tempo real...');
+      return;
+    }
+
+    // TRAVA 100% RÍGIDA DE BOMBA: O início NUNCA pode ser menor do que o fim do último abastecimento
+    const currentLastEnd = effectiveLastPumpEnd;
+    if (currentLastEnd !== null && !isNaN(currentLastEnd) && startVal < currentLastEnd) {
+      alert(`Lançamento bloqueado: A leitura inicial da bomba (${startVal} L) não pode ser menor que o último fechamento registrado (${currentLastEnd} L)! A contagem da bomba só pode avançar.`);
+      return;
+    }
+
     if (hasAddAlert) {
       if (isAddPumpEndInvalid) {
         alert('Lançamento bloqueado: A leitura final da bomba deve ser maior que a leitura inicial!');
+      } else if (isAddPumpStartLowerThanLast) {
+        alert(`Lançamento bloqueado: A leitura inicial da bomba (${startVal} L) não pode ser menor que o último fechamento registrado (${currentLastEnd} L)! A contagem da bomba só pode avançar.`);
+      } else if (isAddHourKmInvalid) {
+        alert(`Lançamento bloqueado: O horímetro informado (${formHourKm}) não pode ser menor do que o horímetro anterior da máquina (${lastAddMachineHour})!`);
       } else if (isAddNegative) {
         alert('Lançamento bloqueado: Leituras de bomba e horímetro não podem ser negativas!');
+      } else if (isLoadingPump) {
+        alert('Aguarde a validação da sequência da bomba em tempo real...');
       } else {
-        alert('Lançamento bloqueado: Preencha as leituras inicial e final da bomba.');
+        alert('Lançamento bloqueado: Preencha as leituras válidas da bomba.');
       }
       return;
     }
@@ -1000,18 +1054,16 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   <Fuel size={13} className="text-[#1B3022]" />
                   <span>Leitura INICIAL da Bomba (L)</span>
                 </label>
-                {discrepancyInfo && discrepancyInfo.lastEnd !== null && (
+                {effectiveLastPumpEnd !== null && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (discrepancyInfo && discrepancyInfo.lastEnd !== null) {
-                        setFormPumpStart(discrepancyInfo.lastEnd);
-                      }
+                      setFormPumpStart(effectiveLastPumpEnd);
                     }}
                     className="text-[10px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg cursor-pointer transition-colors"
                     title="Clique para preencher com o fechamento do último lançamento"
                   >
-                    Usar último fechamento: {discrepancyInfo.lastEnd} L
+                    Usar último fechamento: {effectiveLastPumpEnd} L
                   </button>
                 )}
               </div>
@@ -1020,18 +1072,23 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                   type="number"
                   step="any"
                   required
-                  placeholder={isLoadingPump ? "Buscando último lançamento..." : "Ex: 1040"}
+                  min={effectiveLastPumpEnd !== null ? effectiveLastPumpEnd : 0}
+                  placeholder={isLoadingPump ? "Verificando sequência da bomba..." : "Ex: 1040"}
                   value={formPumpStart}
                   onChange={(e) => setFormPumpStart(e.target.value !== '' ? Number(e.target.value) : '')}
-                  className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs font-mono text-slate-800 focus:outline-hidden focus:border-[#1B3022] shadow-2xs transition-all"
+                  className={`w-full bg-white border rounded-xl py-2 px-3 text-xs font-mono text-slate-800 focus:outline-hidden shadow-2xs transition-all ${
+                    isAddPumpStartLowerThanLast
+                      ? 'border-red-500 focus:border-red-600 bg-red-50/40 text-red-950 font-bold ring-2 ring-red-200'
+                      : 'border-slate-300 focus:border-[#1B3022]'
+                  }`}
                 />
               </div>
-              {discrepancyInfo && discrepancyInfo.lastEnd !== null ? (
+              {effectiveLastPumpEnd !== null ? (
                 <div className="mt-1 flex items-center justify-between text-[10px]">
                   <span className="text-slate-500">
-                    Último fechamento registrado: <strong className="text-slate-800 font-mono">{discrepancyInfo.lastEnd} L</strong>
+                    Último fechamento registrado: <strong className="text-slate-800 font-mono">{effectiveLastPumpEnd} L</strong>
                   </span>
-                  {formPumpStart !== '' && Number(formPumpStart) === Number(discrepancyInfo.lastEnd) && (
+                  {formPumpStart !== '' && Number(formPumpStart) === effectiveLastPumpEnd && (
                     <span className="text-emerald-700 font-bold flex items-center gap-1">
                       <Check size={11} /> Em sequência com o último lançamento
                     </span>
@@ -1111,27 +1168,49 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             />
           </div>
 
-          {/* AUDITORIA DE BOMBA E VALIDACÕES DE ALERTAS */}
-          {isAddPumpDiscrepancy && (
+          {/* AUDITORIA DE BOMBA E VALIDAÇÕES DE ALERTAS */}
+          {isAddPumpStartLowerThanLast && (
+            <div className="p-3.5 bg-red-50 border-2 border-red-400 rounded-xl text-xs text-red-950 leading-normal space-y-1.5 shadow-xs">
+              <div className="flex items-center justify-between font-bold">
+                <div className="flex items-center gap-1.5 text-red-800">
+                  <AlertTriangle size={15} className="shrink-0 text-red-600" />
+                  <span>Trava de Bomba Ativada: Início menor que o fechamento anterior!</span>
+                </div>
+                {effectiveLastPumpEnd !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setFormPumpStart(effectiveLastPumpEnd)}
+                    className="text-[11px] bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer shadow-xs"
+                  >
+                    Ajustar para {effectiveLastPumpEnd} L
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-red-900 leading-relaxed">
+                A leitura inicial informada (<strong>{formPumpStart} L</strong>) é <strong>estritamente menor</strong> que o último fechamento registrado nesta bomba/fazenda (<strong>{effectiveLastPumpEnd} L</strong>). A numeração da bomba só pode avançar e jamais retroceder.
+              </p>
+            </div>
+          )}
+
+          {isAddPumpStartHigherThanLast && (
             <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 leading-normal space-y-1">
               <div className="flex items-center justify-between font-bold">
                 <div className="flex items-center gap-1.5">
                   <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                  <span>Atenção: Início da bomba difere do último lançamento</span>
+                  <span>Atenção: Início da bomba maior que o último fechamento</span>
                 </div>
-                {discrepancyInfo && discrepancyInfo.lastEnd !== null && (
+                {effectiveLastPumpEnd !== null && (
                   <button
                     type="button"
-                    onClick={() => setFormPumpStart(discrepancyInfo.lastEnd!)}
+                    onClick={() => setFormPumpStart(effectiveLastPumpEnd)}
                     className="text-[11px] bg-amber-200 hover:bg-amber-300 text-amber-950 px-2 py-0.5 rounded-lg font-bold transition-colors cursor-pointer"
                   >
-                    Ajustar para {discrepancyInfo.lastEnd} L
+                    Ajustar para {effectiveLastPumpEnd} L
                   </button>
                 )}
               </div>
               <p className="text-[11px] text-amber-800">
-                A leitura inicial informada (<strong>{formPumpStart} L</strong>) difere do último fechamento registrado (<strong>{discrepancyInfo?.lastEnd} L</strong>).
-                Se você conferiu no relógio da bomba e o valor correto é esse, você pode confirmar o abastecimento normalmente.
+                A leitura inicial informada (<strong>{formPumpStart} L</strong>) é maior que o último fechamento registrado (<strong>{effectiveLastPumpEnd} L</strong>). Verifique se houve aferição ou abastecimento avulso.
               </p>
             </div>
           )}
@@ -1143,19 +1222,19 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 <span>Leitura final da bomba inválida!</span>
               </div>
               <p>
-                A leitura final da bomba (<strong>{formPumpEnd} L</strong>) deve ser maior do que a leitura inicial (<strong>{formPumpStart} L</strong>).
+                A leitura final da bomba (<strong>{formPumpEnd} L</strong>) deve ser estritamente maior do que a leitura inicial (<strong>{formPumpStart} L</strong>).
               </p>
             </div>
           )}
 
           {isAddHourKmInvalid && (
-            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-normal space-y-1">
+            <div className="p-3.5 bg-red-50 border border-red-300 rounded-xl text-xs text-red-900 leading-normal space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
-                <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                <span>Atenção no Horímetro/Km</span>
+                <AlertTriangle size={14} className="shrink-0 text-red-600" />
+                <span>Lançamento Bloqueado: Horímetro menor que o anterior!</span>
               </div>
-              <p>
-                O horímetro/km informado (<strong>{formHourKm}</strong>) é menor do que o último horímetro registrado para a máquina <strong>{selectedAddMachine?.code}</strong> (<strong>{lastAddMachineHour}</strong>).
+              <p className="text-[11px] text-red-800">
+                O horímetro/km informado (<strong>{formHourKm}</strong>) não pode ser menor do que o último horímetro registrado para a máquina <strong>{selectedAddMachine?.code}</strong> (<strong>{lastAddMachineHour}</strong>).
               </p>
             </div>
           )}
@@ -1172,18 +1251,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
           )}
 
-          {!hasAddAlert && !isAddPumpDiscrepancy && discrepancyInfo && !discrepancyInfo.hasDiscrepancy && formPumpStart !== '' && (
+          {!hasAddAlert && formPumpStart !== '' && !isAddPumpStartLowerThanLast && !isAddPumpStartHigherThanLast && discrepancyInfo && !discrepancyInfo.hasDiscrepancy && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-1.5">
               <Check size={14} className="text-emerald-600" />
-              <span>Sequência de bomba confirmada! Confere com fechamento anterior ({discrepancyInfo.lastEnd} L).</span>
+              <span>Sequência de bomba confirmada! Confere exatamente com fechamento anterior ({discrepancyInfo.lastEnd} L).</span>
             </div>
           )}
 
-          {/* Banner Resumo de Bloqueio se houver campos obrigatórios faltando */}
+          {/* Banner Resumo de Bloqueio se houver inconsistências */}
           {hasAddAlert && (
             <div className="p-3 bg-red-100 border border-red-300 rounded-xl text-xs text-red-900 font-bold flex items-center gap-2">
               <AlertTriangle size={16} className="text-red-600 shrink-0" />
-              <span>Preencha as leituras válidas da bomba para permitir a confirmação.</span>
+              <span>Corrija as inconsistências para permitir a confirmação do abastecimento.</span>
             </div>
           )}
 
@@ -1212,18 +1291,26 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </button>
             <button
               type="submit"
-              disabled={hasAddAlert || isSubmitting}
+              disabled={hasAddAlert || isSubmitting || isLoadingPump}
               className={`px-5 py-2.5 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 ${
-                hasAddAlert || isSubmitting
+                hasAddAlert || isSubmitting || isLoadingPump
                   ? 'bg-slate-400 cursor-not-allowed opacity-60'
                   : 'bg-[#1B3022] hover:opacity-90 cursor-pointer active:scale-98'
               }`}
-              title={hasAddAlert ? 'Preencha as leituras da bomba' : 'Confirmar Abastecimento'}
+              title={
+                isLoadingPump
+                  ? 'Validando sequência da bomba em tempo real...'
+                  : isAddPumpStartLowerThanLast
+                  ? `Lançamento Bloqueado: Início não pode ser menor que ${effectiveLastPumpEnd} L`
+                  : hasAddAlert
+                  ? 'Corrija as inconsistências para liberar a confirmação'
+                  : 'Confirmar Abastecimento'
+              }
             >
-              {isSubmitting && (
+              {(isSubmitting || isLoadingPump) && (
                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               )}
-              <span>{isSubmitting ? 'Registrando Abastecimento...' : 'Confirmar Abastecimento'}</span>
+              <span>{isSubmitting ? 'Registrando Abastecimento...' : isLoadingPump ? 'Validando Bomba...' : 'Confirmar Abastecimento'}</span>
             </button>
           </div>
         </form>
@@ -1393,14 +1480,14 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           </div>
 
           {/* AUDITORIA DE BOMBA E VALIDAÇÕES DE ALERTAS (EDIÇÃO) */}
-          {isEditPumpDiscrepancy && (
-            <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 leading-normal space-y-1">
+          {isEditPumpStartLowerThanLast && (
+            <div className="p-3.5 bg-red-50 border border-red-300 rounded-xl text-xs text-red-900 leading-normal space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
-                <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                <span>Atenção: Início da bomba difere do fechamento anterior</span>
+                <AlertTriangle size={14} className="shrink-0 text-red-600" />
+                <span>Alteração Bloqueada: Início da bomba menor que o fechamento anterior!</span>
               </div>
-              <p className="text-[11px] text-amber-800">
-                A leitura inicial preenchida (<strong>{editPumpStart} L</strong>) difere do último fechamento registrado para esta fazenda (<strong>{editDiscrepancyInfo?.lastEnd} L</strong>).
+              <p className="text-[11px] text-red-800">
+                A leitura inicial informada (<strong>{editPumpStart} L</strong>) é menor do que o fechamento anterior registrado (<strong>{editDiscrepancyInfo?.lastEnd} L</strong>).
               </p>
             </div>
           )}
@@ -1412,18 +1499,18 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
                 <span>Leitura final da bomba inválida!</span>
               </div>
               <p>
-                A leitura final da bomba (<strong>{editPumpEnd} L</strong>) deve ser maior do que a leitura inicial (<strong>{editPumpStart} L</strong>).
+                A leitura final da bomba (<strong>{editPumpEnd} L</strong>) deve ser estritamente maior do que a leitura inicial (<strong>{editPumpStart} L</strong>).
               </p>
             </div>
           )}
 
           {isEditHourKmInvalid && (
-            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-normal space-y-1">
+            <div className="p-3.5 bg-red-50 border border-red-300 rounded-xl text-xs text-red-900 leading-normal space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
-                <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                <span>Atenção no Horímetro/Km</span>
+                <AlertTriangle size={14} className="shrink-0 text-red-600" />
+                <span>Alteração Bloqueada: Horímetro menor que o anterior!</span>
               </div>
-              <p>
+              <p className="text-[11px] text-red-800">
                 O horímetro/km informado (<strong>{editHourKm}</strong>) é menor do que o horímetro atual da máquina <strong>{selectedEditMachine?.code}</strong> (<strong>{lastEditMachineHour}</strong>).
               </p>
             </div>
@@ -1441,7 +1528,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
             </div>
           )}
 
-          {!hasEditAlert && !isEditPumpDiscrepancy && editDiscrepancyInfo && !editDiscrepancyInfo.hasDiscrepancy && editPumpStart !== '' && (
+          {!hasEditAlert && editDiscrepancyInfo && !editDiscrepancyInfo.hasDiscrepancy && editPumpStart !== '' && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-1.5">
               <Check size={14} className="text-emerald-600" />
               <span>Sequência de bomba confirmada! Confere com fechamento anterior ({editDiscrepancyInfo.lastEnd} L).</span>
@@ -1452,7 +1539,7 @@ export default function FuelPage({ selectedFarmId, selectedPeriod, userRole }: F
           {hasEditAlert && (
             <div className="p-3 bg-red-100 border border-red-300 rounded-xl text-xs text-red-900 font-bold flex items-center gap-2">
               <AlertTriangle size={16} className="text-red-600 shrink-0" />
-              <span>Preencha as leituras válidas da bomba para permitir a gravação.</span>
+              <span>Corrija as inconsistências para permitir a gravação da alteração.</span>
             </div>
           )}
 
