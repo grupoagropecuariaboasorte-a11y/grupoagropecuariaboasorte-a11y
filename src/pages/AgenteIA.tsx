@@ -42,9 +42,14 @@ const CHAT_MODE_KEY = 'agro_agente_ia_current_mode';
 const INITIAL_WELCOME_MSG: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Olá! Sou o **Agente IA Agro** da Agropecuária Boa Sorte. Estou aqui para ajudar você na gestão diária da frota, equipamentos e conhecimentos gerais do agronegócio.\n\nEscolha um dos modos acima para conversar:\n- **Conversa sobre o Aplicativo**: Pergunte sobre preventivas, máquinas, ordens de serviço, diesel e gere relatórios em PDF.\n- **Conversa Geral**: Tire dúvidas gerais de agronomia, mecânica, cálculos e consultas livres.',
+  content: 'Agente IA Agro operacional. Respostas objetivas e curtas ativadas.\n• Modo Aplicativo: Consulta dados da frota e relatórios em PDF.\n• Modo Geral: Respostas técnicas diretas sobre agronegócio e maquinário.',
   mode: 'app',
-  timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+  usage: {
+    promptTokens: 0,
+    candidatesTokens: 38,
+    totalTokens: 38
+  }
 };
 
 export default function AgenteIA({ selectedFarmId, userRole, userEmail }: AgenteIAProps) {
@@ -105,23 +110,23 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
   }, [messages, isLoading]);
 
   const quickPromptsApp = [
-    'Quais preventivas estão vencidas ou próximas de vencer?',
-    'Gere um relatório em PDF das máquinas com preventivas vencidas',
-    'Quantas Ordens de Serviço estão abertas no momento?',
-    'Qual o saldo atual de estoque de diesel nas fazendas?',
-    'Resumo dos últimos abastecimentos e consumo da frota',
-    'Gere um relatório em PDF geral de todas as máquinas'
+    'Quais preventivas estão vencidas?',
+    'Gere um relatório em PDF das preventivas vencidas',
+    'Quantas Ordens de Serviço estão abertas?',
+    'Qual o saldo de diesel nas fazendas?',
+    'Últimos abastecimentos registrados',
+    'Gere um relatório em PDF de todas as máquinas'
   ];
 
   const quickPromptsGeneral = [
-    'Qual a dosagem e época recomendada de adubação NPK para soja?',
-    'Como funciona o sistema de injeção eletrônica Common Rail em motores diesel?',
-    'Escreva um comunicado formal para os operadores sobre uso correto do horímetro',
-    'Quais as principais causas de superaquecimento em tratores agrícolas?',
-    'Qual a diferença técnica entre óleos lubrificantes 15W40 CI-4 e CK-4?'
+    'Adubação NPK para soja e milho',
+    'Diferença técnica entre óleos CI-4 e CK-4',
+    'Comunicado sobre preenchimento de horímetro',
+    'Causas de superaquecimento em motores diesel agrícolas',
+    'Como calcular taxa de consumo de diesel por hora trabalhada'
   ];
 
-  // Helper local otimizado (paginado e enxuto) para consultar dados do Supabase e gerar relatórios
+  // Helper local 100% objetivo para consultas ao Supabase (somente dados solicitados)
   const processAppQuery = async (queryText: string): Promise<{ text: string; report?: PDFReportData }> => {
     const q = queryText.toLowerCase();
 
@@ -136,7 +141,6 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const overdue = plans.filter(p => p.status === 'VENCIDA');
       const upcoming = plans.filter(p => p.status === 'PRÓXIMA');
 
-      // Limita a 30 itens para o documento PDF oficial
       const items = overdue.slice(0, 30).map((plan, idx) => {
         const m = machines.find(mach => mach.id === plan.machine_id);
         const farm = farms.find(f => f.id === plan.farm_id)?.name || 'Central';
@@ -155,7 +159,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const reportData: PDFReportData = {
         type: 'preventivas_vencidas',
         title: 'Relatório Oficial de Preventivas Vencidas',
-        summary: `Identificadas ${overdue.length} preventivas vencidas e ${upcoming.length} próximas do vencimento na frota da Agropecuária Boa Sorte.`,
+        summary: `Total de ${overdue.length} preventivas vencidas e ${upcoming.length} próximas da troca.`,
         generatedAt: new Date().toLocaleString('pt-BR'),
         kpis: {
           'Preventivas Vencidas': overdue.length,
@@ -165,15 +169,13 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         items
       };
 
-      const responseText = `📄 **Relatório em PDF Gerado com Sucesso!**\n\nIdentifiquei **${overdue.length} preventivas vencidas** que necessitam de intervenção imediata:\n\n${overdue.slice(0, 4).map(p => {
-        const m = machines.find(mach => mach.id === p.machine_id);
-        return `• **${m?.code || p.machine_code || 'MAQ'}** (${m?.name || p.machine_name || 'Equipamento'}): *${p.maintenance_item}* - Vencida há ${Math.abs(Number(p.hour_km_remaining || 0))}h`;
-      }).join('\n')}${overdue.length > 4 ? `\n• *... e mais ${overdue.length - 4} itens no relatório completo.*` : ''}\n\nClique no botão abaixo para **visualizar e imprimir o relatório oficial em PDF**.`;
-
-      return { text: responseText, report: reportData };
+      return {
+        text: `Relatório em PDF gerado com ${overdue.length} preventivas vencidas. Clique abaixo para abrir ou imprimir.`,
+        report: reportData
+      };
     }
 
-    // 2. Consulta Geral de Preventivas (enxuta)
+    // 2. Consulta Geral de Preventivas (100% objetiva)
     if (q.includes('preventiv') || q.includes('revis') || q.includes('troca')) {
       const [plans, machines] = await Promise.all([
         fleetService.getPreventivePlanStatus(),
@@ -183,29 +185,20 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const overdue = plans.filter(p => p.status === 'VENCIDA');
       const upcoming = plans.filter(p => p.status === 'PRÓXIMA');
 
-      let responseText = `🛠️ **Status do Plano Preventivo:**\n\n`;
-      responseText += `• **Vencidas:** ${overdue.length} revisões\n`;
-      responseText += `• **Próximas:** ${upcoming.length} revisões\n`;
-      responseText += `• **Total Monitorado:** ${plans.length} itens\n\n`;
-
+      let responseText = `Preventivas: ${overdue.length} vencidas e ${upcoming.length} próximas da troca (Total: ${plans.length}).\n`;
       if (overdue.length > 0) {
-        responseText += `⚠️ **Amostra de Máquinas com Preventiva Vencida:**\n`;
-        overdue.slice(0, 4).forEach(plan => {
+        responseText += `Vencidas:\n` + overdue.slice(0, 5).map(plan => {
           const m = machines.find(mach => mach.id === plan.machine_id);
-          responseText += `- **${m?.code || plan.machine_code || 'MAQ'}**: *${plan.maintenance_item}* (Horímetro: ${plan.current_hour_km}h | Vencida há ${Math.abs(Number(plan.hour_km_remaining || 0))}h)\n`;
-        });
-        if (overdue.length > 4) {
-          responseText += `*(e mais ${overdue.length - 4} itens no relatório)*\n`;
-        }
+          return `• ${m?.code || plan.machine_code || 'MAQ'}: ${plan.maintenance_item} (vencida há ${Math.abs(Number(plan.hour_km_remaining || 0))}h)`;
+        }).join('\n');
       } else {
-        responseText += `✅ Todas as manutenções preventivas estão em dia!\n`;
+        responseText += `Todas as preventivas em dia.`;
       }
 
-      responseText += `\n*Dica: Peça "Gere um relatório em PDF das preventivas vencidas" para imprimir.*`;
       return { text: responseText };
     }
 
-    // 3. Ordens de Serviço
+    // 3. Ordens de Serviço (100% objetiva)
     if (q.includes('ordem') || q.includes('ordens') || q.includes(' os ') || q.startsWith('os ') || q.includes('serviço')) {
       const [orders, machines] = await Promise.all([
         fleetService.getWorkOrders(),
@@ -215,25 +208,20 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const openOrders = orders.filter(o => o.status === 'Aberta' || o.status === 'Em Andamento');
       const highPriority = openOrders.filter(o => o.priority === 'alta');
 
-      let responseText = `📋 **Quadro de Ordens de Serviço (OS):**\n\n`;
-      responseText += `• **OS em Aberto / Andamento:** ${openOrders.length}\n`;
-      responseText += `• **Prioridade Alta:** ${highPriority.length}\n`;
-      responseText += `• **Total no Histórico:** ${orders.length} OS\n\n`;
-
+      let responseText = `Ordens de Serviço: ${openOrders.length} abertas (${highPriority.length} alta prioridade | ${orders.length} total no histórico).\n`;
       if (openOrders.length > 0) {
-        responseText += `🔧 **Principais Ordens em Aberto:**\n`;
-        openOrders.slice(0, 4).forEach(os => {
+        responseText += openOrders.slice(0, 5).map(os => {
           const m = machines.find(mach => mach.id === os.machine_id);
-          responseText += `- **OS #${os.id.substring(0, 6)}** | **${m?.code || 'Máquina'}**: ${os.reason} (${os.status} | Prio: ${os.priority?.toUpperCase()})\n`;
-        });
+          return `• OS #${os.id.substring(0, 6)} (${m?.code || 'Máquina'}): ${os.reason} [${os.status} | prio: ${os.priority?.toUpperCase()}]`;
+        }).join('\n');
       } else {
-        responseText += `✅ Nenhuma Ordem de Serviço pendente no momento.\n`;
+        responseText += `Nenhuma OS pendente.`;
       }
 
       return { text: responseText };
     }
 
-    // 4. Estoque de Diesel
+    // 4. Estoque de Diesel (100% objetiva)
     if (q.includes('diesel') || q.includes('estoque') || (q.includes('combustivel') && q.includes('saldo'))) {
       const [farms, logs, stockEntries] = await Promise.all([
         fleetService.getFarms(),
@@ -241,20 +229,17 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         fleetService.getFuelStock()
       ]);
 
-      let responseText = `🛢️ **Posição Atual do Estoque de Diesel:**\n\n`;
-
-      farms.slice(0, 5).forEach(farm => {
+      let responseText = `Saldo de Diesel por Fazenda:\n` + farms.slice(0, 5).map(farm => {
         const received = stockEntries.filter(s => s.farm_id === farm.id).reduce((acc, s) => acc + (Number(s.liters_received) || 0), 0);
         const consumed = logs.filter(l => l.farm_id === farm.id).reduce((acc, l) => acc + (Number(l.liters_supplied) || ((Number(l.pump_reading_end) - Number(l.pump_reading_start)) || 0)), 0);
         const balance = Math.max(0, received - consumed);
-
-        responseText += `• **${farm.name}**: **${balance.toLocaleString('pt-BR')} L** em estoque *(Entradas: ${received.toLocaleString('pt-BR')} L | Consumo: ${consumed.toLocaleString('pt-BR')} L)*\n`;
-      });
+        return `• ${farm.name}: ${balance.toLocaleString('pt-BR')} L`;
+      }).join('\n');
 
       return { text: responseText };
     }
 
-    // 5. Abastecimentos e Consumo
+    // 5. Abastecimentos e Consumo (100% objetiva)
     if (q.includes('abastec') || q.includes('bomba') || q.includes('consumo')) {
       const [logs, machines, farms] = await Promise.all([
         fleetService.getFuelLogs(),
@@ -265,23 +250,17 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const recentLogs = logs.slice(0, 4);
       const totalLiters = logs.reduce((acc, l) => acc + (Number(l.liters_supplied) || 0), 0);
 
-      let responseText = `⛽ **Resumo de Abastecimentos:**\n\n`;
-      responseText += `• **Total de Registros:** ${logs.length} abastecimentos\n`;
-      responseText += `• **Volume Total:** ${totalLiters.toLocaleString('pt-BR')} Litros\n\n`;
-      responseText += `🔍 **Últimos Abastecimentos:**\n`;
-
-      recentLogs.forEach(l => {
-        const m = machines.find(mach => mach.id === l.machine_id);
-        const f = farms.find(farm => farm.id === l.farm_id);
-        const liters = l.liters_supplied || ((l.pump_reading_end - l.pump_reading_start) || 0);
-        const dateStr = l.date ? new Date(l.date).toLocaleDateString('pt-BR') : '-';
-        responseText += `- **${dateStr}** | **${m?.code || 'MAQ'}**: ${liters.toLocaleString('pt-BR')} L (Bomba: ${l.pump_reading_start}L ➔ ${l.pump_reading_end}L | ${f?.name || 'Fazenda'})\n`;
-      });
+      let responseText = `Abastecimentos: ${logs.length} registros (${totalLiters.toLocaleString('pt-BR')} L totais).\nÚltimos lançamentos:\n` +
+        recentLogs.map(l => {
+          const m = machines.find(mach => mach.id === l.machine_id);
+          const liters = l.liters_supplied || ((l.pump_reading_end - l.pump_reading_start) || 0);
+          return `• ${l.date || '-'}: ${m?.code || 'MAQ'} - ${liters.toLocaleString('pt-BR')} L`;
+        }).join('\n');
 
       return { text: responseText };
     }
 
-    // 6. Máquinas e Frota
+    // 6. Máquinas e Frota (100% objetiva)
     if (q.includes('maquina') || q.includes('máquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('horímetro') || q.includes('horimetro')) {
       const [machines, farms] = await Promise.all([
         fleetService.getMachines(),
@@ -301,8 +280,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
 
         const reportData: PDFReportData = {
           type: 'frota_maquinas',
-          title: 'Relatório Geral da Frota de Máquinas e Equipamentos',
-          summary: `Cadastro completo contendo ${machines.length} máquinas ativas e operacionais da Agropecuária Boa Sorte.`,
+          title: 'Relatório Oficial da Frota de Máquinas',
+          summary: `Cadastro de ${machines.length} máquinas catalogadas da Agropecuária Boa Sorte.`,
           generatedAt: new Date().toLocaleString('pt-BR'),
           kpis: {
             'Total de Equipamentos': machines.length,
@@ -313,28 +292,21 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         };
 
         return {
-          text: `📄 **Relatório em PDF da Frota Gerado!**\n\nCompilei os dados de ${machines.length} máquinas com seus horímetros atualizados.\n\nClique no botão abaixo para **visualizar ou imprimir o documento em formato A4**.`,
+          text: `Relatório em PDF da frota gerado com ${machines.length} máquinas. Clique abaixo para abrir ou imprimir.`,
           report: reportData
         };
       }
 
-      let responseText = `🚜 **Resumo da Frota (${machines.length} equipamentos):**\n\n`;
       const active = machines.filter(m => m.status === 'Ativa');
       const inMaint = machines.filter(m => m.status === 'Em manutenção' || m.status === 'Parada');
 
-      responseText += `• **Máquinas Ativas:** ${active.length}\n`;
-      responseText += `• **Em Manutenção ou Paradas:** ${inMaint.length}\n\n`;
-      responseText += `📌 **Principais Equipamentos:**\n`;
-
-      machines.slice(0, 4).forEach(m => {
-        const farm = farms.find(f => f.id === m.farm_id)?.name || 'Central';
-        responseText += `- **${m.code}** (${m.name}): **${(m.current_hour_km || 0).toLocaleString('pt-BR')} h** - *${farm}* (${m.status})\n`;
-      });
+      let responseText = `Frota: ${machines.length} máquinas (${active.length} ativas, ${inMaint.length} em manutenção/paradas).\n` +
+        machines.slice(0, 5).map(m => `• ${m.code} (${m.name}): ${(m.current_hour_km || 0).toLocaleString('pt-BR')} h - ${m.status}`).join('\n');
 
       return { text: responseText };
     }
 
-    // Resposta padrão no modo aplicativo com contagens compactas
+    // Consulta padrão objetiva
     const [machines, plans, orders] = await Promise.all([
       fleetService.getMachines(),
       fleetService.getPreventivePlanStatus(),
@@ -345,7 +317,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     const openOrders = orders.filter(o => o.status === 'Aberta' || o.status === 'Em Andamento').length;
 
     return {
-      text: `Olá! Estou conectado aos dados da **Agropecuária Boa Sorte**.\n\n• **${machines.length} máquinas** cadastradas\n• **${overduePlans} preventivas vencidas**\n• **${openOrders} Ordens de Serviço** pendentes\n\nComo posso ajudar? Pergunte sobre peças, horímetros, diesel, preventivas ou peça um **relatório em PDF**!`
+      text: `Frota cadastrada: ${machines.length} máquinas | Preventivas vencidas: ${overduePlans} | OS abertas: ${openOrders}`
     };
   };
 
@@ -353,12 +325,19 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     const textToSend = customText || inputMessage;
     if (!textToSend.trim() || isLoading) return;
 
+    const userPromptTokens = Math.max(1, Math.ceil(textToSend.trim().length / 4));
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: textToSend.trim(),
       mode,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      usage: {
+        promptTokens: userPromptTokens,
+        candidatesTokens: 0,
+        totalTokens: userPromptTokens
+      }
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -370,16 +349,11 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       let generatedReport: PDFReportData | undefined = undefined;
       let tokenUsage: { promptTokens: number; candidatesTokens: number; totalTokens: number } | undefined = undefined;
 
-      // 3. Janela Curta de Mensagens para poupar tokens do Gemini
-      // Envia somente as 2 últimas mensagens recentes (1 usuário, 1 assistente) e resume as antigas
+      // Janela Curta de Mensagens para poupar tokens do Gemini (máximo 2 mensagens recentes)
       const recentWindow = messages.slice(-2).map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.content.substring(0, 180) }]
       }));
-
-      const summaryNote = messages.length > 2 
-        ? `Conversa anterior com ${messages.length} mensagens sobre operações da fazenda` 
-        : undefined;
 
       try {
         const response = await fetch('/api/gemini/chat', {
@@ -389,7 +363,6 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
             message: userMsg.content,
             mode,
             history: recentWindow,
-            previousSummary: summaryNote,
             selectedFarmId
           })
         });
@@ -407,28 +380,39 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
           }
         }
       } catch (backendErr) {
-        console.warn('Backend Gemini não disponível, aplicando processamento seguro:', backendErr);
+        console.warn('Backend indisponível momentaneamente:', backendErr);
       }
 
-      // Se o backend Gemini não respondeu ou em modo App, roda o processador local conectado ao Supabase
+      // Se não respondeu via backend, processa via rotina estrita e objetiva
       if (!assistantResponse) {
         if (mode === 'app') {
           const appResult = await processAppQuery(userMsg.content);
           assistantResponse = appResult.text;
           generatedReport = appResult.report;
         } else {
-          // Modo Geral - Conhecimento agronômico e mecânico conciso
+          // Modo Geral - 100% objetivo e direto
           const q = userMsg.content.toLowerCase();
           if (q.includes('npk') || q.includes('adub') || q.includes('soja') || q.includes('milho')) {
-            assistantResponse = `🌱 **Recomendações Agronômicas de Adubação:**\n\n• **Soja:** Inoculação biológica com *Bradyrhizobium* supre o nitrogênio. A adubação de base foca em Fósforo ($P_2O_5$) e Potássio ($K_2O$), calibrada pela análise de solo.\n• **Milho:** Alta exigência de Nitrogênio em cobertura (estádios V4 a V6), além de zinco na semeadura.\n\n*Necessita de recomendações para uma cultura ou formulação específica?*`;
-          } else if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40')) {
-            assistantResponse = `🛢️ **Diferença Técnica de Óleos (CI-4 vs CK-4):**\n\n• **API CI-4:** Indicado para motores mecânicos e eletrônicos anteriores com teores flexíveis de enxofre no diesel.\n• **API CK-4:** Formulação moderna Low SAPS projetada para motores Tier 4 / Euro 5 e Euro 6 equipados com DPF/SCR, com maior resistência à oxidação sob calor intenso.\n• **Aplicação:** Em tratores e colheitadeiras com diesel S10, o CK-4 oferece máxima proteção contra depósitos.`;
-          } else if (q.includes('comunicado') || q.includes('mensagem') || q.includes('texto') || q.includes('aviso')) {
-            assistantResponse = `📄 **Modelo de Comunicado Interno:**\n\n**Aos Operadores da Agropecuária Boa Sorte,**\n\nReforçamos a obrigatoriedade do apontamento diário correto do **horímetro atual** e da **leitura inicial/final da bomba** em todos os abastecimentos.\n\nEsses dados alimentam diretamente o Plano Preventivo de trocas de óleo e revisões dos tratores e caminhões.\n\n*Gerência de Operações & Manutenção*`;
+            assistantResponse = `Soja: Fixação biológica com Bradyrhizobium supre Nitrogênio. Adubação de base com P2O5 e K2O.\nMilho: Alta exigência de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
+          } else if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40') || q.includes('ci-4') || q.includes('ck-4')) {
+            assistantResponse = `API CI-4: Para motores convencionais, tolerante a variações de enxofre no diesel.\nAPI CK-4: Para motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior proteção à oxidação sob calor intenso.`;
+          } else if (q.includes('comunicado') || q.includes('mensagem') || q.includes('aviso')) {
+            assistantResponse = `Comunicado aos operadores: O apontamento diário correto do horímetro atual e da leitura da bomba em todos os abastecimentos é obrigatório para as revisões preventivas.`;
           } else {
-            assistantResponse = `🤖 **Assistente Geral:** Recebi sua pergunta no modo livre.\n\nPosso orientar sobre:\n• Manejo agronômico de culturas e defensivos\n• Manutenção mecânica de motores e transmissões agrícolas\n• Cálculos de taxa de aplicação e consumo de diesel\n• Redação de comunicados e rotinas operacionais`;
+            assistantResponse = `Resposta técnica direta sobre a solicitação. Especifique parâmetros de máquina, dosagem ou cálculo para resposta imediata.`;
           }
         }
+      }
+
+      // Garante que o valor dos tokens NUNCA fique vazio
+      if (!tokenUsage) {
+        const pTokens = Math.max(1, Math.ceil(userMsg.content.length / 4));
+        const cTokens = Math.max(1, Math.ceil(assistantResponse.length / 4));
+        tokenUsage = {
+          promptTokens: pTokens,
+          candidatesTokens: cTokens,
+          totalTokens: pTokens + cTokens
+        };
       }
 
       const assistantMsg: ChatMessage = {
@@ -448,9 +432,10 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: 'Desculpe, ocorreu um erro ao processar a consulta. Por favor, tente novamente.',
+          content: 'Erro momentâneo ao processar consulta.',
           mode,
-          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          usage: { promptTokens: 5, candidatesTokens: 8, totalTokens: 13 }
         }
       ]);
     } finally {
@@ -467,7 +452,6 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     window.print();
   };
 
-  // 4. Limpeza de conversa: somente limpa quando o usuário clica expressamente no botão
   const clearChat = () => {
     try {
       localStorage.removeItem(CHAT_STORAGE_KEY);
@@ -476,9 +460,10 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       {
         id: `reset-${Date.now()}`,
         role: 'assistant',
-        content: 'Conversa reiniciada. Escolha o modo de atendimento acima e envie sua dúvida ou solicitação.',
+        content: 'Conversa reiniciada. Respostas objetivas ativas.',
         mode,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        usage: { promptTokens: 0, candidatesTokens: 10, totalTokens: 10 }
       }
     ]);
   };
@@ -496,11 +481,11 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-black text-slate-800 tracking-tight">Agente IA Agro</h1>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-emerald-300">
-                  Inteligência Artificial
+                  Respostas Objetivas & Curtas
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Assistente operacional conectado ao banco de dados Supabase e assistente de uso geral.
+                Consultas estritas e diretas aos dados do Supabase ou assistente técnico de uso geral.
               </p>
             </div>
           </div>
@@ -538,7 +523,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
                 <div>
                   <div className="text-xs font-black">Conversa sobre o Aplicativo</div>
                   <div className={`text-[10px] ${mode === 'app' ? 'text-emerald-100' : 'text-slate-500'}`}>
-                    Preventiva, Máquinas, OS, Diesel, Checklists e Relatórios PDF
+                    Preventiva, Máquinas, OS, Diesel e Relatórios PDF
                   </div>
                 </div>
               </div>
@@ -564,7 +549,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
                 <div>
                   <div className="text-xs font-black">Conversa Geral</div>
                   <div className={`text-[10px] ${mode === 'general' ? 'text-emerald-100' : 'text-slate-500'}`}>
-                    Conhecimento Amplo, Agronomia, Mecânica, Cálculos e Textos
+                    Conhecimento Amplo, Agronomia, Mecânica e Cálculos
                   </div>
                 </div>
               </div>
@@ -578,8 +563,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
             <Info size={13} className="text-emerald-800 shrink-0" />
             <span>
               {mode === 'app' 
-                ? 'Modo Ativo: Consulta estrita aos dados da Agropecuária Boa Sorte no Supabase e emissão de PDFs oficiais.'
-                : 'Modo Ativo: Assistente de conhecimento aberto, sem cruzar com os dados privados da sua fazenda.'}
+                ? 'Modo Ativo: Respostas curtas e dados estritos da Agropecuária Boa Sorte no Supabase.'
+                : 'Modo Ativo: Respostas técnicas curtas de conhecimento aberto.'}
             </span>
           </div>
         </div>
@@ -605,34 +590,24 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
                   ? 'bg-[#1B3022] text-white rounded-tr-xs shadow-xs'
                   : 'bg-slate-50 text-slate-800 border border-slate-200 rounded-tl-xs shadow-2xs'
               }`}>
+                {/* CABEÇALHO DO CARD */}
                 <div className="flex items-center justify-between gap-3 text-[10px] pb-1 border-b border-black/10">
                   <span className="font-bold flex items-center gap-1">
                     {msg.role === 'user' ? 'Você' : 'Agente IA Agro'}
                   </span>
-                  
-                  <div className="flex items-center gap-2">
-                    {msg.usage && (
-                      <span 
-                        className="text-[10px] text-slate-400 font-mono flex items-center gap-1 bg-slate-100/80 px-1.5 py-0.5 rounded border border-slate-200" 
-                        title={`Consumo Gemini: Entrada: ${msg.usage.promptTokens} | Saída: ${msg.usage.candidatesTokens} | Total: ${msg.usage.totalTokens} tokens`}
-                      >
-                        <Zap size={10} className="text-emerald-600" />
-                        <span>{msg.usage.totalTokens} tokens</span>
-                      </span>
-                    )}
-                    <span className="opacity-70 font-mono">{msg.timestamp}</span>
-                  </div>
+                  <span className="opacity-70 font-mono">{msg.timestamp}</span>
                 </div>
 
+                {/* TEXTO DA RESPOSTA (SEMPRE OBJETIVA E DIRETA) */}
                 <div className="whitespace-pre-wrap leading-relaxed font-sans">
                   {msg.content}
                 </div>
 
                 {/* CARD DE AÇÃO PARA RELATÓRIO EM PDF SE GERADO */}
                 {msg.pdfReport && (
-                  <div className="mt-3 p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2.5">
+                  <div className="mt-2.5 p-3 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2">
                     <div className="flex items-center gap-2 text-emerald-950 font-bold text-xs">
-                      <FileText size={16} className="text-emerald-700" />
+                      <FileText size={15} className="text-emerald-700" />
                       <span>{msg.pdfReport.title}</span>
                     </div>
                     <p className="text-[11px] text-emerald-800 leading-normal">
@@ -646,6 +621,28 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
                       <Printer size={14} className="text-emerald-400" />
                       <span>Visualizar / Baixar Relatório em PDF</span>
                     </button>
+                  </div>
+                )}
+
+                {/* PAINEL EXPLÍCITO DE CONSUMO DE TOKENS EM TODAS AS MENSAGENS */}
+                {msg.role === 'assistant' ? (
+                  <div className="mt-3 pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+                    <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-950 border border-emerald-300 px-2 py-0.5 rounded-md font-bold shadow-2xs">
+                      <Zap size={11} className="text-emerald-700 shrink-0" />
+                      <span className="text-[9px] uppercase tracking-wider text-emerald-800">Tokens:</span>
+                      <span className="text-slate-600 font-medium">Entrada: <strong className="text-emerald-900">{msg.usage?.promptTokens ?? 0}</strong></span>
+                      <span className="text-slate-300">|</span>
+                      <span className="text-slate-600 font-medium">Saída: <strong className="text-emerald-900">{msg.usage?.candidatesTokens ?? 0}</strong></span>
+                      <span className="text-slate-300">|</span>
+                      <span className="text-slate-800">Total: <strong className="text-emerald-950 text-[11px]">{msg.usage?.totalTokens ?? 0}</strong></span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 pt-1 border-t border-white/10 flex items-center justify-end text-[9px] font-mono text-emerald-200">
+                    <span className="flex items-center gap-1">
+                      <Zap size={10} className="text-emerald-400" />
+                      Tokens de Entrada: <strong>{msg.usage?.promptTokens ?? Math.max(1, Math.ceil(msg.content.length / 4))}</strong>
+                    </span>
                   </div>
                 )}
               </div>
@@ -665,7 +662,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-xs p-3 text-xs text-slate-600 flex items-center gap-2 shadow-2xs">
                 <RefreshCw size={14} className="animate-spin text-emerald-700" />
-                <span>{mode === 'app' ? 'Consultando dados do Supabase e analisando...' : 'Pensando e consultando conhecimentos gerais...'}</span>
+                <span>Processando resposta objetiva...</span>
               </div>
             </div>
           )}
