@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bot, User, Send, Trash2, Printer, FileText, CheckCircle2, 
   AlertTriangle, Wrench, Tractor, Fuel, Database, Sparkles, 
-  Globe, Info, RefreshCw, X
+  Globe, Info, RefreshCw, X, Zap
 } from 'lucide-react';
 import { fleetService } from '../lib/fleetService';
 import { UserRole, Machine, PreventivePlanStatus, WorkOrder, FuelLog, FuelStock, Checklist30d } from '../types';
@@ -23,6 +23,11 @@ export interface ChatMessage {
   mode: 'app' | 'general';
   timestamp: string;
   pdfReport?: PDFReportData;
+  usage?: {
+    promptTokens: number;
+    candidatesTokens: number;
+    totalTokens: number;
+  };
 }
 
 interface AgenteIAProps {
@@ -31,25 +36,65 @@ interface AgenteIAProps {
   userEmail: string;
 }
 
+const CHAT_STORAGE_KEY = 'agro_agente_ia_messages_history_v2';
+const CHAT_MODE_KEY = 'agro_agente_ia_current_mode';
+
+const INITIAL_WELCOME_MSG: ChatMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  content: 'Olá! Sou o **Agente IA Agro** da Agropecuária Boa Sorte. Estou aqui para ajudar você na gestão diária da frota, equipamentos e conhecimentos gerais do agronegócio.\n\nEscolha um dos modos acima para conversar:\n- **Conversa sobre o Aplicativo**: Pergunte sobre preventivas, máquinas, ordens de serviço, diesel e gere relatórios em PDF.\n- **Conversa Geral**: Tire dúvidas gerais de agronomia, mecânica, cálculos e consultas livres.',
+  mode: 'app',
+  timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+};
+
 export default function AgenteIA({ selectedFarmId, userRole, userEmail }: AgenteIAProps) {
-  const [mode, setMode] = useState<'app' | 'general'>('app');
+  // 1. Preservação do Modo Escolhido no LocalStorage
+  const [mode, setMode] = useState<'app' | 'general'>(() => {
+    try {
+      const savedMode = localStorage.getItem(CHAT_MODE_KEY);
+      if (savedMode === 'app' || savedMode === 'general') return savedMode;
+    } catch (e) {}
+    return 'app';
+  });
+
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // 2. Preservação do Histórico de Conversas no LocalStorage (não apaga ao mudar de aba)
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    return [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: 'Olá! Sou o **Agente IA Agro** da Agropecuária Boa Sorte. Estou aqui para ajudar você na gestão diária da frota, equipamentos e conhecimentos gerais do agronegócio.\n\nEscolha um dos modos acima para conversar:\n- **Conversa sobre o Aplicativo**: Pergunte sobre preventivas, máquinas, ordens de serviço, diesel e gere relatórios em PDF.\n- **Conversa Geral**: Tire dúvidas gerais de agronomia, mecânica, cálculos e consultas livres.',
-        mode: 'app',
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    try {
+      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       }
-    ];
+    } catch (e) {
+      console.warn('Alerta ao ler histórico do Agente IA:', e);
+    }
+    return [INITIAL_WELCOME_MSG];
   });
 
   const [activePdfReport, setActivePdfReport] = useState<PDFReportData | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Salva no localStorage sempre que as mensagens forem alteradas
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    } catch (e) {
+      console.warn('Alerta ao persistir mensagens do chat:', e);
+    }
+  }, [messages]);
+
+  // Salva o modo no localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_MODE_KEY, mode);
+    } catch (e) {}
+  }, [mode]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,7 +121,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     'Qual a diferença técnica entre óleos lubrificantes 15W40 CI-4 e CK-4?'
   ];
 
-  // Helper para consultar dados do Supabase e gerar relatórios
+  // Helper local otimizado (paginado e enxuto) para consultar dados do Supabase e gerar relatórios
   const processAppQuery = async (queryText: string): Promise<{ text: string; report?: PDFReportData }> => {
     const q = queryText.toLowerCase();
 
@@ -91,43 +136,44 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const overdue = plans.filter(p => p.status === 'VENCIDA');
       const upcoming = plans.filter(p => p.status === 'PRÓXIMA');
 
-      const items = overdue.map((plan, idx) => {
+      // Limita a 30 itens para o documento PDF oficial
+      const items = overdue.slice(0, 30).map((plan, idx) => {
         const m = machines.find(mach => mach.id === plan.machine_id);
         const farm = farms.find(f => f.id === plan.farm_id)?.name || 'Central';
         return {
           idx: idx + 1,
-          code: m?.code || '-',
-          machine: m?.name || 'Máquina',
+          code: m?.code || plan.machine_code || '-',
+          machine: m?.name || plan.machine_name || 'Máquina',
           farm,
           item: plan.maintenance_item,
-          currentHourKm: `${plan.current_hour_km.toLocaleString('pt-BR')} ${plan.current_hour_km > 5000 ? 'km' : 'h'}`,
-          remaining: `Vencida há ${Math.abs(plan.hour_km_remaining).toLocaleString('pt-BR')} ${plan.current_hour_km > 5000 ? 'km' : 'h'}`,
+          currentHourKm: `${Number(plan.current_hour_km || 0).toLocaleString('pt-BR')} ${Number(plan.current_hour_km || 0) > 5000 ? 'km' : 'h'}`,
+          remaining: `Vencida há ${Math.abs(Number(plan.hour_km_remaining || 0)).toLocaleString('pt-BR')} ${Number(plan.current_hour_km || 0) > 5000 ? 'km' : 'h'}`,
           status: 'VENCIDA'
         };
       });
 
       const reportData: PDFReportData = {
         type: 'preventivas_vencidas',
-        title: 'Relatório de Revisões Preventivas Vencidas',
+        title: 'Relatório Oficial de Preventivas Vencidas',
         summary: `Identificadas ${overdue.length} preventivas vencidas e ${upcoming.length} próximas do vencimento na frota da Agropecuária Boa Sorte.`,
         generatedAt: new Date().toLocaleString('pt-BR'),
         kpis: {
           'Preventivas Vencidas': overdue.length,
           'Próximas da Troca': upcoming.length,
-          'Total de Itens Monitorados': plans.length
+          'Total Monitorado': plans.length
         },
         items
       };
 
-      const responseText = `📄 **Relatório em PDF Gerado com Sucesso!**\n\nIdentifiquei **${overdue.length} preventivas vencidas** que necessitam de intervenção imediata da equipe de manutenção:\n\n${overdue.slice(0, 5).map(p => {
+      const responseText = `📄 **Relatório em PDF Gerado com Sucesso!**\n\nIdentifiquei **${overdue.length} preventivas vencidas** que necessitam de intervenção imediata:\n\n${overdue.slice(0, 4).map(p => {
         const m = machines.find(mach => mach.id === p.machine_id);
-        return `• **${m?.code || 'MAQ'}** (${m?.name}): *${p.maintenance_item}* - Vencida há ${Math.abs(p.hour_km_remaining)}h`;
-      }).join('\n')}${overdue.length > 5 ? `\n• *... e mais ${overdue.length - 5} itens no relatório completo.*` : ''}\n\nClique no botão abaixo para **visualizar e imprimir o relatório oficial em PDF**.`;
+        return `• **${m?.code || p.machine_code || 'MAQ'}** (${m?.name || p.machine_name || 'Equipamento'}): *${p.maintenance_item}* - Vencida há ${Math.abs(Number(p.hour_km_remaining || 0))}h`;
+      }).join('\n')}${overdue.length > 4 ? `\n• *... e mais ${overdue.length - 4} itens no relatório completo.*` : ''}\n\nClique no botão abaixo para **visualizar e imprimir o relatório oficial em PDF**.`;
 
       return { text: responseText, report: reportData };
     }
 
-    // 2. Consulta Geral de Preventivas
+    // 2. Consulta Geral de Preventivas (enxuta)
     if (q.includes('preventiv') || q.includes('revis') || q.includes('troca')) {
       const [plans, machines] = await Promise.all([
         fleetService.getPreventivePlanStatus(),
@@ -137,25 +183,25 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const overdue = plans.filter(p => p.status === 'VENCIDA');
       const upcoming = plans.filter(p => p.status === 'PRÓXIMA');
 
-      let responseText = `🛠️ **Status Atual do Plano Preventivo:**\n\n`;
+      let responseText = `🛠️ **Status do Plano Preventivo:**\n\n`;
       responseText += `• **Vencidas:** ${overdue.length} revisões\n`;
-      responseText += `• **Próximas da Troca:** ${upcoming.length} revisões\n`;
-      responseText += `• **Total Monitorado:** ${plans.length} itens cadastrados\n\n`;
+      responseText += `• **Próximas:** ${upcoming.length} revisões\n`;
+      responseText += `• **Total Monitorado:** ${plans.length} itens\n\n`;
 
       if (overdue.length > 0) {
-        responseText += `⚠️ **Atenção Imediata nas Seguintes Máquinas:**\n`;
-        overdue.slice(0, 5).forEach(plan => {
+        responseText += `⚠️ **Amostra de Máquinas com Preventiva Vencida:**\n`;
+        overdue.slice(0, 4).forEach(plan => {
           const m = machines.find(mach => mach.id === plan.machine_id);
-          responseText += `- **${m?.code}** (${m?.name}): *${plan.maintenance_item}* (Horímetro: ${plan.current_hour_km}h | Vencida há ${Math.abs(plan.hour_km_remaining)}h)\n`;
+          responseText += `- **${m?.code || plan.machine_code || 'MAQ'}**: *${plan.maintenance_item}* (Horímetro: ${plan.current_hour_km}h | Vencida há ${Math.abs(Number(plan.hour_km_remaining || 0))}h)\n`;
         });
-        if (overdue.length > 5) {
-          responseText += `*(e mais ${overdue.length - 5} revisões vencidas)*\n`;
+        if (overdue.length > 4) {
+          responseText += `*(e mais ${overdue.length - 4} itens no relatório)*\n`;
         }
       } else {
         responseText += `✅ Todas as manutenções preventivas estão em dia!\n`;
       }
 
-      responseText += `\n*Dica: Você pode me pedir "Gere um relatório em PDF das preventivas vencidas" a qualquer momento.*`;
+      responseText += `\n*Dica: Peça "Gere um relatório em PDF das preventivas vencidas" para imprimir.*`;
       return { text: responseText };
     }
 
@@ -170,15 +216,15 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const highPriority = openOrders.filter(o => o.priority === 'alta');
 
       let responseText = `📋 **Quadro de Ordens de Serviço (OS):**\n\n`;
-      responseText += `• **OS Abertas / Em Andamento:** ${openOrders.length}\n`;
+      responseText += `• **OS em Aberto / Andamento:** ${openOrders.length}\n`;
       responseText += `• **Prioridade Alta:** ${highPriority.length}\n`;
-      responseText += `• **Total Registrado no Histórico:** ${orders.length} OS\n\n`;
+      responseText += `• **Total no Histórico:** ${orders.length} OS\n\n`;
 
       if (openOrders.length > 0) {
         responseText += `🔧 **Principais Ordens em Aberto:**\n`;
-        openOrders.slice(0, 5).forEach(os => {
+        openOrders.slice(0, 4).forEach(os => {
           const m = machines.find(mach => mach.id === os.machine_id);
-          responseText += `- **OS #${os.id.substring(0, 6)}** | **${m?.code || 'Máquina'}**: ${os.reason} (Status: *${os.status}* | Prioridade: *${os.priority?.toUpperCase()}* | Resp: *${os.responsible || 'Oficina'}*)\n`;
+          responseText += `- **OS #${os.id.substring(0, 6)}** | **${m?.code || 'Máquina'}**: ${os.reason} (${os.status} | Prio: ${os.priority?.toUpperCase()})\n`;
         });
       } else {
         responseText += `✅ Nenhuma Ordem de Serviço pendente no momento.\n`;
@@ -188,7 +234,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     }
 
     // 4. Estoque de Diesel
-    if (q.includes('diesel') || q.includes('estoque') || q.includes('combustivel') && q.includes('saldo')) {
+    if (q.includes('diesel') || q.includes('estoque') || (q.includes('combustivel') && q.includes('saldo'))) {
       const [farms, logs, stockEntries] = await Promise.all([
         fleetService.getFarms(),
         fleetService.getFuelLogs(),
@@ -197,7 +243,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
 
       let responseText = `🛢️ **Posição Atual do Estoque de Diesel:**\n\n`;
 
-      farms.forEach(farm => {
+      farms.slice(0, 5).forEach(farm => {
         const received = stockEntries.filter(s => s.farm_id === farm.id).reduce((acc, s) => acc + (Number(s.liters_received) || 0), 0);
         const consumed = logs.filter(l => l.farm_id === farm.id).reduce((acc, l) => acc + (Number(l.liters_supplied) || ((Number(l.pump_reading_end) - Number(l.pump_reading_start)) || 0)), 0);
         const balance = Math.max(0, received - consumed);
@@ -216,13 +262,13 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         fleetService.getFarms()
       ]);
 
-      const recentLogs = logs.slice(0, 5);
+      const recentLogs = logs.slice(0, 4);
       const totalLiters = logs.reduce((acc, l) => acc + (Number(l.liters_supplied) || 0), 0);
 
       let responseText = `⛽ **Resumo de Abastecimentos:**\n\n`;
-      responseText += `• **Total de Registros:** ${logs.length} abastecimentos realizados\n`;
-      responseText += `• **Volume Total Consumido:** ${totalLiters.toLocaleString('pt-BR')} Litros\n\n`;
-      responseText += `🔍 **Últimos Lançamentos Registrados:**\n`;
+      responseText += `• **Total de Registros:** ${logs.length} abastecimentos\n`;
+      responseText += `• **Volume Total:** ${totalLiters.toLocaleString('pt-BR')} Litros\n\n`;
+      responseText += `🔍 **Últimos Abastecimentos:**\n`;
 
       recentLogs.forEach(l => {
         const m = machines.find(mach => mach.id === l.machine_id);
@@ -242,9 +288,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         fleetService.getFarms()
       ]);
 
-      // Se pediu PDF da frota
       if (q.includes('pdf')) {
-        const items = machines.map((m, idx) => ({
+        const items = machines.slice(0, 35).map((m, idx) => ({
           idx: idx + 1,
           code: m.code,
           name: m.name,
@@ -268,54 +313,28 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         };
 
         return {
-          text: `📄 **Relatório em PDF da Frota Gerado!**\n\nCompilei todos os dados de ${machines.length} máquinas com seus horímetros atualizados e fazendas alocadas.\n\nClique no botão abaixo para **visualizar ou imprimir o documento em formato A4**.`,
+          text: `📄 **Relatório em PDF da Frota Gerado!**\n\nCompilei os dados de ${machines.length} máquinas com seus horímetros atualizados.\n\nClique no botão abaixo para **visualizar ou imprimir o documento em formato A4**.`,
           report: reportData
         };
       }
 
-      let responseText = `🚜 **Resumo Geral da Frota (${machines.length} equipamentos):**\n\n`;
+      let responseText = `🚜 **Resumo da Frota (${machines.length} equipamentos):**\n\n`;
       const active = machines.filter(m => m.status === 'Ativa');
-      const inMaint = machines.filter(m => m.status === 'Em Manutenção' || m.status === 'Parada');
+      const inMaint = machines.filter(m => m.status === 'Em manutenção' || m.status === 'Parada');
 
       responseText += `• **Máquinas Ativas:** ${active.length}\n`;
       responseText += `• **Em Manutenção ou Paradas:** ${inMaint.length}\n\n`;
       responseText += `📌 **Principais Equipamentos:**\n`;
 
-      machines.slice(0, 6).forEach(m => {
+      machines.slice(0, 4).forEach(m => {
         const farm = farms.find(f => f.id === m.farm_id)?.name || 'Central';
-        responseText += `- **${m.code}** (${m.name} ${m.model}): **${(m.current_hour_km || 0).toLocaleString('pt-BR')} h** - *${farm}* (Status: ${m.status})\n`;
+        responseText += `- **${m.code}** (${m.name}): **${(m.current_hour_km || 0).toLocaleString('pt-BR')} h** - *${farm}* (${m.status})\n`;
       });
 
       return { text: responseText };
     }
 
-    // 7. Checklists
-    if (q.includes('checklist') || q.includes('inspeç') || q.includes('avaria')) {
-      const [checklists, machines] = await Promise.all([
-        fleetService.getChecklists(),
-        fleetService.getMachines()
-      ]);
-
-      const attentionNeeded = checklists.filter(c => c.overall_status === 'Necessita Atenção');
-
-      let responseText = `📝 **Histórico de Checklists Recentes:**\n\n`;
-      responseText += `• **Total de Inspeções:** ${checklists.length}\n`;
-      responseText += `• **Atenção Necessária:** ${attentionNeeded.length}\n\n`;
-
-      if (attentionNeeded.length > 0) {
-        responseText += `⚠️ **Itens com Observações de Atenção:**\n`;
-        attentionNeeded.slice(0, 5).forEach(c => {
-          const m = machines.find(mach => mach.id === c.machine_id);
-          responseText += `- **${m?.code || 'MAQ'}** em ${c.date}: ${c.failed_items_notes || 'Itens pendentes apontados pelo operador'} (Op: ${c.operator_name})\n`;
-        });
-      } else {
-        responseText += `✅ Todas as últimas inspeções de checklist estão em conformidade.\n`;
-      }
-
-      return { text: responseText };
-    }
-
-    // Resposta padrão no modo aplicativo
+    // Resposta padrão no modo aplicativo com contagens compactas
     const [machines, plans, orders] = await Promise.all([
       fleetService.getMachines(),
       fleetService.getPreventivePlanStatus(),
@@ -326,7 +345,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     const openOrders = orders.filter(o => o.status === 'Aberta' || o.status === 'Em Andamento').length;
 
     return {
-      text: `Olá! Estou conectado aos dados da **Agropecuária Boa Sorte**.\n\nNo momento temos:\n• **${machines.length} máquinas** cadastradas na frota\n• **${overduePlans} preventivas vencidas**\n• **${openOrders} Ordens de Serviço** pendentes\n\nComo posso ajudar? Você pode me perguntar sobre peças, horímetros, diesel, preventivas ou pedir a **geração de um relatório em PDF**!`
+      text: `Olá! Estou conectado aos dados da **Agropecuária Boa Sorte**.\n\n• **${machines.length} máquinas** cadastradas\n• **${overduePlans} preventivas vencidas**\n• **${openOrders} Ordens de Serviço** pendentes\n\nComo posso ajudar? Pergunte sobre peças, horímetros, diesel, preventivas ou peça um **relatório em PDF**!`
     };
   };
 
@@ -347,9 +366,20 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     setIsLoading(true);
 
     try {
-      // Tenta chamar o backend da API Gemini primeiro
       let assistantResponse = '';
       let generatedReport: PDFReportData | undefined = undefined;
+      let tokenUsage: { promptTokens: number; candidatesTokens: number; totalTokens: number } | undefined = undefined;
+
+      // 3. Janela Curta de Mensagens para poupar tokens do Gemini
+      // Envia somente as 2 últimas mensagens recentes (1 usuário, 1 assistente) e resume as antigas
+      const recentWindow = messages.slice(-2).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content.substring(0, 180) }]
+      }));
+
+      const summaryNote = messages.length > 2 
+        ? `Conversa anterior com ${messages.length} mensagens sobre operações da fazenda` 
+        : undefined;
 
       try {
         const response = await fetch('/api/gemini/chat', {
@@ -358,10 +388,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
           body: JSON.stringify({
             message: userMsg.content,
             mode,
-            history: messages.slice(-6).map(m => ({
-              role: m.role === 'user' ? 'user' : 'model',
-              parts: [{ text: m.content }]
-            })),
+            history: recentWindow,
+            previousSummary: summaryNote,
             selectedFarmId
           })
         });
@@ -373,29 +401,32 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
             if (data.pdfReport) {
               generatedReport = data.pdfReport;
             }
+            if (data.usage) {
+              tokenUsage = data.usage;
+            }
           }
         }
       } catch (backendErr) {
         console.warn('Backend Gemini não disponível, aplicando processamento seguro:', backendErr);
       }
 
-      // Se o backend não respondeu ou estamos no modo App, roda o processador local conectado ao Supabase
+      // Se o backend Gemini não respondeu ou em modo App, roda o processador local conectado ao Supabase
       if (!assistantResponse) {
         if (mode === 'app') {
           const appResult = await processAppQuery(userMsg.content);
           assistantResponse = appResult.text;
           generatedReport = appResult.report;
         } else {
-          // Modo Geral - Respostas inteligentes sobre agronomia e agropecuária
+          // Modo Geral - Conhecimento agronômico e mecânico conciso
           const q = userMsg.content.toLowerCase();
           if (q.includes('npk') || q.includes('adub') || q.includes('soja') || q.includes('milho')) {
-            assistantResponse = `🌱 **Recomendações Agronômicas Gerais de Nutrição e Adubação:**\n\n• **Análise de Solo:** A dosagem ideal de NPK depende sempre do teor de argila, fósforo (P-resina ou Mehlich) e potássio trocável da análise de solo recente (0-20 cm e 20-40 cm).\n• **Soja:** Como leguminosa, a soja fixa nitrogênio biologicamente através da inoculação com *Bradyrhizobium*. O foco da adubação de base concentra-se em Fósforo ($P_2O_5$) e Potássio ($K_2O$), tipicamente em formulações como 04-30-16, 02-20-20 ou adubação potássica parcelada a lanço.\n• **Milho:** Exige alta demanda de Nitrogênio em cobertura (estádios V4 a V6), além de zinco e boro na dessecação ou no sulco.\n\n*Deseja orientações específicas sobre alguma cultura ou estágio fenológico?*`;
+            assistantResponse = `🌱 **Recomendações Agronômicas de Adubação:**\n\n• **Soja:** Inoculação biológica com *Bradyrhizobium* supre o nitrogênio. A adubação de base foca em Fósforo ($P_2O_5$) e Potássio ($K_2O$), calibrada pela análise de solo.\n• **Milho:** Alta exigência de Nitrogênio em cobertura (estádios V4 a V6), além de zinco na semeadura.\n\n*Necessita de recomendações para uma cultura ou formulação específica?*`;
           } else if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40')) {
-            assistantResponse = `🛢️ **Diferença Técnica entre Especificações de Óleo (CI-4 vs CK-4):**\n\n• **API CI-4 (2002):** Desenvolvido para motores diesel pesados com sistema EGR sem filtro de partículas (DPF). É excelente para combustíveis com teores variados de enxofre.\n• **API CK-4 (2016):** Formulação moderna de baixo teor de cinzas sulfatadas, fósforo e enxofre (Low SAPS). Projetado para motores Tier 4 / Euro 5 e Euro 6 equipados com DPF, catalisadores SCR e que utilizam **Diesel S10** obrigatoriamente.\n• **Vantagens do CK-4:** Maior resistência à oxidação térmica e maior proteção contra desgaste de anéis e camisas em regimes severos de colheita e plantio.`;
+            assistantResponse = `🛢️ **Diferença Técnica de Óleos (CI-4 vs CK-4):**\n\n• **API CI-4:** Indicado para motores mecânicos e eletrônicos anteriores com teores flexíveis de enxofre no diesel.\n• **API CK-4:** Formulação moderna Low SAPS projetada para motores Tier 4 / Euro 5 e Euro 6 equipados com DPF/SCR, com maior resistência à oxidação sob calor intenso.\n• **Aplicação:** Em tratores e colheitadeiras com diesel S10, o CK-4 oferece máxima proteção contra depósitos.`;
           } else if (q.includes('comunicado') || q.includes('mensagem') || q.includes('texto') || q.includes('aviso')) {
-            assistantResponse = `📄 **Modelo de Comunicado Interno para Operadores de Máquinas:**\n\n---\n**COMUNICADO INTERNO – GESTÃO DE FROTA E OPERAÇÕES**\n\n**Aos Operadores e Mecânicos da Agropecuária Boa Sorte,**\n\nReforçamos a importância vital do preenchimento e conferência diária do **horímetro atual e das leituras de bomba** em todos os abastecimentos e checklists.\n\n1. O horímetro da máquina é o coração do nosso Plano Preventivo de revisões (trocas de óleo e filtros).\n2. Na bomba de combustível, confira sempre a leitura inicial e final no relógio mecânico para garantir a continuidade correta da litragem.\n3. Qualquer anomalia, ruído anormal ou vazamento deve ser imediatamente reportado para abertura de Ordem de Serviço.\n\nContamos com a colaboração e compromisso de todos para mantermos nossa frota sempre produtiva e segura!\n\n*Atenciosamente,*\n*Gerência de Operações e Frota*\n---`;
+            assistantResponse = `📄 **Modelo de Comunicado Interno:**\n\n**Aos Operadores da Agropecuária Boa Sorte,**\n\nReforçamos a obrigatoriedade do apontamento diário correto do **horímetro atual** e da **leitura inicial/final da bomba** em todos os abastecimentos.\n\nEsses dados alimentam diretamente o Plano Preventivo de trocas de óleo e revisões dos tratores e caminhões.\n\n*Gerência de Operações & Manutenção*`;
           } else {
-            assistantResponse = `🤖 **Assistente Geral:** Recebi sua pergunta no modo geral.\n\nComo assistente amplo, posso orientar sobre:\n• Boas práticas agrícolas, dessecação e manejo de defensivos\n• Manutenção mecânica preventiva de motores agrícolas pesados\n• Cálculo de consumo de combustível e taxa de aplicação por hectare\n• Redação de avisos, procedimentos operacionais e relatórios executivos\n\nComo posso detalhar mais esse assunto para você?`;
+            assistantResponse = `🤖 **Assistente Geral:** Recebi sua pergunta no modo livre.\n\nPosso orientar sobre:\n• Manejo agronômico de culturas e defensivos\n• Manutenção mecânica de motores e transmissões agrícolas\n• Cálculos de taxa de aplicação e consumo de diesel\n• Redação de comunicados e rotinas operacionais`;
           }
         }
       }
@@ -406,7 +437,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         content: assistantResponse,
         mode,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        pdfReport: generatedReport
+        pdfReport: generatedReport,
+        usage: tokenUsage
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -416,7 +448,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: 'Desculpe, ocorreu um erro momentâneo ao processar a consulta. Por favor, tente novamente.',
+          content: 'Desculpe, ocorreu um erro ao processar a consulta. Por favor, tente novamente.',
           mode,
           timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         }
@@ -435,10 +467,14 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     window.print();
   };
 
+  // 4. Limpeza de conversa: somente limpa quando o usuário clica expressamente no botão
   const clearChat = () => {
+    try {
+      localStorage.removeItem(CHAT_STORAGE_KEY);
+    } catch (e) {}
     setMessages([
       {
-        id: 'reset',
+        id: `reset-${Date.now()}`,
         role: 'assistant',
         content: 'Conversa reiniciada. Escolha o modo de atendimento acima e envie sua dúvida ou solicitação.',
         mode,
@@ -573,7 +609,19 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
                   <span className="font-bold flex items-center gap-1">
                     {msg.role === 'user' ? 'Você' : 'Agente IA Agro'}
                   </span>
-                  <span className="opacity-70 font-mono">{msg.timestamp}</span>
+                  
+                  <div className="flex items-center gap-2">
+                    {msg.usage && (
+                      <span 
+                        className="text-[10px] text-slate-400 font-mono flex items-center gap-1 bg-slate-100/80 px-1.5 py-0.5 rounded border border-slate-200" 
+                        title={`Consumo Gemini: Entrada: ${msg.usage.promptTokens} | Saída: ${msg.usage.candidatesTokens} | Total: ${msg.usage.totalTokens} tokens`}
+                      >
+                        <Zap size={10} className="text-emerald-600" />
+                        <span>{msg.usage.totalTokens} tokens</span>
+                      </span>
+                    )}
+                    <span className="opacity-70 font-mono">{msg.timestamp}</span>
+                  </div>
                 </div>
 
                 <div className="whitespace-pre-wrap leading-relaxed font-sans">
