@@ -110,11 +110,11 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
   }, [messages, isLoading]);
 
   const quickPromptsApp = [
-    'Quais preventivas estão vencidas?',
-    'Gere um relatório em PDF das preventivas vencidas',
+    'Quantos equipamentos temos cadastrados?',
+    'Quantas preventivas estão vencidas?',
     'Quantas Ordens de Serviço estão abertas?',
     'Qual o saldo de diesel nas fazendas?',
-    'Últimos abastecimentos registrados',
+    'Gere um relatório em PDF das preventivas vencidas',
     'Gere um relatório em PDF de todas as máquinas'
   ];
 
@@ -129,6 +129,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
   // Helper local 100% objetivo para consultas ao Supabase (somente dados solicitados)
   const processAppQuery = async (queryText: string): Promise<{ text: string; report?: PDFReportData }> => {
     const q = queryText.toLowerCase();
+    const isListRequested = q.includes('quais') || q.includes('liste') || q.includes('listar') || q.includes('nomes') || q.includes('detalhe') || q.includes('relacione');
 
     // 1. Relatório em PDF de Preventivas Vencidas
     if (q.includes('pdf') && (q.includes('preventiv') || q.includes('vencid') || q.includes('revis'))) {
@@ -185,15 +186,17 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const overdue = plans.filter(p => p.status === 'VENCIDA');
       const upcoming = plans.filter(p => p.status === 'PRÓXIMA');
 
-      let responseText = `Preventivas: ${overdue.length} vencidas e ${upcoming.length} próximas da troca (Total: ${plans.length}).\n`;
-      if (overdue.length > 0) {
-        responseText += `Vencidas:\n` + overdue.slice(0, 5).map(plan => {
+      if (!isListRequested) {
+        return {
+          text: `• ${overdue.length} preventivas vencidas\n• ${upcoming.length} próximas da troca\n• ${plans.length} total monitorado`
+        };
+      }
+
+      let responseText = `Preventivas Vencidas (${overdue.length}):\n` +
+        overdue.slice(0, 5).map(plan => {
           const m = machines.find(mach => mach.id === plan.machine_id);
           return `• ${m?.code || plan.machine_code || 'MAQ'}: ${plan.maintenance_item} (vencida há ${Math.abs(Number(plan.hour_km_remaining || 0))}h)`;
         }).join('\n');
-      } else {
-        responseText += `Todas as preventivas em dia.`;
-      }
 
       return { text: responseText };
     }
@@ -208,15 +211,17 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const openOrders = orders.filter(o => o.status === 'Aberta' || o.status === 'Em Andamento');
       const highPriority = openOrders.filter(o => o.priority === 'alta');
 
-      let responseText = `Ordens de Serviço: ${openOrders.length} abertas (${highPriority.length} alta prioridade | ${orders.length} total no histórico).\n`;
-      if (openOrders.length > 0) {
-        responseText += openOrders.slice(0, 5).map(os => {
+      if (!isListRequested) {
+        return {
+          text: `• ${openOrders.length} ordens de serviço abertas\n• ${highPriority.length} com prioridade alta\n• ${orders.length} total no histórico`
+        };
+      }
+
+      let responseText = `Ordens de Serviço Abertas (${openOrders.length}):\n` +
+        openOrders.slice(0, 5).map(os => {
           const m = machines.find(mach => mach.id === os.machine_id);
           return `• OS #${os.id.substring(0, 6)} (${m?.code || 'Máquina'}): ${os.reason} [${os.status} | prio: ${os.priority?.toUpperCase()}]`;
         }).join('\n');
-      } else {
-        responseText += `Nenhuma OS pendente.`;
-      }
 
       return { text: responseText };
     }
@@ -247,9 +252,15 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         fleetService.getFarms()
       ]);
 
-      const recentLogs = logs.slice(0, 4);
       const totalLiters = logs.reduce((acc, l) => acc + (Number(l.liters_supplied) || 0), 0);
 
+      if (!isListRequested) {
+        return {
+          text: `• ${logs.length} abastecimentos registrados\n• ${totalLiters.toLocaleString('pt-BR')} L abastecidos no total`
+        };
+      }
+
+      const recentLogs = logs.slice(0, 4);
       let responseText = `Abastecimentos: ${logs.length} registros (${totalLiters.toLocaleString('pt-BR')} L totais).\nÚltimos lançamentos:\n` +
         recentLogs.map(l => {
           const m = machines.find(mach => mach.id === l.machine_id);
@@ -260,8 +271,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       return { text: responseText };
     }
 
-    // 6. Máquinas e Frota (100% objetiva)
-    if (q.includes('maquina') || q.includes('máquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('horímetro') || q.includes('horimetro')) {
+    // 6. Máquinas e Frota (100% objetiva - Regra estrita de quantidade)
+    if (q.includes('maquina') || q.includes('máquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('horímetro') || q.includes('horimetro') || q.includes('equipamento')) {
       const [machines, farms] = await Promise.all([
         fleetService.getMachines(),
         fleetService.getFarms()
@@ -300,7 +311,15 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       const active = machines.filter(m => m.status === 'Ativa');
       const inMaint = machines.filter(m => m.status === 'Em manutenção' || m.status === 'Parada');
 
-      let responseText = `Frota: ${machines.length} máquinas (${active.length} ativas, ${inMaint.length} em manutenção/paradas).\n` +
+      // Se for pergunta de quantidade (ex: quantos equipamentos temos cadastrados?):
+      // Mostra ESTRITAMENTE os totais e NADA MAIS, sem listar equipamentos ou nomes.
+      if (!isListRequested) {
+        return {
+          text: `• ${machines.length} equipamentos\n• ${active.length} ativos\n• ${inMaint.length} em manutenção/parado`
+        };
+      }
+
+      let responseText = `Frota (${machines.length} equipamentos):\n` +
         machines.slice(0, 5).map(m => `• ${m.code} (${m.name}): ${(m.current_hour_km || 0).toLocaleString('pt-BR')} h - ${m.status}`).join('\n');
 
       return { text: responseText };
@@ -317,7 +336,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
     const openOrders = orders.filter(o => o.status === 'Aberta' || o.status === 'Em Andamento').length;
 
     return {
-      text: `Frota cadastrada: ${machines.length} máquinas | Preventivas vencidas: ${overduePlans} | OS abertas: ${openOrders}`
+      text: `• ${machines.length} equipamentos cadastrados\n• ${overduePlans} preventivas vencidas\n• ${openOrders} ordens de serviço abertas`
     };
   };
 
@@ -349,62 +368,70 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       let generatedReport: PDFReportData | undefined = undefined;
       let tokenUsage: { promptTokens: number; candidatesTokens: number; totalTokens: number } | undefined = undefined;
 
-      // Janela Curta de Mensagens para poupar tokens do Gemini (máximo 2 mensagens recentes)
-      const recentWindow = messages.slice(-2).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content.substring(0, 180) }]
-      }));
+      // Se estiver no Modo Aplicativo, processa com dados autenticados do Supabase
+      if (mode === 'app') {
+        const appResult = await processAppQuery(userMsg.content);
+        assistantResponse = appResult.text;
+        generatedReport = appResult.report;
 
-      try {
-        const response = await fetch('/api/gemini/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: userMsg.content,
-            mode,
-            history: recentWindow,
-            selectedFarmId
-          })
-        });
+        const pTokens = Math.max(1, Math.ceil(userMsg.content.length / 4));
+        const cTokens = Math.max(1, Math.ceil(assistantResponse.length / 4));
+        tokenUsage = {
+          promptTokens: pTokens,
+          candidatesTokens: cTokens,
+          totalTokens: pTokens + cTokens
+        };
+      } else {
+        // Modo Geral - tenta backend e aplica fallback técnico direto
+        try {
+          const recentWindow = messages.slice(-2).map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.content.substring(0, 180) }]
+          }));
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.text) {
-            assistantResponse = data.text;
-            if (data.pdfReport) {
-              generatedReport = data.pdfReport;
-            }
-            if (data.usage) {
-              tokenUsage = data.usage;
+          const response = await fetch('/api/gemini/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: userMsg.content,
+              mode: 'general',
+              history: recentWindow
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.text) {
+              assistantResponse = data.text;
+              if (data.usage) {
+                tokenUsage = data.usage;
+              }
             }
           }
-        }
-      } catch (backendErr) {
-        console.warn('Backend indisponível momentaneamente:', backendErr);
-      }
+        } catch (e) {}
 
-      // Se não respondeu via backend, processa via rotina estrita e objetiva
-      if (!assistantResponse) {
-        if (mode === 'app') {
-          const appResult = await processAppQuery(userMsg.content);
-          assistantResponse = appResult.text;
-          generatedReport = appResult.report;
-        } else {
-          // Modo Geral - 100% objetivo e direto
+        if (!assistantResponse) {
           const q = userMsg.content.toLowerCase();
           if (q.includes('npk') || q.includes('adub') || q.includes('soja') || q.includes('milho')) {
-            assistantResponse = `Soja: Fixação biológica com Bradyrhizobium supre Nitrogênio. Adubação de base com P2O5 e K2O.\nMilho: Alta exigência de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
+            assistantResponse = `• Soja: Fixação biológica com Bradyrhizobium supre Nitrogênio. Adubação com P2O5 e K2O.\n• Milho: Alta exigência de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
           } else if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40') || q.includes('ci-4') || q.includes('ck-4')) {
-            assistantResponse = `API CI-4: Para motores convencionais, tolerante a variações de enxofre no diesel.\nAPI CK-4: Para motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior proteção à oxidação sob calor intenso.`;
+            assistantResponse = `• API CI-4: Para motores convencionais, tolerante a variações de enxofre no diesel.\n• API CK-4: Para motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior proteção à oxidação sob calor intenso.`;
           } else if (q.includes('comunicado') || q.includes('mensagem') || q.includes('aviso')) {
             assistantResponse = `Comunicado aos operadores: O apontamento diário correto do horímetro atual e da leitura da bomba em todos os abastecimentos é obrigatório para as revisões preventivas.`;
           } else {
             assistantResponse = `Resposta técnica direta sobre a solicitação. Especifique parâmetros de máquina, dosagem ou cálculo para resposta imediata.`;
           }
+
+          const pTokens = Math.max(1, Math.ceil(userMsg.content.length / 4));
+          const cTokens = Math.max(1, Math.ceil(assistantResponse.length / 4));
+          tokenUsage = {
+            promptTokens: pTokens,
+            candidatesTokens: cTokens,
+            totalTokens: pTokens + cTokens
+          };
         }
       }
 
-      // Garante que o valor dos tokens NUNCA fique vazio
       if (!tokenUsage) {
         const pTokens = Math.max(1, Math.ceil(userMsg.content.length / 4));
         const cTokens = Math.max(1, Math.ceil(assistantResponse.length / 4));
@@ -599,7 +626,7 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
                 </div>
 
                 {/* TEXTO DA RESPOSTA (SEMPRE OBJETIVA E DIRETA) */}
-                <div className="whitespace-pre-wrap leading-relaxed font-sans">
+                <div className="whitespace-pre-wrap leading-relaxed font-sans font-medium text-slate-800">
                   {msg.content}
                 </div>
 

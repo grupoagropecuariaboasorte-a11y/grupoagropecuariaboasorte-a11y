@@ -48,9 +48,10 @@ async function startServer() {
       }
 
       const q = message.toLowerCase().trim();
+      const isListExplicitlyAsked = q.includes('quais') || q.includes('liste') || q.includes('listar') || q.includes('nomes') || q.includes('detalhe') || q.includes('relacione');
 
       // =========================================================================
-      // 1. REQUISIÇÃO DE RELATÓRIO PDF NO MODO APLICATIVO (RESPOSTA CURTA E OBJETIVA)
+      // 1. REQUISIÇÃO DE RELATÓRIO PDF NO MODO APLICATIVO
       // =========================================================================
       if (mode === 'app' && q.includes('pdf')) {
         // PDF de Preventivas Vencidas
@@ -104,7 +105,6 @@ async function startServer() {
             items
           };
 
-          // Resposta 100% curta e objetiva
           const textResponse = `Relatório em PDF gerado com ${overdue.length} preventivas vencidas. Clique abaixo para abrir ou imprimir.`;
 
           const promptTokens = Math.max(1, Math.ceil(message.length / 4));
@@ -191,75 +191,102 @@ async function startServer() {
       if (mode === 'app') {
         try {
           if (q.includes('preventiv') || q.includes('revis') || q.includes('vencid') || q.includes('troca')) {
-            const [overdueCount, upcomingCount, sampleOverdue] = await Promise.all([
+            const [overdueCount, upcomingCount, totalCountRes, sampleOverdue] = await Promise.all([
               supabase.from('preventive_plan_status').select('id', { count: 'exact', head: true }).eq('status', 'VENCIDA'),
               supabase.from('preventive_plan_status').select('id', { count: 'exact', head: true }).eq('status', 'PRÓXIMA'),
-              supabase.from('preventive_plan_status')
-                .select('machine_code, maintenance_item, hour_km_remaining')
-                .eq('status', 'VENCIDA')
-                .limit(5)
+              supabase.from('preventive_plan_status').select('id', { count: 'exact', head: true }),
+              isListExplicitlyAsked
+                ? supabase.from('preventive_plan_status').select('machine_code, maintenance_item, hour_km_remaining').eq('status', 'VENCIDA').limit(5)
+                : Promise.resolve({ data: [] })
             ]);
 
             const vCount = overdueCount.count || 0;
             const pCount = upcomingCount.count || 0;
-            const sample = (sampleOverdue.data || []).map((p: any) => 
-              `• ${p.machine_code || 'MAQ'}: ${p.maintenance_item} (vencida há ${Math.abs(Number(p.hour_km_remaining || 0))}h)`
-            ).join('\n');
+            const tCount = totalCountRes.count || 0;
 
-            compactDataContext = `[DADOS SUPABASE]: Vencidas: ${vCount}, Próximas: ${pCount}.\n${sample}`;
-            directObjectiveText = `Preventivas Vencidas: ${vCount} | Próximas da troca: ${pCount}\n${sample || 'Nenhuma preventiva vencida no momento.'}`;
+            compactDataContext = `[DADOS SUPABASE]: ${vCount} preventivas vencidas, ${pCount} próximas da troca, ${tCount} total.`;
+
+            if (isListExplicitlyAsked) {
+              const sample = (sampleOverdue.data || []).map((p: any) => 
+                `• ${p.machine_code || 'MAQ'}: ${p.maintenance_item} (vencida há ${Math.abs(Number(p.hour_km_remaining || 0))}h)`
+              ).join('\n');
+              directObjectiveText = `Preventivas Vencidas:\n${sample || 'Nenhuma preventiva vencida.'}`;
+            } else {
+              // Pergunta de quantidade: somente os totais numéricos
+              directObjectiveText = `• ${vCount} preventivas vencidas\n• ${pCount} próximas da troca\n• ${tCount} total monitorado`;
+            }
 
           } else if (q.includes('ordem') || q.includes(' os ') || q.startsWith('os ') || q.includes('serviço') || q.includes('manutenç')) {
-            const [openOrdersCount, highPriorityCount, sampleOrders] = await Promise.all([
+            const [openOrdersCount, highPriorityCount, totalOrdersRes, sampleOrders] = await Promise.all([
               supabase.from('work_orders').select('id', { count: 'exact', head: true }).in('status', ['Aberta', 'Em Andamento']),
               supabase.from('work_orders').select('id', { count: 'exact', head: true }).eq('priority', 'alta'),
-              supabase.from('work_orders')
-                .select('id, reason, status, priority')
-                .in('status', ['Aberta', 'Em Andamento'])
-                .limit(5)
+              supabase.from('work_orders').select('id', { count: 'exact', head: true }),
+              isListExplicitlyAsked
+                ? supabase.from('work_orders').select('id, reason, status, priority').in('status', ['Aberta', 'Em Andamento']).limit(5)
+                : Promise.resolve({ data: [] })
             ]);
 
             const oCount = openOrdersCount.count || 0;
             const hpCount = highPriorityCount.count || 0;
-            const sample = (sampleOrders.data || []).map((o: any) => 
-              `• OS #${(o.id || '').substring(0, 6)}: ${o.reason} (${o.status}, prioridade: ${o.priority})`
-            ).join('\n');
+            const totCount = totalOrdersRes.count || 0;
 
-            compactDataContext = `[DADOS SUPABASE]: OS Abertas: ${oCount} (Alta prio: ${hpCount}).\n${sample}`;
-            directObjectiveText = `Ordens de Serviço Abertas: ${oCount} (Alta prioridade: ${hpCount})\n${sample || 'Nenhuma OS aberta no momento.'}`;
+            compactDataContext = `[DADOS SUPABASE]: ${oCount} OS abertas (${hpCount} alta prioridade), ${totCount} total.`;
+
+            if (isListExplicitlyAsked) {
+              const sample = (sampleOrders.data || []).map((o: any) => 
+                `• OS #${(o.id || '').substring(0, 6)}: ${o.reason} (${o.status}, prioridade: ${o.priority})`
+              ).join('\n');
+              directObjectiveText = `Ordens de Serviço Abertas:\n${sample || 'Nenhuma OS aberta.'}`;
+            } else {
+              // Pergunta de quantidade: somente os totais numéricos
+              directObjectiveText = `• ${oCount} ordens de serviço abertas\n• ${hpCount} com alta prioridade\n• ${totCount} no histórico total`;
+            }
 
           } else if (q.includes('diesel') || q.includes('abastec') || q.includes('combustivel') || q.includes('bomba') || q.includes('litro')) {
             const [logsCount, sampleLogs] = await Promise.all([
               supabase.from('fuel_logs').select('id', { count: 'exact', head: true }),
-              supabase.from('fuel_logs')
-                .select('date, liters_supplied, pump_reading_start, pump_reading_end')
-                .order('date', { ascending: false })
-                .limit(4)
+              isListExplicitlyAsked
+                ? supabase.from('fuel_logs').select('date, liters_supplied, pump_reading_start, pump_reading_end').order('date', { ascending: false }).limit(4)
+                : Promise.resolve({ data: [] })
             ]);
 
             const lCount = logsCount.count || 0;
-            const sample = (sampleLogs.data || []).map((l: any) => 
-              `• ${l.date || '-'}: ${l.liters_supplied || (Number(l.pump_reading_end) - Number(l.pump_reading_start)) || 0} L`
-            ).join('\n');
 
-            compactDataContext = `[DADOS SUPABASE]: ${lCount} abastecimentos registrados.\n${sample}`;
-            directObjectiveText = `Abastecimentos: ${lCount} registros totais.\nÚltimos lançamentos:\n${sample || 'Nenhum lançamento recente.'}`;
+            compactDataContext = `[DADOS SUPABASE]: ${lCount} abastecimentos registrados.`;
 
-          } else if (q.includes('maquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('horimetro') || q.includes('horímetro')) {
+            if (isListExplicitlyAsked) {
+              const sample = (sampleLogs.data || []).map((l: any) => 
+                `• ${l.date || '-'}: ${l.liters_supplied || (Number(l.pump_reading_end) - Number(l.pump_reading_start)) || 0} L`
+              ).join('\n');
+              directObjectiveText = `Últimos Abastecimentos:\n${sample || 'Nenhum lançamento recente.'}`;
+            } else {
+              directObjectiveText = `• ${lCount} abastecimentos registrados no sistema`;
+            }
+
+          } else if (q.includes('maquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('equipamento') || q.includes('horimetro') || q.includes('horímetro')) {
             const [totalCount, activeCount, sampleMachines] = await Promise.all([
               supabase.from('machines').select('id', { count: 'exact', head: true }),
               supabase.from('machines').select('id', { count: 'exact', head: true }).eq('status', 'Ativa'),
-              supabase.from('machines').select('code, name, model, current_hour_km, status').limit(5)
+              isListExplicitlyAsked
+                ? supabase.from('machines').select('code, name, model, current_hour_km, status').limit(5)
+                : Promise.resolve({ data: [] })
             ]);
 
             const tCount = totalCount.count || 0;
             const aCount = activeCount.count || 0;
-            const sample = (sampleMachines.data || []).map((m: any) => 
-              `• ${m.code} (${m.name}): ${m.current_hour_km || 0} h - ${m.status}`
-            ).join('\n');
+            const inMaintCount = Math.max(0, tCount - aCount);
 
-            compactDataContext = `[DADOS SUPABASE]: Total: ${tCount}, Ativas: ${aCount}.\n${sample}`;
-            directObjectiveText = `Frota: ${tCount} máquinas (${aCount} ativas, ${Math.max(0, tCount - aCount)} em manutenção/paradas)\n${sample}`;
+            compactDataContext = `[DADOS SUPABASE]: ${tCount} equipamentos, ${aCount} ativos, ${inMaintCount} em manutenção/parado.`;
+
+            if (isListExplicitlyAsked) {
+              const sample = (sampleMachines.data || []).map((m: any) => 
+                `• ${m.code} (${m.name}): ${m.current_hour_km || 0} h - ${m.status}`
+              ).join('\n');
+              directObjectiveText = `Máquinas da Frota:\n${sample}`;
+            } else {
+              // Resposta ESTRITAMENTE numérica de quantidade solicitada pelo usuário
+              directObjectiveText = `• ${tCount} equipamentos\n• ${aCount} ativos\n• ${inMaintCount} em manutenção/parado`;
+            }
 
           } else {
             const [machCount, overdueCount, openOsCount] = await Promise.all([
@@ -268,8 +295,12 @@ async function startServer() {
               supabase.from('work_orders').select('id', { count: 'exact', head: true }).in('status', ['Aberta', 'Em Andamento'])
             ]);
 
-            compactDataContext = `[DADOS SUPABASE]: ${machCount.count || 0} máquinas, ${overdueCount.count || 0} preventivas vencidas, ${openOsCount.count || 0} OS abertas.`;
-            directObjectiveText = `Frota cadastrada: ${machCount.count || 0} máquinas | Preventivas vencidas: ${overdueCount.count || 0} | OS abertas: ${openOsCount.count || 0}`;
+            const mCount = machCount.count || 0;
+            const oCount = overdueCount.count || 0;
+            const osCount = openOsCount.count || 0;
+
+            compactDataContext = `[DADOS SUPABASE]: ${mCount} máquinas, ${oCount} preventivas vencidas, ${osCount} OS abertas.`;
+            directObjectiveText = `• ${mCount} equipamentos cadastrados\n• ${oCount} preventivas vencidas\n• ${osCount} ordens de serviço abertas`;
           }
         } catch (dbErr) {
           console.warn('Alerta na consulta compacta ao Supabase:', dbErr);
@@ -277,13 +308,13 @@ async function startServer() {
       } else {
         // Modo Geral - Respostas estritamente objetivas e curtas
         if (q.includes('npk') || q.includes('adub') || q.includes('soja') || q.includes('milho')) {
-          directObjectiveText = `Soja: Fixação biológica supre Nitrogênio. Adubação com P2O5 e K2O conforme análise do solo.\nMilho: Alta demanda de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
+          directObjectiveText = `• Soja: Fixação biológica com Bradyrhizobium supre Nitrogênio. Adubação com P2O5 e K2O.\n• Milho: Alta demanda de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
         } else if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40') || q.includes('ci-4') || q.includes('ck-4')) {
-          directObjectiveText = `API CI-4: Para motores convencionais, tolerante a variações de enxofre no diesel.\nAPI CK-4: Para motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior resistência térmica.`;
+          directObjectiveText = `• API CI-4: Motores convencionais, tolerante a variações de enxofre no diesel.\n• API CK-4: Motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior resistência térmica.`;
         } else if (q.includes('comunicado') || q.includes('mensagem') || q.includes('aviso')) {
           directObjectiveText = `Comunicado aos operadores: O apontamento diário correto do horímetro atual e da leitura da bomba em todos os abastecimentos é obrigatório para as revisões preventivas.`;
         } else {
-          directObjectiveText = `Resposta direta sobre o assunto solicitado: forneça o detalhe específico desejado para análise técnica imediata.`;
+          directObjectiveText = `Resposta técnica direta sobre a solicitação. Especifique parâmetros de máquina, dosagem ou cálculo para resposta imediata.`;
         }
       }
 
@@ -293,8 +324,16 @@ async function startServer() {
       if (ai) {
         try {
           const systemInstruction = mode === 'app'
-            ? `Você é o Agente IA Agro da Agropecuária Boa Sorte. REGRA MANDATÓRIA: Responda de forma 100% objetiva, curta e direta, fornecendo ESTRITAMENTE o que foi solicitado. Proibido usar saudações, introduções, cumprimentos, dicas ou sugestões extras. Responda apenas com os dados solicitados.`
-            : `Você é o Agente IA Agro em modo Geral. REGRA MANDATÓRIA: Responda de forma 100% objetiva, curta e direta, fornecendo ESTRITAMENTE o que foi solicitado. Proibido usar saudações, introduções ou perguntas retóricas ao final. Responda diretamente ao ponto.`;
+            ? `Você é o Agente IA Agro da Agropecuária Boa Sorte.
+REGRA MANDATÓRIA DE OBJETIVIDADE:
+- Em perguntas de QUANTIDADE (ex: quantos, quantas, total, cadastro, equipamentos, preventivas, OS), responda ESTRITAMENTE com os totais em tópicos simples e NADA MAIS.
+Exemplo exato para perguntas sobre equipamentos:
+• 160 equipamentos
+• 159 ativos
+• 1 em manutenção/parado
+- NUNCA liste nomes de equipamentos, marcas, modelos, códigos ou itens individuais a menos que o usuário use expressamente palavras como "quais", "liste", "listar" ou "nomes".
+- Responda apenas e exclusivamente o que foi perguntado. Proibido saudações, introduções ou explicações adicionais.`
+            : `Você é o Agente IA Agro em modo Geral. REGRA MANDATÓRIA: Em perguntas de quantidade ou contagem, mostre somente os totais numéricos e resumo essencial. Não liste itens desnecessários. Sem saudações ou enrolação.`;
 
           const promptContent = mode === 'app' && compactDataContext
             ? `${compactDataContext}\nPergunta: ${message}`
@@ -305,7 +344,7 @@ async function startServer() {
             contents: promptContent,
             config: {
               systemInstruction,
-              maxOutputTokens: 350
+              maxOutputTokens: 250
             }
           });
 
@@ -329,7 +368,7 @@ async function startServer() {
             });
           }
         } catch (geminiError: any) {
-          // Loga erro sem quebrar
+          // Fallback seguro
         }
       }
 
