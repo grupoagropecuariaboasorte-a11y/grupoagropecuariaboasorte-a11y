@@ -20,6 +20,7 @@ import CostRanking from './pages/CostRanking';
 import MonthlyReport from './pages/MonthlyReport';
 import MachineReport from './pages/MachineReport';
 import SettingsPage from './pages/Settings';
+import AgenteIA from './pages/AgenteIA';
 
 // Importar Componentes Compartilhados
 import Sidebar from './components/Sidebar';
@@ -33,6 +34,7 @@ import { checkForAppUpdate, UpdateCheckResult, isAndroidCapacitor } from './lib/
 const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   admin: [
     '/',
+    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',
@@ -48,6 +50,7 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   control: [
     '/',
+    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',
@@ -61,10 +64,12 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/relatorio-maquinas'
   ],
   fuel: [
+    '/agente-ia',
     '/combustivel',
     '/estoque-diesel'
   ],
   mechanic: [
+    '/agente-ia',
     '/manutencao',
     '/plano-preventivo',
     '/checklist',
@@ -72,6 +77,7 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   editor: [
     '/',
+    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',
@@ -86,6 +92,7 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   viewer: [
     '/',
+    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',
@@ -367,6 +374,14 @@ function AppContent() {
               element={
                 <ProtectedRoute path="/" userRole={userRole}>
                   <Dashboard selectedFarmId={selectedFarmId} selectedPeriod={selectedPeriod} userRole={userRole} />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/agente-ia" 
+              element={
+                <ProtectedRoute path="/agente-ia" userRole={userRole}>
+                  <AgenteIA selectedFarmId={selectedFarmId} userRole={userRole} userEmail={userEmail} />
                 </ProtectedRoute>
               } 
             />

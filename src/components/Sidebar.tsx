@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Tractor, Layers, Fuel, Database, Wrench, 
+  Bot, LayoutDashboard, Tractor, Layers, Fuel, Database, Wrench, 
   CalendarDays, CheckSquare, TrendingUp, ClipboardList, 
   FileText, FileSpreadsheet, Settings, LogOut, Info, X
 } from 'lucide-react';
@@ -53,6 +53,7 @@ export default function Sidebar({ userRole, userEmail, onLogout, isOpen = false,
   }, []);
 
   const allMenuItems = [
+    { path: '/agente-ia', label: 'Agente IA Agro', icon: Bot, roles: ['admin', 'control', 'editor', 'viewer', 'mechanic', 'fuel'] },
     { path: '/', label: 'Painel Geral', icon: LayoutDashboard, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/maquinas', label: 'Máquinas / Frota', icon: Tractor, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/implementos', label: 'Implementos', icon: Layers, roles: ['admin', 'control', 'editor', 'viewer'] },
