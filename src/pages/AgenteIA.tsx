@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bot, User, Send, Trash2, Printer, FileText, CheckCircle2, 
   AlertTriangle, Wrench, Tractor, Fuel, Database, Sparkles, 
-  Globe, Info, RefreshCw, X, Zap
+  Globe, Info, RefreshCw, X, Zap, Mic, MicOff
 } from 'lucide-react';
 import { fleetService } from '../lib/fleetService';
 import { UserRole, Machine, PreventivePlanStatus, WorkOrder, FuelLog, FuelStock, Checklist30d, isImplement } from '../types';
@@ -84,6 +84,100 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
   const [activePdfReport, setActivePdfReport] = useState<PDFReportData | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Estados da Web Speech API (Microfone / Conversão Áudio em Texto)
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const baseTextRef = useRef('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      setSpeechSupported(!!SpeechRecognition);
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechError('Reconhecimento de voz não suportado neste navegador. Utilize o Google Chrome, Edge ou Safari.');
+      setTimeout(() => setSpeechError(null), 5000);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      baseTextRef.current = inputMessage.trim();
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setSpeechError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let currentTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+
+        const base = baseTextRef.current;
+        const full = base ? `${base} ${currentTranscript.trim()}` : currentTranscript.trim();
+        setInputMessage(full);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('[WebSpeech] Erro no reconhecimento:', event?.error);
+        if (event?.error === 'not-allowed') {
+          setSpeechError('Permissão para uso do microfone foi negada no navegador.');
+        } else if (event?.error === 'no-speech') {
+          // Apenas silêncio
+        } else {
+          setSpeechError(`Erro no microfone: ${event?.error || 'falha na captura'}`);
+        }
+        setIsListening(false);
+        setTimeout(() => setSpeechError(null), 5000);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.warn('[WebSpeech] Falha ao iniciar reconhecimento:', err);
+      setSpeechError('Não foi possível iniciar o microfone.');
+      setIsListening(false);
+      setTimeout(() => setSpeechError(null), 5000);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+    };
+  }, []);
 
   // Salva no localStorage sempre que as mensagens forem alteradas
   useEffect(() => {
@@ -881,11 +975,47 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
           ))}
         </div>
 
-        {/* CAMPO DE ENTRADA DO CHAT */}
-        <div className="p-3 sm:p-4 border-t border-slate-200 bg-white rounded-b-2xl">
+        {/* CAMPO DE ENTRADA DO CHAT COM SUPORTE A MICROFONE (WEB SPEECH API) */}
+        <div className="p-3 sm:p-4 border-t border-slate-200 bg-white rounded-b-2xl relative">
+          {speechError && (
+            <div className="mb-2 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] rounded-lg flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle size={13} className="text-rose-600 shrink-0" />
+                {speechError}
+              </span>
+              <button 
+                type="button" 
+                onClick={() => setSpeechError(null)}
+                className="text-rose-600 hover:text-rose-900 cursor-pointer"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          {isListening && (
+            <div className="mb-2 px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-900 text-[11px] rounded-lg flex items-center justify-between gap-2 animate-pulse">
+              <span className="flex items-center gap-2 font-medium">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                Ouvindo sua voz em português... Fale sua pergunta e ela será transcrita no campo.
+              </span>
+              <button
+                type="button"
+                onClick={toggleListening}
+                className="text-[10px] bg-[#1B3022] hover:bg-emerald-950 text-white font-bold px-2 py-0.5 rounded-md cursor-pointer shrink-0"
+              >
+                Concluir
+              </button>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (isListening && recognitionRef.current) {
+                try { recognitionRef.current.stop(); } catch (err) {}
+                setIsListening(false);
+              }
               handleSendMessage();
             }}
             className="flex items-center gap-2"
@@ -895,13 +1025,49 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder={
-                mode === 'app'
+                isListening
+                  ? 'Ouvindo... Fale agora para transcrever...'
+                  : mode === 'app'
                   ? 'Pergunte sobre preventivas, máquinas, diesel, OS ou peça "Gere um PDF de..."'
                   : 'Pergunte sobre agronomia, mecânica, cálculos, clima ou outros assuntos...'
               }
               disabled={isLoading}
-              className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-[#1B3022] focus:bg-white shadow-2xs transition-all"
+              className={`flex-1 bg-slate-50 border rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white shadow-2xs transition-all ${
+                isListening ? 'border-rose-400 ring-2 ring-rose-200/50 bg-rose-50/20' : 'border-slate-300 focus:border-[#1B3022]'
+              }`}
             />
+
+            {/* BOTÃO DO MICROFONE (WEB SPEECH API) */}
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={isLoading}
+              title={
+                !speechSupported
+                  ? 'Reconhecimento de voz não suportado neste navegador'
+                  : isListening
+                  ? 'Clique para finalizar a captura de voz'
+                  : 'Falar por áudio (converter voz em texto)'
+              }
+              className={`p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs border ${
+                isListening
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-700 ring-2 ring-rose-300 animate-pulse'
+                  : speechSupported
+                  ? 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-950 border-slate-300 hover:border-emerald-300 active:scale-95'
+                  : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-50'
+              }`}
+            >
+              {isListening ? (
+                <>
+                  <MicOff size={16} className="text-white" />
+                  <span className="hidden md:inline text-[11px]">Ouvindo...</span>
+                </>
+              ) : (
+                <Mic size={16} className="text-emerald-800" />
+              )}
+            </button>
+
+            {/* BOTÃO DE ENVIAR */}
             <button
               type="submit"
               disabled={!inputMessage.trim() || isLoading}
