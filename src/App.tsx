@@ -50,7 +50,6 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   control: [
     '/',
-    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',
@@ -64,12 +63,10 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     '/relatorio-maquinas'
   ],
   fuel: [
-    '/agente-ia',
     '/combustivel',
     '/estoque-diesel'
   ],
   mechanic: [
-    '/agente-ia',
     '/manutencao',
     '/plano-preventivo',
     '/checklist',
@@ -77,7 +74,6 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   editor: [
     '/',
-    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',
@@ -92,7 +88,6 @@ const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   viewer: [
     '/',
-    '/agente-ia',
     '/maquinas',
     '/implementos',
     '/combustivel',

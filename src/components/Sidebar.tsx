@@ -53,7 +53,7 @@ export default function Sidebar({ userRole, userEmail, onLogout, isOpen = false,
   }, []);
 
   const allMenuItems = [
-    { path: '/agente-ia', label: 'Agente IA Agro', icon: Bot, roles: ['admin', 'control', 'editor', 'viewer', 'mechanic', 'fuel'] },
+    { path: '/agente-ia', label: 'Agente IA Agro', icon: Bot, roles: ['admin'] },
     { path: '/', label: 'Painel Geral', icon: LayoutDashboard, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/maquinas', label: 'Máquinas / Frota', icon: Tractor, roles: ['admin', 'control', 'editor', 'viewer'] },
     { path: '/implementos', label: 'Implementos', icon: Layers, roles: ['admin', 'control', 'editor', 'viewer'] },
