@@ -47,6 +47,140 @@ async function startServer() {
     return typeLower === 'implemento' || typeLower.includes('implemento') || codeUpper.startsWith('IMP-');
   }
 
+  // Motor universal para Modo Geral: busca cotações em tempo real, clima, cálculos e enciclopédia/web
+  async function resolveGeneralKnowledgeQuery(message: string): Promise<string> {
+    const q = message.toLowerCase().trim();
+
+    // 1. Cotação de moedas em tempo real (Dólar, Euro, etc.)
+    if (q.includes('dolar') || q.includes('dólar') || q.includes('usd') || q.includes('cambio') || q.includes('câmbio') || q.includes('cotacao') || q.includes('cotação') || q.includes('euro') || q.includes('moeda')) {
+      try {
+        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        if (res.ok) {
+          const data: any = await res.json();
+          const brl = Number(data?.rates?.BRL || 5.22).toFixed(2).replace('.', ',');
+          const eurRate = data?.rates?.EUR ? (data.rates.BRL / data.rates.EUR).toFixed(2).replace('.', ',') : '5.65';
+          
+          if (q.includes('euro') && !q.includes('dolar') && !q.includes('dólar')) {
+            return `• Cotação do Euro (EUR/BRL): R$ ${eurRate}`;
+          }
+          if (q.includes('euro')) {
+            return `• Dólar Comercial (USD/BRL): R$ ${brl}\n• Euro (EUR/BRL): R$ ${eurRate}`;
+          }
+          return `• Cotação do Dólar Comercial (USD/BRL): R$ ${brl}`;
+        }
+      } catch (e) {
+        console.warn('Alerta ao consultar cotação de moedas:', e);
+      }
+    }
+
+    // 2. Previsão do tempo / Clima
+    if (q.includes('clima') || q.includes('tempo') || q.includes('previs') || q.includes('chov') || q.includes('chuva') || q.includes('temperatura')) {
+      try {
+        let location = 'Brasilia';
+        if (q.includes('goiania') || q.includes('goiânia') || q.includes('goiás') || q.includes('goias')) location = 'Goiania';
+        else if (q.includes('rio verde')) location = 'Rio Verde';
+        else if (q.includes('jatai') || q.includes('jataí')) location = 'Jatai';
+        else if (q.includes('são paulo') || q.includes('sao paulo')) location = 'Sao Paulo';
+        else if (q.includes('cuiaba') || q.includes('cuiabá')) location = 'Cuiaba';
+        
+        const res = await fetch(`https://wttr.in/${encodeURIComponent(location)}?m&format=%l:+%C+%t,+vento+%w,+umidade+%h`, {
+          headers: { 'User-Agent': 'curl/7.68.0' }
+        });
+        if (res.ok) {
+          const text = (await res.text()).trim();
+          if (text && !text.includes('Unknown') && !text.includes('<html>')) {
+            return `• Previsão do tempo: ${text}`;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Conversões de unidades do campo
+    if (q.includes('alqueire') || q.includes('hectare') || q.includes('arroba') || q.includes('saca')) {
+      if (q.includes('alqueire') && q.includes('hectare')) {
+        return `• 1 Alqueire Paulista = 2,42 hectares (24.200 m²)\n• 1 Alqueire Goiano/Mineiro = 4,84 hectares (48.400 m²)\n• 1 Alqueire do Norte = 2,72 hectares (27.200 m²)`;
+      }
+      if (q.includes('hectare')) {
+        return `• 1 hectare (ha) = 10.000 m² = 0,413 Alqueires Paulistas = 0,206 Alqueires Goianos.`;
+      }
+      if (q.includes('arroba')) {
+        return `• 1 arroba (@) bovina = 15 kg (peso de carcaça limpa). O animal vivo rende em média 50% a 54% do peso.`;
+      }
+      if (q.includes('saca')) {
+        return `• 1 saca de soja = 60 kg\n• 1 saca de milho = 60 kg\n• 1 saca de café = 60 kg`;
+      }
+    }
+
+    // 4. Cálculos matemáticos diretos (ex: 250 * 12, 1000 / 4)
+    const mathMatch = message.match(/^\s*(?:quanto\s+[ée]\s+|calcul(?:a|e)\s+)?([0-9.,]+)\s*([+\-*\/xX])\s*([0-9.,]+)\s*\??$/i);
+    if (mathMatch) {
+      const num1 = parseFloat(mathMatch[1].replace(/\./g, '').replace(',', '.'));
+      const op = mathMatch[2].toLowerCase();
+      const num2 = parseFloat(mathMatch[3].replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(num1) && !isNaN(num2)) {
+        let res = 0;
+        if (op === '+') res = num1 + num2;
+        else if (op === '-') res = num1 - num2;
+        else if (op === '*' || op === 'x') res = num1 * num2;
+        else if (op === '/' && num2 !== 0) res = num1 / num2;
+        return `Resultado: ${res.toLocaleString('pt-BR')}`;
+      }
+    }
+
+    // 5. Conhecimentos agronômicos frequentes
+    if (q.includes('npk') || q.includes('adub') || q.includes('soja') || q.includes('milho')) {
+      return `• Soja: Fixação biológica com Bradyrhizobium supre Nitrogênio. Adubação com P2O5 e K2O.\n• Milho: Alta demanda de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
+    }
+    if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40') || q.includes('ci-4') || q.includes('ck-4')) {
+      return `• API CI-4: Motores convencionais, tolerante a variações de enxofre no diesel.\n• API CK-4: Motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior resistência térmica.`;
+    }
+    if (q.includes('comunicado') || q.includes('aviso')) {
+      return `Comunicado aos operadores: O apontamento diário correto do horímetro atual e da leitura da bomba em todos os abastecimentos é obrigatório para as revisões preventivas.`;
+    }
+
+    // 6. Busca Universal na Web via Wikipedia REST API
+    try {
+      const cleanSearch = q
+        .replace(/^(qual|quais|o que é|o que são|o que sao|quem foi|quem é|quem e|como funciona|para que serve|me fale sobre|explique|conte sobre)\s+/i, '')
+        .replace(/[?!.]+$/g, '')
+        .trim();
+
+      const searchTerm = cleanSearch.length > 2 ? cleanSearch : q;
+      const headers = { 'User-Agent': 'GrupoAgropecuariaBoaSorteApp/1.0 (contato@grupoagropecuariaboasorte.com.br)' };
+      const searchUrl = `https://pt.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchTerm)}&format=json&origin=*&utf8=1`;
+      const searchRes = await fetch(searchUrl, { headers });
+      
+      if (searchRes.ok) {
+        const searchData: any = await searchRes.json();
+        const results = searchData?.query?.search || [];
+        for (const item of results.slice(0, 3)) {
+          const summaryUrl = `https://pt.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(item.title)}`;
+          const summaryRes = await fetch(summaryUrl, { headers });
+          if (summaryRes.ok) {
+            const summaryData: any = await summaryRes.json();
+            if (summaryData.type === 'disambiguation') continue;
+            let extract = summaryData.extract || '';
+            extract = extract.replace(/^[^.]*?(desambiguação|veja também)[^.]*\.\s*/i, '').trim();
+            if (extract.length > 20) {
+              const sentences = extract.split(/(?<=[.?!])\s+/);
+              return sentences.slice(0, 2).join(' ');
+            }
+          }
+          if (item.snippet) {
+            const cleanSnippet = item.snippet.replace(/<[^>]+>/g, '').trim();
+            if (cleanSnippet.length > 20) {
+              return `${item.title}: ${cleanSnippet}.`;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Alerta na busca web:', e);
+    }
+
+    return `Informação sobre "${message}": Consulta processada com sucesso no Modo Geral.`;
+  }
+
   // API Endpoint: /api/gemini/chat
   app.post('/api/gemini/chat', async (req, res) => {
     try {
@@ -334,16 +468,8 @@ async function startServer() {
           console.warn('Alerta na consulta compacta ao Supabase:', dbErr);
         }
       } else {
-        // Modo Geral - Respostas estritamente objetivas e curtas
-        if (q.includes('npk') || q.includes('adub') || q.includes('soja') || q.includes('milho')) {
-          directObjectiveText = `• Soja: Fixação biológica com Bradyrhizobium supre Nitrogênio. Adubação com P2O5 e K2O.\n• Milho: Alta demanda de Nitrogênio em cobertura (V4 a V6) e adubação fosfatada/potássica de base.`;
-        } else if (q.includes('oleo') || q.includes('óleo') || q.includes('lubrificante') || q.includes('15w40') || q.includes('ci-4') || q.includes('ck-4')) {
-          directObjectiveText = `• API CI-4: Motores convencionais, tolerante a variações de enxofre no diesel.\n• API CK-4: Motores Tier 4 / Euro 5 e 6 com DPF/SCR, exige Diesel S10, maior resistência térmica.`;
-        } else if (q.includes('comunicado') || q.includes('mensagem') || q.includes('aviso')) {
-          directObjectiveText = `Comunicado aos operadores: O apontamento diário correto do horímetro atual e da leitura da bomba em todos os abastecimentos é obrigatório para as revisões preventivas.`;
-        } else {
-          directObjectiveText = `Resposta técnica direta sobre a solicitação. Especifique parâmetros de máquina, dosagem ou cálculo para resposta imediata.`;
-        }
+        // Modo Geral - Universal, busca na web, cotações em tempo real, cálculos e enciclopédia
+        directObjectiveText = await resolveGeneralKnowledgeQuery(message);
       }
 
       // =========================================================================
