@@ -614,19 +614,25 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
 
               <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 text-xs leading-relaxed space-y-3 ${
                 msg.role === 'user'
-                  ? 'bg-[#1B3022] text-white rounded-tr-xs shadow-xs'
+                  ? 'bg-[#1B3022] text-white rounded-tr-xs shadow-md'
                   : 'bg-slate-50 text-slate-800 border border-slate-200 rounded-tl-xs shadow-2xs'
               }`}>
                 {/* CABEÇALHO DO CARD */}
-                <div className="flex items-center justify-between gap-3 text-[10px] pb-1 border-b border-black/10">
+                <div className={`flex items-center justify-between gap-3 text-[10px] pb-1.5 border-b ${
+                  msg.role === 'user' ? 'border-white/20 text-emerald-200' : 'border-black/10 text-slate-500'
+                }`}>
                   <span className="font-bold flex items-center gap-1">
                     {msg.role === 'user' ? 'Você' : 'Agente IA Agro'}
                   </span>
-                  <span className="opacity-70 font-mono">{msg.timestamp}</span>
+                  <span className="opacity-85 font-mono">{msg.timestamp}</span>
                 </div>
 
-                {/* TEXTO DA RESPOSTA (SEMPRE OBJETIVA E DIRETA) */}
-                <div className="whitespace-pre-wrap leading-relaxed font-sans font-medium text-slate-800">
+                {/* TEXTO DA PERGUNTA OU RESPOSTA */}
+                <div className={`whitespace-pre-wrap leading-relaxed font-sans ${
+                  msg.role === 'user'
+                    ? 'text-white font-semibold text-[13px] tracking-wide drop-shadow-xs'
+                    : 'text-slate-800 font-medium text-xs'
+                }`}>
                   {msg.content}
                 </div>
 
