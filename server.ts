@@ -39,6 +39,14 @@ async function startServer() {
     }
   }
 
+  // Helper para identificar se um item é implemento (mesma regra do frontend)
+  function isImplement(m: any): boolean {
+    if (!m) return false;
+    const typeLower = (m.type || '').toLowerCase().trim();
+    const codeUpper = (m.code || '').toUpperCase().trim();
+    return typeLower === 'implemento' || typeLower.includes('implemento') || codeUpper.startsWith('IMP-');
+  }
+
   // API Endpoint: /api/gemini/chat
   app.post('/api/gemini/chat', async (req, res) => {
     try {
@@ -263,29 +271,49 @@ async function startServer() {
               directObjectiveText = `• ${lCount} abastecimentos registrados no sistema`;
             }
 
-          } else if (q.includes('maquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('equipamento') || q.includes('horimetro') || q.includes('horímetro')) {
-            const [totalCount, activeCount, sampleMachines] = await Promise.all([
-              supabase.from('machines').select('id', { count: 'exact', head: true }),
-              supabase.from('machines').select('id', { count: 'exact', head: true }).eq('status', 'Ativa'),
-              isListExplicitlyAsked
-                ? supabase.from('machines').select('code, name, model, current_hour_km, status').limit(5)
-                : Promise.resolve({ data: [] })
-            ]);
+          } else if (q.includes('implement')) {
+            const { data: allMachs } = await supabase.from('machines').select('id, code, name, type, status').limit(200);
+            const imps = (allMachs || []).filter(isImplement);
+            const activeImps = imps.filter((m: any) => m.status === 'Ativa');
+            const inMaintImps = imps.filter((m: any) => m.status === 'Em manutenção' || m.status === 'Parada');
 
-            const tCount = totalCount.count || 0;
-            const aCount = activeCount.count || 0;
-            const inMaintCount = Math.max(0, tCount - aCount);
-
-            compactDataContext = `[DADOS SUPABASE]: ${tCount} equipamentos, ${aCount} ativos, ${inMaintCount} em manutenção/parado.`;
+            compactDataContext = `[DADOS SUPABASE]: ${imps.length} implementos (${activeImps.length} ativos, ${inMaintImps.length} em manutenção/parado).`;
 
             if (isListExplicitlyAsked) {
-              const sample = (sampleMachines.data || []).map((m: any) => 
-                `• ${m.code} (${m.name}): ${m.current_hour_km || 0} h - ${m.status}`
-              ).join('\n');
-              directObjectiveText = `Máquinas da Frota:\n${sample}`;
+              const sample = imps.slice(0, 8).map((m: any) => `• ${m.code} (${m.name}): ${m.status}`).join('\n');
+              directObjectiveText = `Implementos:\n${sample}`;
             } else {
-              // Resposta ESTRITAMENTE numérica de quantidade solicitada pelo usuário
-              directObjectiveText = `• ${tCount} equipamentos\n• ${aCount} ativos\n• ${inMaintCount} em manutenção/parado`;
+              directObjectiveText = `• ${imps.length} implementos\n• ${activeImps.length} ativos\n• ${inMaintImps.length} em manutenção/parado`;
+            }
+
+          } else if (q.includes('maquina') || q.includes('máquina') || q.includes('trator') || q.includes('colheitadeira') || q.includes('caminhao') || q.includes('caminhão')) {
+            const { data: allMachs } = await supabase.from('machines').select('id, code, name, type, current_hour_km, status').limit(200);
+            const onlyMachs = (allMachs || []).filter((m: any) => !isImplement(m));
+            const activeMachs = onlyMachs.filter((m: any) => m.status === 'Ativa');
+            const inMaintMachs = onlyMachs.filter((m: any) => m.status === 'Em manutenção' || m.status === 'Parada');
+
+            compactDataContext = `[DADOS SUPABASE]: ${onlyMachs.length} máquinas (${activeMachs.length} ativas, ${inMaintMachs.length} em manutenção/parada).`;
+
+            if (isListExplicitlyAsked) {
+              const sample = onlyMachs.slice(0, 6).map((m: any) => `• ${m.code} (${m.name}): ${m.current_hour_km || 0} h - ${m.status}`).join('\n');
+              directObjectiveText = `Máquinas:\n${sample}`;
+            } else {
+              directObjectiveText = `• ${onlyMachs.length} máquinas\n• ${activeMachs.length} ativas\n• ${inMaintMachs.length} em manutenção/parada`;
+            }
+
+          } else if (q.includes('frota') || q.includes('equipamento') || q.includes('total')) {
+            const { data: allMachs } = await supabase.from('machines').select('id, code, name, type, current_hour_km, status').limit(200);
+            const onlyMachs = (allMachs || []).filter((m: any) => !isImplement(m));
+            const imps = (allMachs || []).filter(isImplement);
+            const inMaint = (allMachs || []).filter((m: any) => m.status === 'Em manutenção' || m.status === 'Parada');
+
+            compactDataContext = `[DADOS SUPABASE]: ${(allMachs || []).length} equipamentos (${onlyMachs.length} máquinas, ${imps.length} implementos).`;
+
+            if (isListExplicitlyAsked) {
+              const sample = (allMachs || []).slice(0, 6).map((m: any) => `• ${m.code} (${m.name}): ${m.status}`).join('\n');
+              directObjectiveText = `Equipamentos:\n${sample}`;
+            } else {
+              directObjectiveText = `• ${(allMachs || []).length} equipamentos no total\n• ${onlyMachs.length} máquinas (${onlyMachs.filter((m: any) => m.status === 'Ativa').length} ativas)\n• ${imps.length} implementos (${imps.filter((m: any) => m.status === 'Ativa').length} ativos)\n• ${inMaint.length} em manutenção/parado`;
             }
 
           } else {

@@ -5,7 +5,7 @@ import {
   Globe, Info, RefreshCw, X, Zap
 } from 'lucide-react';
 import { fleetService } from '../lib/fleetService';
-import { UserRole, Machine, PreventivePlanStatus, WorkOrder, FuelLog, FuelStock, Checklist30d } from '../types';
+import { UserRole, Machine, PreventivePlanStatus, WorkOrder, FuelLog, FuelStock, Checklist30d, isImplement } from '../types';
 
 export interface PDFReportData {
   type: 'preventivas_vencidas' | 'frota_maquinas' | 'ordens_servico' | 'abastecimentos' | 'estoque_diesel' | 'geral';
@@ -110,12 +110,12 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
   }, [messages, isLoading]);
 
   const quickPromptsApp = [
-    'Quantos equipamentos temos cadastrados?',
+    'Quantos implementos temos cadastrados?',
+    'Quantas máquinas temos cadastradas?',
+    'Quantos equipamentos temos no total?',
     'Quantas preventivas estão vencidas?',
     'Quantas Ordens de Serviço estão abertas?',
-    'Qual o saldo de diesel nas fazendas?',
-    'Gere um relatório em PDF das preventivas vencidas',
-    'Gere um relatório em PDF de todas as máquinas'
+    'Gere um relatório em PDF das preventivas vencidas'
   ];
 
   const quickPromptsGeneral = [
@@ -271,8 +271,46 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       return { text: responseText };
     }
 
-    // 6. Máquinas e Frota (100% objetiva - Regra estrita de quantidade)
-    if (q.includes('maquina') || q.includes('máquina') || q.includes('frota') || q.includes('trator') || q.includes('colheitadeira') || q.includes('horímetro') || q.includes('horimetro') || q.includes('equipamento')) {
+    // 6. IMPLEMENTOS (Consulta exclusiva da aba Implementos)
+    if (q.includes('implement')) {
+      const machines = await fleetService.getMachines();
+      const implementsList = machines.filter(m => isImplement(m));
+      const active = implementsList.filter(m => m.status === 'Ativa');
+      const inMaint = implementsList.filter(m => m.status === 'Em manutenção' || m.status === 'Parada');
+
+      if (!isListRequested) {
+        return {
+          text: `• ${implementsList.length} implementos\n• ${active.length} ativos\n• ${inMaint.length} em manutenção/parado`
+        };
+      }
+
+      let responseText = `Implementos (${implementsList.length}):\n` +
+        implementsList.slice(0, 8).map(m => `• ${m.code} (${m.name}): ${m.status}`).join('\n');
+
+      return { text: responseText };
+    }
+
+    // 7. MÁQUINAS (Consulta exclusiva de Máquinas/Veículos, excluindo implementos)
+    if (q.includes('maquina') || q.includes('máquina') || q.includes('trator') || q.includes('colheitadeira') || q.includes('caminhao') || q.includes('caminhão')) {
+      const machines = await fleetService.getMachines();
+      const onlyMachines = machines.filter(m => !isImplement(m));
+      const active = onlyMachines.filter(m => m.status === 'Ativa');
+      const inMaint = onlyMachines.filter(m => m.status === 'Em manutenção' || m.status === 'Parada');
+
+      if (!isListRequested) {
+        return {
+          text: `• ${onlyMachines.length} máquinas\n• ${active.length} ativas\n• ${inMaint.length} em manutenção/parada`
+        };
+      }
+
+      let responseText = `Máquinas (${onlyMachines.length}):\n` +
+        onlyMachines.slice(0, 6).map(m => `• ${m.code} (${m.name}): ${(m.current_hour_km || 0).toLocaleString('pt-BR')} h - ${m.status}`).join('\n');
+
+      return { text: responseText };
+    }
+
+    // 8. EQUIPAMENTOS / FROTA GERAL (Totais consolidados de máquinas + implementos)
+    if (q.includes('frota') || q.includes('equipamento') || q.includes('total')) {
       const [machines, farms] = await Promise.all([
         fleetService.getMachines(),
         fleetService.getFarms()
@@ -291,8 +329,8 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
 
         const reportData: PDFReportData = {
           type: 'frota_maquinas',
-          title: 'Relatório Oficial da Frota de Máquinas',
-          summary: `Cadastro de ${machines.length} máquinas catalogadas da Agropecuária Boa Sorte.`,
+          title: 'Relatório Oficial da Frota de Máquinas e Implementos',
+          summary: `Cadastro de ${machines.length} equipamentos da Agropecuária Boa Sorte.`,
           generatedAt: new Date().toLocaleString('pt-BR'),
           kpis: {
             'Total de Equipamentos': machines.length,
@@ -303,24 +341,23 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
         };
 
         return {
-          text: `Relatório em PDF da frota gerado com ${machines.length} máquinas. Clique abaixo para abrir ou imprimir.`,
+          text: `Relatório em PDF da frota gerado com ${machines.length} equipamentos. Clique abaixo para abrir ou imprimir.`,
           report: reportData
         };
       }
 
-      const active = machines.filter(m => m.status === 'Ativa');
+      const onlyMachines = machines.filter(m => !isImplement(m));
+      const implementsList = machines.filter(m => isImplement(m));
       const inMaint = machines.filter(m => m.status === 'Em manutenção' || m.status === 'Parada');
 
-      // Se for pergunta de quantidade (ex: quantos equipamentos temos cadastrados?):
-      // Mostra ESTRITAMENTE os totais e NADA MAIS, sem listar equipamentos ou nomes.
       if (!isListRequested) {
         return {
-          text: `• ${machines.length} equipamentos\n• ${active.length} ativos\n• ${inMaint.length} em manutenção/parado`
+          text: `• ${machines.length} equipamentos no total\n• ${onlyMachines.length} máquinas (${onlyMachines.filter(m => m.status === 'Ativa').length} ativas)\n• ${implementsList.length} implementos (${implementsList.filter(m => m.status === 'Ativa').length} ativos)\n• ${inMaint.length} em manutenção/parado`
         };
       }
 
-      let responseText = `Frota (${machines.length} equipamentos):\n` +
-        machines.slice(0, 5).map(m => `• ${m.code} (${m.name}): ${(m.current_hour_km || 0).toLocaleString('pt-BR')} h - ${m.status}`).join('\n');
+      let responseText = `Equipamentos (${machines.length}):\n` +
+        machines.slice(0, 6).map(m => `• ${m.code} (${m.name}): ${m.status}`).join('\n');
 
       return { text: responseText };
     }
@@ -332,11 +369,13 @@ export default function AgenteIA({ selectedFarmId, userRole, userEmail }: Agente
       fleetService.getWorkOrders()
     ]);
 
+    const onlyMachines = machines.filter(m => !isImplement(m));
+    const implementsList = machines.filter(m => isImplement(m));
     const overduePlans = plans.filter(p => p.status === 'VENCIDA').length;
     const openOrders = orders.filter(o => o.status === 'Aberta' || o.status === 'Em Andamento').length;
 
     return {
-      text: `• ${machines.length} equipamentos cadastrados\n• ${overduePlans} preventivas vencidas\n• ${openOrders} ordens de serviço abertas`
+      text: `• ${onlyMachines.length} máquinas (${onlyMachines.filter(m => m.status === 'Ativa').length} ativas)\n• ${implementsList.length} implementos (${implementsList.filter(m => m.status === 'Ativa').length} ativos)\n• ${overduePlans} preventivas vencidas\n• ${openOrders} ordens de serviço abertas`
     };
   };
 
