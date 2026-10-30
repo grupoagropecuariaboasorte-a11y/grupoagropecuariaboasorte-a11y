@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { WorkOrder, Farm, Machine, UserRole } from '../types';
 import Modal from '../components/Modal';
@@ -7,7 +7,7 @@ import {
   ClipboardList, Plus, Search, Calendar, ChevronRight, 
   ArrowRight, CheckCircle2, Clock, PlayCircle, Trash2, 
   AlertTriangle, Wrench, ArrowLeft, Filter, Edit,
-  Printer, CheckSquare
+  Printer, CheckSquare, ChevronDown
 } from 'lucide-react';
 import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
@@ -31,6 +31,8 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
   const [machineFilter, setMachineFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilterType[]>(['Aberta', 'Em Andamento', 'Concluída']);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
 
   // Form States (Nova OS)
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -93,6 +95,18 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
     }
     loadData();
   }, [selectedFarmId]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setIsStatusDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const refreshList = async () => {
     try {
@@ -484,75 +498,150 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
           <option value="Baixa">Baixa</option>
         </select>
 
-        {/* Filtro de Seleção por Marcação de Status (Abertas, Em Andamento, Concluídas) */}
-        <div className="flex flex-wrap items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1 mr-1">
-            <CheckSquare size={13} className="text-[#1B3022]" />
-            <span>Status:</span>
-          </span>
-
-          {/* Opção Abertas */}
-          <label 
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none text-xs font-semibold ${
-              statusFilter.includes('Aberta')
-                ? 'bg-red-50 text-red-900 border border-red-200 shadow-2xs'
-                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
+        {/* Filtro Multi-seleção por Marcação de Status (Abertas, Em Andamento, Concluídas) */}
+        <div className="relative shrink-0" ref={statusDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setIsStatusDropdownOpen(prev => !prev)}
+            className={`flex items-center gap-2 bg-slate-50 border rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer transition-all ${
+              statusFilter.length === 0
+                ? 'border-amber-400 bg-amber-50/70 text-amber-900'
+                : statusFilter.length < 3
+                ? 'border-[#1B3022] bg-[#1B3022]/5 text-[#1B3022]'
+                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
             }`}
+            title="Filtrar por Status (seleção por marcação de 1, 2 ou 3 opções)"
           >
-            <input
-              type="checkbox"
-              checked={statusFilter.includes('Aberta')}
-              onChange={() => toggleStatus('Aberta')}
-              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-red-600"
-            />
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-full ${statusFilter.includes('Aberta') ? 'bg-red-500' : 'bg-slate-300'} shrink-0`} />
-              Abertas
-              <span className="text-[10px] font-mono opacity-80">({workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Aberta').length})</span>
+            <CheckSquare size={14} className="text-[#1B3022] shrink-0" />
+            <span className="whitespace-nowrap">
+              {statusFilter.length === 3 ? (
+                <span>Status: <strong className="text-slate-800">Todos</strong> <span className="font-mono text-[11px] text-slate-500 font-bold">(3)</span></span>
+              ) : statusFilter.length === 0 ? (
+                <span className="text-rose-600 font-bold">Status: Nenhum</span>
+              ) : (
+                <span>
+                  Status: <strong className="text-[#1B3022]">{statusFilter.join(', ')}</strong> <span className="font-mono text-[11px] font-bold">({statusFilter.length})</span>
+                </span>
+              )}
             </span>
-          </label>
+            <ChevronDown size={14} className={`text-slate-500 transition-transform ${isStatusDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
 
-          {/* Opção Em Andamento */}
-          <label 
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none text-xs font-semibold ${
-              statusFilter.includes('Em Andamento')
-                ? 'bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs'
-                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={statusFilter.includes('Em Andamento')}
-              onChange={() => toggleStatus('Em Andamento')}
-              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-amber-600"
-            />
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-full ${statusFilter.includes('Em Andamento') ? 'bg-amber-500' : 'bg-slate-300'} shrink-0`} />
-              Em Andamento
-              <span className="text-[10px] font-mono opacity-80">({workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Em Andamento').length})</span>
-            </span>
-          </label>
+          {isStatusDropdownOpen && (
+            <div className="absolute left-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3 animate-fadeIn">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckSquare size={13} className="text-[#1B3022]" />
+                  Status da O.S.
+                </span>
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter(['Aberta', 'Em Andamento', 'Concluída'])}
+                    className="text-[#1B3022] hover:underline font-bold cursor-pointer"
+                  >
+                    Marcar todas
+                  </button>
+                  <span className="text-slate-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter([])}
+                    className="text-rose-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Desmarcar
+                  </button>
+                </div>
+              </div>
 
-          {/* Opção Concluídas */}
-          <label 
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none text-xs font-semibold ${
-              statusFilter.includes('Concluída')
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-2xs'
-                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={statusFilter.includes('Concluída')}
-              onChange={() => toggleStatus('Concluída')}
-              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-emerald-600"
-            />
-            <span className="flex items-center gap-1">
-              <span className={`w-2 h-2 rounded-full ${statusFilter.includes('Concluída') ? 'bg-emerald-500' : 'bg-slate-300'} shrink-0`} />
-              Concluídas
-              <span className="text-[10px] font-mono opacity-80">({workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Concluída').length})</span>
-            </span>
-          </label>
+              <div className="space-y-1.5">
+                {/* Opção Aberta */}
+                <label 
+                  className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all select-none border ${
+                    statusFilter.includes('Aberta') 
+                      ? 'bg-red-50 border-red-200 text-red-950 font-bold' 
+                      : 'border-transparent hover:bg-slate-50 text-slate-700 font-medium'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={statusFilter.includes('Aberta')}
+                      onChange={() => toggleStatus('Aberta')}
+                      className="w-4 h-4 rounded border-slate-300 accent-red-600 cursor-pointer"
+                    />
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                      Abertas
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                    {workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Aberta').length}
+                  </span>
+                </label>
+
+                {/* Opção Em Andamento */}
+                <label 
+                  className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all select-none border ${
+                    statusFilter.includes('Em Andamento') 
+                      ? 'bg-amber-50 border-amber-200 text-amber-950 font-bold' 
+                      : 'border-transparent hover:bg-slate-50 text-slate-700 font-medium'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={statusFilter.includes('Em Andamento')}
+                      onChange={() => toggleStatus('Em Andamento')}
+                      className="w-4 h-4 rounded border-slate-300 accent-amber-600 cursor-pointer"
+                    />
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                      Em Andamento
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                    {workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Em Andamento').length}
+                  </span>
+                </label>
+
+                {/* Opção Concluída */}
+                <label 
+                  className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all select-none border ${
+                    statusFilter.includes('Concluída') 
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold' 
+                      : 'border-transparent hover:bg-slate-50 text-slate-700 font-medium'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={statusFilter.includes('Concluída')}
+                      onChange={() => toggleStatus('Concluída')}
+                      className="w-4 h-4 rounded border-slate-300 accent-emerald-600 cursor-pointer"
+                    />
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0" />
+                      Concluídas
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                    {workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Concluída').length}
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                <span>Pode marcar 1, 2 ou 3</span>
+                <button
+                  type="button"
+                  onClick={() => setIsStatusDropdownOpen(false)}
+                  className="px-2.5 py-1 rounded-md bg-[#1B3022] text-white font-bold cursor-pointer hover:opacity-90 transition-opacity"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Busca por texto */}
