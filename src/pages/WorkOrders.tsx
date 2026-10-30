@@ -7,7 +7,7 @@ import {
   ClipboardList, Plus, Search, Calendar, ChevronRight, 
   ArrowRight, CheckCircle2, Clock, PlayCircle, Trash2, 
   AlertTriangle, Wrench, ArrowLeft, Filter, Edit,
-  Printer
+  Printer, CheckSquare
 } from 'lucide-react';
 import { formatDateForInput, formatDisplayDate, formatDisplayDateTime } from '../lib/dateUtils';
 
@@ -16,6 +16,8 @@ interface WorkOrdersProps {
   userRole: UserRole;
   userEmail?: string;
 }
+
+type StatusFilterType = 'Aberta' | 'Em Andamento' | 'Concluída';
 
 export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }: WorkOrdersProps) {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -28,6 +30,7 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
   const [searchTerm, setSearchTerm] = useState('');
   const [machineFilter, setMachineFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterType[]>(['Aberta', 'Em Andamento', 'Concluída']);
 
   // Form States (Nova OS)
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -322,6 +325,14 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
     }
   };
 
+  const toggleStatus = (status: StatusFilterType) => {
+    setStatusFilter(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
   // =========================================================================
   // FILTRAGEM E SEPARAÇÃO DAS LANES (COLUNAS KANBAN)
   // =========================================================================
@@ -334,6 +345,10 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
     const filterPrioStr = priorityFilter.toLowerCase();
     const priorityMatch = priorityFilter === 'ALL' || prioStr === filterPrioStr;
 
+    // Filtro por marcação de status
+    const normStatus = normalizeStatus(wo.status);
+    const statusMatch = statusFilter.includes(normStatus as StatusFilterType);
+
     const textMatch = 
       String(wo.os_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (wo.description || wo.reason || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -341,7 +356,7 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
       (machine && (machine.code || '').toLowerCase().includes(searchTerm.toLowerCase())) ||
       (machine && (machine.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return farmMatch && machineMatch && priorityMatch && textMatch;
+    return farmMatch && machineMatch && priorityMatch && statusMatch && textMatch;
   });
 
   const laneAberta = filteredOrders.filter(wo => wo.status === 'Aberta');
@@ -469,8 +484,79 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
           <option value="Baixa">Baixa</option>
         </select>
 
+        {/* Filtro de Seleção por Marcação de Status (Abertas, Em Andamento, Concluídas) */}
+        <div className="flex flex-wrap items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1 mr-1">
+            <CheckSquare size={13} className="text-[#1B3022]" />
+            <span>Status:</span>
+          </span>
+
+          {/* Opção Abertas */}
+          <label 
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none text-xs font-semibold ${
+              statusFilter.includes('Aberta')
+                ? 'bg-red-50 text-red-900 border border-red-200 shadow-2xs'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={statusFilter.includes('Aberta')}
+              onChange={() => toggleStatus('Aberta')}
+              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-red-600"
+            />
+            <span className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${statusFilter.includes('Aberta') ? 'bg-red-500' : 'bg-slate-300'} shrink-0`} />
+              Abertas
+              <span className="text-[10px] font-mono opacity-80">({workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Aberta').length})</span>
+            </span>
+          </label>
+
+          {/* Opção Em Andamento */}
+          <label 
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none text-xs font-semibold ${
+              statusFilter.includes('Em Andamento')
+                ? 'bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={statusFilter.includes('Em Andamento')}
+              onChange={() => toggleStatus('Em Andamento')}
+              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-amber-600"
+            />
+            <span className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${statusFilter.includes('Em Andamento') ? 'bg-amber-500' : 'bg-slate-300'} shrink-0`} />
+              Em Andamento
+              <span className="text-[10px] font-mono opacity-80">({workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Em Andamento').length})</span>
+            </span>
+          </label>
+
+          {/* Opção Concluídas */}
+          <label 
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none text-xs font-semibold ${
+              statusFilter.includes('Concluída')
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-2xs'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={statusFilter.includes('Concluída')}
+              onChange={() => toggleStatus('Concluída')}
+              className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-emerald-600"
+            />
+            <span className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${statusFilter.includes('Concluída') ? 'bg-emerald-500' : 'bg-slate-300'} shrink-0`} />
+              Concluídas
+              <span className="text-[10px] font-mono opacity-80">({workOrders.filter(w => (machineFilter === 'ALL' || w.machine_id === machineFilter) && normalizeStatus(w.status) === 'Concluída').length})</span>
+            </span>
+          </label>
+        </div>
+
         {/* Busca por texto */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[180px]">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
             <Search size={14} />
           </span>
@@ -483,273 +569,298 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
           />
         </div>
 
-        {(machineFilter !== 'ALL' || priorityFilter !== 'ALL' || searchTerm !== '') && (
+        {(machineFilter !== 'ALL' || priorityFilter !== 'ALL' || searchTerm !== '' || statusFilter.length !== 3) && (
           <button
             onClick={() => {
               setMachineFilter('ALL');
               setPriorityFilter('ALL');
               setSearchTerm('');
+              setStatusFilter(['Aberta', 'Em Andamento', 'Concluída']);
             }}
-            className="text-xs text-red-600 hover:underline font-bold px-2 py-1 cursor-pointer"
+            className="text-xs text-red-600 hover:underline font-bold px-2 py-1 cursor-pointer shrink-0"
           >
             Limpar Filtros
           </button>
         )}
 
-        <div className="text-xs text-slate-500 font-mono ml-auto">
+        <div className="text-xs text-slate-500 font-mono ml-auto shrink-0">
           Total O.S.: <strong className="text-slate-800">{filteredOrders.length}</strong>
         </div>
       </div>
 
-      {/* QUADRO KANBAN (3 LANES) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[500px]">
-        
-        {/* LANE 1: ABERTAS */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              Abertas
-            </span>
-            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
-              {laneAberta.length}
-            </span>
-          </div>
-
-          <div className="p-4 overflow-y-auto space-y-4 flex-1">
-            {laneAberta.map(wo => {
-              const mach = machines.find(m => m.id === wo.machine_id);
-              const descText = wo.description || wo.reason || '';
-              const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
-
-              return (
-                <div key={wo.id} className="bg-white border border-slate-200 hover:border-[#1B3022]/30 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
-                        OS #{wo.os_number || wo.id.substring(0, 6)}
-                      </span>
-                      <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
-                    </div>
-                    {userRole !== 'viewer' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(wo)}
-                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
-                          title="Editar O.S."
-                        >
-                          <Edit size={13} />
-                        </button>
-                        <button 
-                          onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
-                          title="Excluir O.S."
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{descText}&rdquo;</p>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
-                      Prioridade {wo.priority}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Téc: {techText}</span>
-                  </div>
-
-                  {userRole !== 'viewer' && (
-                    <button
-                      onClick={() => handleStartService(wo)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-50 hover:bg-[#1B3022] hover:text-white text-xs font-bold text-[#1B3022] rounded-xl border border-emerald-200 cursor-pointer transition-all shadow-xs active:scale-95"
-                    >
-                      <PlayCircle size={14} className="text-amber-500" />
-                      Iniciar Serviço <ArrowRight size={12} />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            {laneAberta.length === 0 && (
-              <div className="h-28 flex flex-col items-center justify-center text-slate-400">
-                <CheckCircle2 size={24} className="text-[#1B3022]/60" />
-                <p className="text-[10px] mt-1 font-mono uppercase tracking-wide">Sem pendências</p>
-              </div>
-            )}
-          </div>
+      {/* QUADRO KANBAN DINÂMICO CONFORME STATUS SELECIONADOS */}
+      {statusFilter.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center flex flex-col items-center justify-center gap-3 flex-1 min-h-[400px] shadow-xs">
+          <CheckSquare size={36} className="text-slate-300" />
+          <h4 className="text-sm font-bold text-slate-700">Nenhum status marcado no filtro</h4>
+          <p className="text-xs text-slate-500 max-w-md">
+            Marque uma ou mais opções no filtro de status acima (Abertas, Em Andamento ou Concluídas) para exibir as ordens de serviço e gerar relatórios.
+          </p>
+          <button
+            onClick={() => setStatusFilter(['Aberta', 'Em Andamento', 'Concluída'])}
+            className="mt-2 px-4 py-2 bg-[#1B3022] hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            Marcar Todos os Status
+          </button>
         </div>
-
-        {/* LANE 2: EM ANDAMENTO */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              Em Andamento
-            </span>
-            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
-              {laneAndamento.length}
-            </span>
-          </div>
-
-          <div className="p-4 overflow-y-auto space-y-4 flex-1">
-            {laneAndamento.map(wo => {
-              const mach = machines.find(m => m.id === wo.machine_id);
-              const descText = wo.description || wo.reason || '';
-              const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
-
-              return (
-                <div key={wo.id} className="bg-white border border-amber-200 hover:border-amber-400 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-wide bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                        OS #{wo.os_number || wo.id.substring(0, 6)}
-                      </span>
-                      <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
-                    </div>
-                    {userRole !== 'viewer' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(wo)}
-                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
-                          title="Editar O.S."
-                        >
-                          <Edit size={13} />
-                        </button>
-                        <button 
-                          onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
-                          title="Excluir O.S."
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{descText}&rdquo;</p>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
-                      Prioridade {wo.priority}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Téc: {techText}</span>
-                  </div>
-
-                  {userRole !== 'viewer' && (
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        onClick={() => handleUpdateStatus(wo.id, 'Aberta')}
-                        className="flex items-center justify-center gap-1 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl border border-slate-200 cursor-pointer transition-colors"
-                      >
-                        <ArrowLeft size={12} /> Pausar
-                      </button>
-                      <button
-                        onClick={() => handleOpenCompleteModal(wo)}
-                        className="flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
-                      >
-                        <CheckCircle2 size={13} /> Concluir OS
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {laneAndamento.length === 0 && (
-              <div className="h-28 flex flex-col items-center justify-center text-slate-400">
-                <Clock size={24} className="text-slate-300" />
-                <p className="text-[10px] mt-1 font-mono uppercase tracking-wide">Fila vazia</p>
+      ) : (
+        <div className={`grid grid-cols-1 ${
+          statusFilter.length === 1 ? 'lg:grid-cols-1' : statusFilter.length === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'
+        } gap-6 flex-1 min-h-[500px]`}>
+          
+          {/* LANE 1: ABERTAS */}
+          {statusFilter.includes('Aberta') && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  Abertas
+                </span>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {laneAberta.length}
+                </span>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* LANE 3: CONCLUÍDAS */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <CheckCircle2 size={14} className="text-emerald-600" />
-              Concluídas
-            </span>
-            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
-              {laneConcluida.length}
-            </span>
-          </div>
+              <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                {laneAberta.map(wo => {
+                  const mach = machines.find(m => m.id === wo.machine_id);
+                  const descText = wo.description || wo.reason || '';
+                  const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
 
-          <div className="p-4 overflow-y-auto space-y-4 flex-1">
-            {laneConcluida.map(wo => {
-              const mach = machines.find(m => m.id === wo.machine_id);
-              const descText = wo.description || wo.reason || '';
-              const techText = wo.assigned_to || wo.responsible || 'Técnico';
-              const closeDateFormatted = wo.close_date ? wo.close_date.split('T')[0] : '';
-
-              return (
-                <div key={wo.id} className="bg-white border border-slate-200 rounded-xl p-4 text-xs space-y-3 shadow-xs group hover:border-emerald-300 transition-all">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
-                        OS #{wo.os_number || wo.id.substring(0, 6)}
-                      </span>
-                      <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
-                    </div>
-                    {userRole !== 'viewer' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(wo)}
-                          className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
-                          title="Editar O.S."
-                        >
-                          <Edit size={13} />
-                        </button>
-                        <button 
-                          onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
-                          title="Excluir O.S."
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                  return (
+                    <div key={wo.id} className="bg-white border border-slate-200 hover:border-[#1B3022]/30 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                            OS #{wo.os_number || wo.id.substring(0, 6)}
+                          </span>
+                          <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
+                        </div>
+                        {userRole !== 'viewer' && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(wo)}
+                              className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
+                              title="Editar O.S."
+                            >
+                              <Edit size={13} />
+                            </button>
+                            <button 
+                              onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                              title="Excluir O.S."
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <p className="text-slate-500 leading-normal font-serif italic line-through">&ldquo;{descText}&rdquo;</p>
-                  
-                  {wo.notes && (
-                    <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-[11px] text-slate-600 font-sans">
-                      <strong className="text-slate-700">Laudo:</strong> {wo.notes}
-                    </div>
-                  )}
+                      <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{descText}&rdquo;</p>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-slate-500 font-mono">Técnico: {techText}</span>
-                      {wo.close_date && (
-                        <span className="text-[9px] text-emerald-700 font-mono">Concluído: {formatDisplayDate(wo.close_date)}</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
+                          Prioridade {wo.priority}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">Téc: {techText}</span>
+                      </div>
+
+                      {userRole !== 'viewer' && (
+                        <button
+                          onClick={() => handleStartService(wo)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-50 hover:bg-[#1B3022] hover:text-white text-xs font-bold text-[#1B3022] rounded-xl border border-emerald-200 cursor-pointer transition-all shadow-xs active:scale-95"
+                        >
+                          <PlayCircle size={14} className="text-amber-500" />
+                          Iniciar Serviço <ArrowRight size={12} />
+                        </button>
                       )}
                     </div>
-                    {userRole !== 'viewer' && (
-                      <button
-                        onClick={() => handleUpdateStatus(wo.id, 'Em Andamento')}
-                        className="text-xs text-amber-700 hover:text-amber-900 hover:underline font-bold cursor-pointer"
-                      >
-                        Reabrir
-                      </button>
-                    )}
+                  );
+                })}
+                {laneAberta.length === 0 && (
+                  <div className="h-28 flex flex-col items-center justify-center text-slate-400">
+                    <CheckCircle2 size={24} className="text-[#1B3022]/60" />
+                    <p className="text-[10px] mt-1 font-mono uppercase tracking-wide">Sem pendências</p>
                   </div>
-                </div>
-              );
-            })}
-            {laneConcluida.length === 0 && (
-              <div className="h-28 flex flex-col items-center justify-center text-slate-400">
-                <Wrench size={24} className="text-slate-300" />
-                <p className="text-[10px] mt-1 font-mono uppercase tracking-wide">Sem histórico recente</p>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
 
-      </div>
+          {/* LANE 2: EM ANDAMENTO */}
+          {statusFilter.includes('Em Andamento') && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  Em Andamento
+                </span>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {laneAndamento.length}
+                </span>
+              </div>
+
+              <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                {laneAndamento.map(wo => {
+                  const mach = machines.find(m => m.id === wo.machine_id);
+                  const descText = wo.description || wo.reason || '';
+                  const techText = wo.assigned_to || wo.responsible || 'Sem Técnico';
+
+                  return (
+                    <div key={wo.id} className="bg-white border border-amber-200 hover:border-amber-400 rounded-xl p-4 text-xs space-y-3 shadow-xs group transition-all">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[10px] font-mono font-bold text-amber-800 uppercase tracking-wide bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                            OS #{wo.os_number || wo.id.substring(0, 6)}
+                          </span>
+                          <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
+                        </div>
+                        {userRole !== 'viewer' && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(wo)}
+                              className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
+                              title="Editar O.S."
+                            >
+                              <Edit size={13} />
+                            </button>
+                            <button 
+                              onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                              title="Excluir O.S."
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <p className="text-slate-600 leading-normal font-serif italic">&ldquo;{descText}&rdquo;</p>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-semibold border rounded-sm uppercase tracking-wider ${priorityColors[wo.priority] || 'bg-slate-50 text-slate-700 border-slate-100'}`}>
+                          Prioridade {wo.priority}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">Téc: {techText}</span>
+                      </div>
+
+                      {userRole !== 'viewer' && (
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <button
+                            onClick={() => handleUpdateStatus(wo.id, 'Aberta')}
+                            className="flex items-center justify-center gap-1 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl border border-slate-200 cursor-pointer transition-colors"
+                          >
+                            <ArrowLeft size={12} /> Pausar
+                          </button>
+                          <button
+                            onClick={() => handleOpenCompleteModal(wo)}
+                            className="flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+                          >
+                            <CheckCircle2 size={13} /> Concluir OS
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {laneAndamento.length === 0 && (
+                  <div className="h-28 flex flex-col items-center justify-center text-slate-400">
+                    <Clock size={24} className="text-slate-300" />
+                    <p className="text-[10px] mt-1 font-mono uppercase tracking-wide">Fila vazia</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* LANE 3: CONCLUÍDAS */}
+          {statusFilter.includes('Concluída') && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl flex flex-col h-full overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                  Concluídas
+                </span>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {laneConcluida.length}
+                </span>
+              </div>
+
+              <div className="p-4 overflow-y-auto space-y-4 flex-1">
+                {laneConcluida.map(wo => {
+                  const mach = machines.find(m => m.id === wo.machine_id);
+                  const descText = wo.description || wo.reason || '';
+                  const techText = wo.assigned_to || wo.responsible || 'Técnico';
+                  const closeDateFormatted = wo.close_date ? wo.close_date.split('T')[0] : '';
+
+                  return (
+                    <div key={wo.id} className="bg-white border border-slate-200 rounded-xl p-4 text-xs space-y-3 shadow-xs group hover:border-emerald-300 transition-all">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[10px] font-mono font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                            OS #{wo.os_number || wo.id.substring(0, 6)}
+                          </span>
+                          <h4 className="font-bold text-slate-800 mt-2">{mach?.code} - {mach?.name}</h4>
+                        </div>
+                        {userRole !== 'viewer' && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(wo)}
+                              className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md cursor-pointer transition-colors"
+                              title="Editar O.S."
+                            >
+                              <Edit size={13} />
+                            </button>
+                            <button 
+                              onClick={() => setDeleteTarget({ id: wo.id, title: `O.S. #${wo.os_number || ''} (${mach?.code})` })}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                              title="Excluir O.S."
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <p className="text-slate-500 leading-normal font-serif italic line-through">&ldquo;{descText}&rdquo;</p>
+                      
+                      {wo.notes && (
+                        <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-[11px] text-slate-600 font-sans">
+                          <strong className="text-slate-700">Laudo:</strong> {wo.notes}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-slate-500 font-mono">Técnico: {techText}</span>
+                          {wo.close_date && (
+                            <span className="text-[9px] text-emerald-700 font-mono">Concluído: {formatDisplayDate(wo.close_date)}</span>
+                          )}
+                        </div>
+                        {userRole !== 'viewer' && (
+                          <button
+                            onClick={() => handleUpdateStatus(wo.id, 'Em Andamento')}
+                            className="text-xs text-amber-700 hover:text-amber-900 hover:underline font-bold cursor-pointer"
+                          >
+                            Reabrir
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {laneConcluida.length === 0 && (
+                  <div className="h-28 flex flex-col items-center justify-center text-slate-400">
+                    <Wrench size={24} className="text-slate-300" />
+                    <p className="text-[10px] mt-1 font-mono uppercase tracking-wide">Sem histórico recente</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
 
       {/* MODAL CONCLUIR SERVIÇO (MECÂNICO) */}
       <Modal isOpen={isCompleteOpen} onClose={() => setIsCompleteOpen(false)} title="Conclusão e Baixa de Ordem de Serviço (O.S.)">
@@ -1181,6 +1292,14 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
             <strong>Máquina:</strong> {machineFilter === 'ALL' ? 'Todas as Máquinas' : (machines.find(m => m.id === machineFilter)?.name || machineFilter)}
           </div>
           <div><strong>Prioridade:</strong> {priorityFilter === 'ALL' ? 'Todas as Prioridades' : priorityFilter}</div>
+          <div>
+            <strong>Status Filtrados:</strong>{' '}
+            {statusFilter.length === 3
+              ? 'Todos (Abertas, Em Andamento, Concluídas)'
+              : statusFilter.length === 0
+              ? 'Nenhum'
+              : statusFilter.join(', ')}
+          </div>
           <div><strong>Total de O.S.:</strong> {filteredOrders.length} ordens de serviço</div>
         </div>
       </div>
@@ -1188,7 +1307,7 @@ export default function WorkOrders({ selectedFarmId, userRole, userEmail = '' }:
       {/* RESUMO EXECUTIVO CONSOLIDADO */}
       <div className="grid grid-cols-5 gap-2 mb-2 text-center">
         <div className="border border-slate-400 rounded p-1 bg-slate-50">
-          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total de O.S.</span>
+          <span className="text-[7.5px] font-bold text-slate-600 block uppercase">Total no Relatório</span>
           <span className="text-[11px] font-black font-mono text-[#1B3022]">{filteredOrders.length}</span>
         </div>
         <div className="border border-slate-400 rounded p-1 bg-slate-50">
