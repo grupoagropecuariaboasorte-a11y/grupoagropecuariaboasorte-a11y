@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fleetService } from '../lib/fleetService';
 import { Checklist30d, Farm, Machine, UserRole } from '../types';
 import Modal from '../components/Modal';
@@ -316,6 +316,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
   const [machineFilter, setMachineFilter] = useState('ALL');
   const [validityFilter, setValidityFilter] = useState<'ALL' | 'OK' | 'VENCIDO'>('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [latestScopeFilter, setLatestScopeFilter] = useState<'ALL' | 'LATEST_ALL' | 'LATEST_OK' | 'LATEST_VENCIDAS'>('ALL');
 
   // Form States (Nova Vistoria / Editar)
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -626,6 +627,55 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     return true;
   };
 
+  // Encontrar o checklist mais recente de cada máquina
+  const latestChecklistIds = useMemo(() => {
+    const latestMap = new Map<string, Checklist30d>();
+    
+    // Ordenar do mais novo para o mais antigo
+    const sorted = [...checklists].sort((a, b) => {
+      const da = parseDateOnly(a.date).getTime();
+      const db = parseDateOnly(b.date).getTime();
+      if (db !== da) return db - da;
+      const ca = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const cb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (cb !== ca) return cb - ca;
+      return (b.id || '').localeCompare(a.id || '');
+    });
+
+    for (const item of sorted) {
+      if (item.machine_id && !latestMap.has(item.machine_id)) {
+        latestMap.set(item.machine_id, item);
+      }
+    }
+
+    return new Set(Array.from(latestMap.values()).map(c => c.id));
+  }, [checklists]);
+
+  // Contadores rápidos dos últimos lançamentos por equipamento
+  const latestCounts = useMemo(() => {
+    let total = 0;
+    let ok = 0;
+    let vencidas = 0;
+
+    checklists.forEach(log => {
+      if (latestChecklistIds.has(log.id)) {
+        const mach = machines.find(m => m.id === log.machine_id);
+        const farmMatch = selectedFarmId === 'ALL' || (mach && mach.farm_id === selectedFarmId);
+        if (farmMatch) {
+          total++;
+          const val = getValidityStatus(log, checklists);
+          if (val.status === 'OK') {
+            ok++;
+          } else {
+            vencidas++;
+          }
+        }
+      }
+    });
+
+    return { total, ok, vencidas };
+  }, [checklists, latestChecklistIds, machines, selectedFarmId]);
+
   const filteredLogs = checklists.filter(log => {
     const machine = machines.find(m => m.id === log.machine_id);
     const farmMatch = selectedFarmId === 'ALL' || (machine && machine.farm_id === selectedFarmId);
@@ -640,7 +690,20 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     const valObj = getValidityStatus(log, checklists);
     const validityMatch = validityFilter === 'ALL' || valObj.status.toUpperCase() === validityFilter.toUpperCase();
 
-    const periodMatch = isDateInPeriod(log.date);
+    // Filtro de Últimos Lançamentos por Máquina / Equipamento
+    const isLatest = latestChecklistIds.has(log.id);
+    if (latestScopeFilter !== 'ALL' && !isLatest) {
+      return false;
+    }
+    if (latestScopeFilter === 'LATEST_OK' && valObj.status !== 'OK') {
+      return false;
+    }
+    if (latestScopeFilter === 'LATEST_VENCIDAS' && valObj.status !== 'Vencido') {
+      return false;
+    }
+
+    // Ao visualizar os últimos lançamentos por equipamento, não cortamos por período para não esconder máquinas com vistoria atrasada
+    const periodMatch = latestScopeFilter !== 'ALL' ? true : isDateInPeriod(log.date);
 
     const textMatch = 
       (log.operator_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -860,6 +923,74 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
           <option value="Prioridade Alta (Máquina Parada)">Prioridade Alta (Máquina Parada)</option>
         </select>
 
+        {/* Novo Filtro: Últimos Lançamentos por Equipamento/Máquina (OK ou Vencidas) */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <select
+            value={latestScopeFilter}
+            onChange={(e) => setLatestScopeFilter(e.target.value as any)}
+            className={`border rounded-xl px-3 py-2 text-xs font-bold focus:outline-hidden focus:border-[#1B3022] cursor-pointer transition-all ${
+              latestScopeFilter !== 'ALL'
+                ? 'bg-[#1B3022] text-white border-[#1B3022] shadow-xs'
+                : 'bg-slate-50 border border-slate-200 text-slate-700'
+            }`}
+          >
+            <option value="ALL" className="bg-white text-slate-800 font-normal">
+              Histórico Completo (Todos os Lançamentos)
+            </option>
+            <option value="LATEST_ALL" className="bg-white text-slate-900 font-bold">
+              Último por Máquina: Todos ({latestCounts.total})
+            </option>
+            <option value="LATEST_OK" className="bg-white text-emerald-800 font-bold">
+              Último por Máquina: Somente OK ({latestCounts.ok})
+            </option>
+            <option value="LATEST_VENCIDAS" className="bg-white text-rose-800 font-bold">
+              Último por Máquina: Somente Vencidas ({latestCounts.vencidas})
+            </option>
+          </select>
+
+          {/* Atalhos rápidos quando o filtro de Últimos Lançamentos estiver selecionado */}
+          {latestScopeFilter !== 'ALL' && (
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setLatestScopeFilter('LATEST_ALL')}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                  latestScopeFilter === 'LATEST_ALL'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Exibir os últimos lançamentos de todas as máquinas"
+              >
+                Todas ({latestCounts.total})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLatestScopeFilter('LATEST_OK')}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                  latestScopeFilter === 'LATEST_OK'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-emerald-800 hover:bg-emerald-50'
+                }`}
+                title="Exibir apenas os últimos lançamentos com status OK (no prazo)"
+              >
+                <Check size={11} className="stroke-[3]" /> OK ({latestCounts.ok})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLatestScopeFilter('LATEST_VENCIDAS')}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                  latestScopeFilter === 'LATEST_VENCIDAS'
+                    ? 'bg-rose-700 text-white shadow-xs'
+                    : 'text-rose-800 hover:bg-rose-50'
+                }`}
+                title="Exibir apenas os últimos lançamentos com status Vencido"
+              >
+                <Clock size={11} /> Vencidas ({latestCounts.vencidas})
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Campo de Busca */}
         <div className="relative flex-1 min-w-[200px]">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
@@ -874,12 +1005,13 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
           />
         </div>
 
-        {(machineFilter !== 'ALL' || validityFilter !== 'ALL' || statusFilter !== 'ALL' || searchTerm !== '') && (
+        {(machineFilter !== 'ALL' || validityFilter !== 'ALL' || statusFilter !== 'ALL' || latestScopeFilter !== 'ALL' || searchTerm !== '') && (
           <button
             onClick={() => {
               setMachineFilter('ALL');
               setValidityFilter('ALL');
               setStatusFilter('ALL');
+              setLatestScopeFilter('ALL');
               setSearchTerm('');
             }}
             className="text-xs text-red-600 hover:underline font-bold px-2 py-1 cursor-pointer"
@@ -889,7 +1021,15 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
         )}
 
         <div className="text-xs text-slate-500 font-mono ml-auto">
-          Encontradas: <strong className="text-slate-800">{filteredLogs.length}</strong>
+          {latestScopeFilter !== 'ALL' ? (
+            <>
+              Últimos lançamentos: <strong className="text-slate-800">{filteredLogs.length} máquinas</strong>
+            </>
+          ) : (
+            <>
+              Encontradas: <strong className="text-slate-800">{filteredLogs.length} vistorias</strong>
+            </>
+          )}
         </div>
       </div>
 
@@ -941,7 +1081,14 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                 <div>
                   <div className="flex justify-between items-start border-b border-slate-100 pb-3.5 mb-3.5 gap-2">
                     <div>
-                      <span className="font-mono text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{farm?.name || 'Fazenda'}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{farm?.name || 'Fazenda'}</span>
+                        {latestChecklistIds.has(log.id) && (
+                          <span className="font-sans text-[8px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded uppercase">
+                            Último da Máquina
+                          </span>
+                        )}
+                      </div>
                       <h4 className="text-xs font-bold text-slate-800 mt-1.5">{mach?.code} - {mach?.name}</h4>
                     </div>
                     
@@ -1638,8 +1785,8 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
           <div>
             <strong>Máquina:</strong> {machineFilter === 'ALL' ? 'Todas as Máquinas' : (machines.find(m => m.id === machineFilter)?.name || machineFilter)}
           </div>
-          <div><strong>Status:</strong> {statusFilter === 'ALL' ? 'Todos os Status' : statusFilter} | <strong>Validade:</strong> {validityFilter === 'ALL' ? 'Todas' : validityFilter}</div>
-          <div><strong>Total de Vistorias:</strong> {filteredLogs.length} registros</div>
+          <div><strong>Status:</strong> {statusFilter === 'ALL' ? 'Todos os Status' : statusFilter} | <strong>Validade:</strong> {validityFilter === 'ALL' ? 'Todas' : validityFilter} | <strong>Escopo:</strong> {latestScopeFilter === 'ALL' ? 'Histórico Completo' : latestScopeFilter === 'LATEST_OK' ? 'Último por Máquina (OK)' : latestScopeFilter === 'LATEST_VENCIDAS' ? 'Último por Máquina (Vencidas)' : 'Último por Máquina (Todos)'}</div>
+          <div><strong>Total de Vistorias:</strong> {filteredLogs.length} {latestScopeFilter !== 'ALL' ? 'máquinas (últimos lançamentos)' : 'registros'}</div>
         </div>
       </div>
 
