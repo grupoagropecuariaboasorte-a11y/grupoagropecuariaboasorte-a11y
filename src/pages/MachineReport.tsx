@@ -1920,7 +1920,7 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
           return acc;
         }, {} as Record<string, string>));
 
-        const val = getValidityStatus(selectedChecklistForModal.date);
+        const val = getValidityStatus(selectedChecklistForModal, checklists);
         const st = selectedChecklistForModal.overall_status || 'OK';
 
         const renderModalViewGrid = (itemsList: string[]) => (
@@ -1984,15 +1984,28 @@ export default function MachineReport({ selectedFarmId, userRole, userEmail = ''
 
               {/* STATUS E VALIDADE */}
               <div className="space-y-2">
-                <div className={`flex items-center justify-between p-3 rounded-xl border ${val.status === 'OK' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border ${val.status === 'OK' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
                   <div className="flex items-center gap-2">
-                    {val.status === 'OK' ? <CheckCircle2 size={18} className="text-emerald-600" /> : <Clock size={18} className="text-rose-600" />}
-                    <span className="font-bold text-xs">
-                      Status Validade 7 Dias: <span className="uppercase">{val.status}</span>
-                    </span>
+                    {val.status === 'OK' ? <CheckCircle2 size={18} className="text-emerald-600 shrink-0" /> : <Clock size={18} className="text-rose-600 shrink-0" />}
+                    <div>
+                      <span className="font-bold text-xs">
+                        Status Validade 7 Dias: <span className="uppercase">{val.status}</span>
+                        {val.isSuperseded && (
+                          <span className="ml-2 text-[10px] font-normal px-2 py-0.5 bg-white/80 rounded-md border text-slate-700">
+                            {val.status === 'Vencido' ? 'Contagem congelada pelo próximo checklist' : 'Substituído por novo checklist'}
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </div>
                   <span className="text-[11px] font-mono">
-                    {val.days === 0 ? 'Lançamento efetuado hoje' : `Lançado há ${val.days} dia(s)`}
+                    {val.isSuperseded 
+                      ? (val.status === 'Vencido'
+                          ? `Venceu por ${val.overdueDays} dia(s) (parou ao realizar novo checklist em ${formatDisplayDate(val.nextChecklistDate || '')})`
+                          : `Renovado no prazo (próx. checklist em ${formatDisplayDate(val.nextChecklistDate || '')})`)
+                      : (val.status === 'Vencido'
+                          ? `Vencido há ${val.overdueDays} dia(s) (${val.days}d do lançamento)`
+                          : (val.days === 0 ? 'Lançamento efetuado hoje' : `Lançado há ${val.days} dia(s)`))}
                   </span>
                 </div>
 

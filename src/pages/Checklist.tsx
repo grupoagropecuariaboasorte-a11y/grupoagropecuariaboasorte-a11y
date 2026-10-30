@@ -148,17 +148,160 @@ export const parseChecklistData = (notesStr?: string) => {
   return null;
 };
 
-export const getValidityStatus = (dateStr?: string): { status: 'OK' | 'Vencido'; days: number } => {
-  if (!dateStr) return { status: 'Vencido', days: 999 };
-  const checkDate = new Date(dateStr);
-  const today = new Date();
-  const checkZero = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate());
-  const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const diffTime = todayZero.getTime() - checkZero.getTime();
-  const days = Math.floor(diffTime / (1000 * 3600 * 24));
+export interface ChecklistValidityResult {
+  status: 'OK' | 'Vencido';
+  days: number;           // Dias decorridos até o corte (próximo checklist ou hoje)
+  overdueDays: number;    // Dias vencidos (0 se days <= 7, senão days - 7)
+  isSuperseded: boolean;  // Se já foi realizada uma vistoria posterior para esta máquina
+  nextChecklistDate?: string;
+  nextChecklistId?: string;
+  badgeLabel: string;     // Rótulo: 'OK', 'Renovado', 'Vencido', 'Vencido (Congelado)'
+  summaryText: string;    // Texto descritivo
+}
+
+export const parseDateOnly = (dStr: string): Date => {
+  if (!dStr) return new Date();
+  const clean = dStr.split('T')[0];
+  const parts = clean.split('-').map(Number);
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  const d = new Date(dStr);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+export const getNextChecklistForMachine = (
+  current: { id?: string; machine_id: string; date: string; created_at?: string },
+  allChecklists: Checklist30d[]
+): Checklist30d | null => {
+  if (!current?.machine_id || !allChecklists || allChecklists.length === 0) return null;
+
+  const currentDateObj = parseDateOnly(current.date);
+  const currentCreated = current.created_at ? new Date(current.created_at).getTime() : 0;
+
+  // Filtrar checklists da mesma máquina posteriores ao atual
+  const laterLogs = allChecklists.filter(c => {
+    if (c.machine_id !== current.machine_id || c.id === current.id) return false;
+    const d = parseDateOnly(c.date);
+    if (d.getTime() > currentDateObj.getTime()) return true;
+    if (d.getTime() === currentDateObj.getTime()) {
+      const cCreated = c.created_at ? new Date(c.created_at).getTime() : 0;
+      if (cCreated && currentCreated && cCreated !== currentCreated) {
+        return cCreated > currentCreated;
+      }
+      return (c.id || '') > (current.id || '');
+    }
+    return false;
+  });
+
+  if (laterLogs.length === 0) return null;
+
+  // Ordenar para encontrar o mais próximo imediatamente posterior
+  laterLogs.sort((a, b) => {
+    const da = parseDateOnly(a.date).getTime();
+    const db = parseDateOnly(b.date).getTime();
+    if (da !== db) return da - db;
+    const ca = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const cb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (ca !== cb) return ca - cb;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+
+  return laterLogs[0];
+};
+
+export const getValidityStatus = (
+  dateOrLog?: string | Checklist30d,
+  allChecklistsOrNextDate?: Checklist30d[] | string | null,
+  currentChecklistId?: string
+): ChecklistValidityResult => {
+  let dateStr = '';
+  let nextDateStr: string | null = null;
+  let nextChecklistId: string | undefined;
+  let isSuperseded = false;
+
+  if (typeof dateOrLog === 'object' && dateOrLog !== null) {
+    dateStr = dateOrLog.date;
+    const all = Array.isArray(allChecklistsOrNextDate) ? allChecklistsOrNextDate : [];
+    const next = getNextChecklistForMachine(dateOrLog, all);
+    if (next) {
+      isSuperseded = true;
+      nextDateStr = next.date;
+      nextChecklistId = next.id;
+    }
+  } else if (typeof dateOrLog === 'string') {
+    dateStr = dateOrLog;
+    if (typeof allChecklistsOrNextDate === 'string') {
+      isSuperseded = true;
+      nextDateStr = allChecklistsOrNextDate;
+    } else if (Array.isArray(allChecklistsOrNextDate) && currentChecklistId) {
+      const current = allChecklistsOrNextDate.find(c => c.id === currentChecklistId);
+      if (current) {
+        const next = getNextChecklistForMachine(current, allChecklistsOrNextDate);
+        if (next) {
+          isSuperseded = true;
+          nextDateStr = next.date;
+          nextChecklistId = next.id;
+        }
+      }
+    }
+  }
+
+  if (!dateStr) {
+    return {
+      status: 'Vencido',
+      days: 999,
+      overdueDays: 999,
+      isSuperseded: false,
+      badgeLabel: 'Vencido',
+      summaryText: 'Vencido'
+    };
+  }
+
+  const checkZero = parseDateOnly(dateStr);
+  const endZero = isSuperseded && nextDateStr 
+    ? parseDateOnly(nextDateStr)
+    : (() => {
+        const t = new Date();
+        return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      })();
+
+  const diffTime = endZero.getTime() - checkZero.getTime();
+  const days = Math.max(0, Math.round(diffTime / (1000 * 3600 * 24)));
+  const isExpired = days > 7;
+  const overdueDays = isExpired ? days - 7 : 0;
+  const status: 'OK' | 'Vencido' = isExpired ? 'Vencido' : 'OK';
+
+  let badgeLabel = 'OK';
+  let summaryText = '';
+
+  if (isSuperseded) {
+    if (isExpired) {
+      badgeLabel = 'Vencido (Congelado)';
+      summaryText = `Vencido (${overdueDays}d até novo checklist)`;
+    } else {
+      badgeLabel = 'Renovado';
+      summaryText = `OK (Renovado no prazo)`;
+    }
+  } else {
+    if (isExpired) {
+      badgeLabel = 'Vencido';
+      summaryText = `Vencido (${overdueDays}d vencidos)`;
+    } else {
+      badgeLabel = 'OK';
+      summaryText = days === 0 ? 'OK (Hoje)' : `OK (${days}d atrás)`;
+    }
+  }
+
   return {
-    status: days > 7 ? 'Vencido' : 'OK',
-    days: days < 0 ? 0 : days
+    status,
+    days,
+    overdueDays,
+    isSuperseded,
+    nextChecklistDate: nextDateStr || undefined,
+    nextChecklistId,
+    badgeLabel,
+    summaryText
   };
 };
 
@@ -494,7 +637,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
     if (normStatus === 'Máquina Parada') normStatus = 'Prioridade Alta (Máquina Parada)';
     const statusMatch = statusFilter === 'ALL' || normStatus === statusFilter || log.overall_status === statusFilter;
 
-    const valObj = getValidityStatus(log.date);
+    const valObj = getValidityStatus(log, checklists);
     const validityMatch = validityFilter === 'ALL' || valObj.status.toUpperCase() === validityFilter.toUpperCase();
 
     const periodMatch = isDateInPeriod(log.date);
@@ -758,7 +901,7 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
             const farm = farms.find(f => f?.id === mach?.farm_id);
             const parsedData = parseChecklistData(log.failed_items_notes);
 
-            const validity = getValidityStatus(log.date);
+            const validity = getValidityStatus(log, checklists);
 
             let displayStatus = (parsedData?.evalStatus || log.overall_status) as string;
             if (displayStatus === 'Necessita Atenção') displayStatus = 'Prioridade Média';
@@ -803,14 +946,20 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                     </div>
                     
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      {/* Validade do Lançamento: OK ou Vencido */}
+                      {/* Validade do Lançamento: OK ou Vencido (com congelamento após próximo checklist) */}
                       {validity.status === 'OK' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[8px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md uppercase tracking-wider">
-                          <CheckCircle2 size={10} /> OK
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[8px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md uppercase tracking-wider"
+                          title={validity.summaryText}
+                        >
+                          <CheckCircle2 size={10} /> {validity.isSuperseded ? 'Renovado' : 'OK'}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[8px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 rounded-md uppercase tracking-wider">
-                          <Clock size={10} /> Vencido
+                        <span 
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[8px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 rounded-md uppercase tracking-wider"
+                          title={validity.isSuperseded ? `Vencimento congelado no próximo checklist (${validity.overdueDays}d de atraso)` : `Vencido há ${validity.overdueDays}d`}
+                        >
+                          <Clock size={10} /> {validity.isSuperseded ? 'Vencido (Congelado)' : 'Vencido'}
                         </span>
                       )}
 
@@ -829,10 +978,10 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                       <span className="text-slate-400">Data Lançamento:</span>
                       <span className="font-mono">{formatDisplayDate(log.date)}</span>
                     </p>
-                    <p className="flex justify-between">
+                    <p className="flex justify-between items-center text-xs">
                       <span className="text-slate-400">Status Validade (7d):</span>
                       <strong className={validity.status === 'OK' ? 'text-emerald-700 font-mono font-bold' : 'text-rose-700 font-mono font-bold'}>
-                        {validity.status === 'OK' ? `OK (${validity.days}d atrás)` : `Vencido (${validity.days}d atrás)`}
+                        {validity.summaryText}
                       </strong>
                     </p>
                     <p className="flex justify-between">
@@ -1257,22 +1406,35 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
 
               {/* SITUAÇÃO GERAL DE LIBERAÇÃO E VALIDADE */}
               {(() => {
-                const val = getValidityStatus(selectedChecklist.date);
+                const val = getValidityStatus(selectedChecklist, checklists);
                 let st = (parsed?.evalStatus || selectedChecklist.overall_status) as string;
                 if (st === 'Necessita Atenção') st = 'Prioridade Média';
                 if (st === 'Máquina Parada') st = 'Prioridade Alta (Máquina Parada)';
 
                 return (
                   <div className="space-y-2">
-                    <div className={`flex items-center justify-between p-3 rounded-xl border ${val.status === 'OK' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border ${val.status === 'OK' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
                       <div className="flex items-center gap-2">
-                        {val.status === 'OK' ? <CheckCircle2 size={18} className="text-emerald-600" /> : <Clock size={18} className="text-rose-600" />}
-                        <span className="font-bold text-xs">
-                          Status Validade 7 Dias: <span className="uppercase">{val.status}</span>
-                        </span>
+                        {val.status === 'OK' ? <CheckCircle2 size={18} className="text-emerald-600 shrink-0" /> : <Clock size={18} className="text-rose-600 shrink-0" />}
+                        <div>
+                          <span className="font-bold text-xs">
+                            Status Validade 7 Dias: <span className="uppercase">{val.status}</span>
+                            {val.isSuperseded && (
+                              <span className="ml-2 text-[10px] font-normal px-2 py-0.5 bg-white/80 rounded-md border text-slate-700">
+                                {val.status === 'Vencido' ? 'Contagem congelada pelo próximo checklist' : 'Substituído por novo checklist'}
+                              </span>
+                            )}
+                          </span>
+                        </div>
                       </div>
                       <span className="text-[11px] font-mono">
-                        {val.days === 0 ? 'Lançamento efetuado hoje' : `Lançado há ${val.days} dia(s)`}
+                        {val.isSuperseded 
+                          ? (val.status === 'Vencido'
+                              ? `Venceu por ${val.overdueDays} dia(s) (parou ao realizar novo checklist em ${formatDisplayDate(val.nextChecklistDate || '')})`
+                              : `Renovado no prazo (próx. checklist em ${formatDisplayDate(val.nextChecklistDate || '')})`)
+                          : (val.status === 'Vencido'
+                              ? `Vencido há ${val.overdueDays} dia(s) (${val.days}d do lançamento)`
+                              : (val.days === 0 ? 'Lançamento efetuado hoje' : `Lançado há ${val.days} dia(s)`))}
                       </span>
                     </div>
 
@@ -1534,11 +1696,8 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
             const mach = machines.find(m => m.id === log.machine_id);
             const farmName = farms.find(f => f.id === mach?.farm_id)?.name || '-';
             
-            // Calcular validade (7 dias)
-            const logDate = new Date(log.date + 'T00:00:00');
-            const validUntil = new Date(logDate);
-            validUntil.setDate(validUntil.getDate() + 7);
-            const isExpired = new Date() > validUntil;
+            // Calcular validade (7 dias) com congelamento se houver novo checklist
+            const val = getValidityStatus(log, checklists);
 
             const isCritical = log.overall_status === 'Prioridade Alta (Máquina Parada)' || log.overall_status === 'Máquina Parada';
             const isWarning = log.overall_status === 'Prioridade Média' || log.overall_status === 'Necessita Atenção';
@@ -1570,9 +1729,9 @@ export default function ChecklistPage({ selectedFarmId, selectedPeriod, userRole
                   {log.failed_items_notes ? log.failed_items_notes : 'Sem avarias registradas (Todos os itens conformes)'}
                 </td>
                 <td className={`border border-slate-300 p-0.5 font-mono text-center whitespace-nowrap text-[7px] font-bold ${
-                  isExpired ? 'text-rose-700' : 'text-emerald-800'
+                  val.status === 'Vencido' ? 'text-rose-700' : 'text-emerald-800'
                 }`}>
-                  {formatDisplayDate(validUntil.toISOString().split('T')[0])} {isExpired ? '(Vencido)' : '(Válido)'}
+                  {val.summaryText}
                 </td>
               </tr>
             );
